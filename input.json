@@ -1,0 +1,8 @@
+[
+["PUSH_I", 10],
+["DBG_DUMP_STACK"],
+["PUSH_D", 10.23],
+["DBG_DUMP_STACK"],
+["ADD_I"],
+["DBG_DUMP_STACK"]
+]
