@@ -115,61 +115,33 @@ struct EnvFrame
 };
 //---------------------------------------------------------------------------
 
-struct Program
-{
-    Operation **m_ops;
-    size_t      m_len;
-};
-//---------------------------------------------------------------------------
-
 class VM
 {
     private:
-        Operation               *m_prog;
-        Operation               *m_last;
-        Operation               *m_cur;
-
-        Datum                  **m_stack;
-        size_t                   m_stack_size;
-        size_t                   m_stack_safetyzone;
-        Datum                  **m_stack_top;
-        Datum                  **m_stack_max;
-        Datum                  **m_stack_bottom;
-
+        std::vector<Operation *> m_ops;
+        std::vector<Datum *>     m_stack;
         std::vector<EnvFrame>    m_env_stack;
+
+        size_t                   m_ip;
 
         bool                     m_enable_trace_log;
 
     public:
         VM()
-            : m_prog(nullptr),
-              m_last(nullptr),
-              m_cur(nullptr),
-              m_enable_trace_log(false),
-              m_stack_size(1024),
-
-              // needs to be bigger than one operation can push onto
-              // the stack!
-              m_stack_safetyzone(10)
+            : m_enable_trace_log(false),
+              m_ip(0)
         {
-            size_t stack_init_size = m_stack_size + m_stack_safetyzone;
-            m_stack_bottom = m_stack = new Datum*[stack_init_size];
-
-            for (size_t i = 0; i < stack_init_size; i++)
-                m_stack[i] = nullptr;
-
-            m_stack_top = m_stack;
-            m_stack_max = &(m_stack[m_stack_size - 1]);
         }
 
-#       define STK_PUSH(datum)  do { *m_stack_top = (datum); m_stack_top++; } while(0);
-#       define STK_POPN(n)      do { m_stack_top -= n; } while(0);
-#       define STK_AT(o)        (*(m_stack_top - o))
-#       define GET_STK_SIZE     ((size_t) (m_stack_top - m_stack_bottom))
+#       define STK_PUSH(datum)  do { m_stack.push_back(datum); } while(0);
+#       define STK_POP()        do { m_stack.pop_back(); } while(0);
+#       define STK_AT(o)        (m_stack[m_stack.size() - o])
+#       define GET_STK_SIZE     (m_stack.size())
 
         inline bool check_stack_overflow()
         {
-            return m_stack_top >= m_stack_max;
+            // TODO: Check some limit, so we dont gobble up the machine!
+            return false;
         }
 
         Datum *new_datum(Type t);

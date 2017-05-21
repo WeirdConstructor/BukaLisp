@@ -16,14 +16,7 @@ void VM::log(const string &error)
 
 void VM::append(Operation *op)
 {
-    op->m_next = nullptr;
-
-    if (m_last)
-    {
-        m_last->m_next = op;
-        m_last = op;
-    }
-    else m_prog = m_last = op;
+    m_ops.push_back(op);
 }
 //---------------------------------------------------------------------------
 
@@ -58,19 +51,11 @@ void VM::dump_stack(const std::string &msg)
     int offs = 0;
 
     cout << "### BEGIN STACK DUMP {" << msg << "}" << endl;
-    if (m_stack_top == m_stack_bottom)
-        return;
-
-    Datum **stk_cur = m_stack_top;
-    do
+    for (int i = 0; i < m_stack.size(); i++)
     {
-        stk_cur--;
-        Datum *d = *stk_cur;
-        cout << "    " << offs << " @" << stk_cur << ": " << d->to_string() << endl;
-        offs++;
+        Datum *d = m_stack[i];
+        cout << "    " << i << ": " << d->to_string() << endl;
     }
-    while (stk_cur != m_stack_bottom);
-
     cout << "### END STACK DUMP {" << msg << "}" << endl;
 }
 //---------------------------------------------------------------------------
@@ -99,9 +84,9 @@ Datum *VM::new_datum(Type t)
 
 Datum *VM::run()
 {
-    m_cur = m_prog;
+    int op_max_ip = m_ops.size() - 1;
 
-    while (m_cur)
+    while (m_ip <= op_max_ip)
     {
         if (check_stack_overflow())
         {
@@ -109,10 +94,11 @@ Datum *VM::run()
             break;
         }
 
+        Operation &op = *(m_ops[m_ip]);
+
         if (m_enable_trace_log)
-            cout << "(stks=" << GET_STK_SIZE << ") TRC: " << OPCODE2NAME(m_cur->m_op)
+            cout << "(stks=" << GET_STK_SIZE << ") TRC: " << OPCODE2NAME(op.m_op)
                  << endl;
-        Operation &op = *m_cur;
 
         switch (op.m_op)
         {
@@ -141,7 +127,8 @@ Datum *VM::run()
                     new_dt_dbl(  STK_AT(1)->to_dbl()
                                + STK_AT(2)->to_dbl());
                 // TODO: Optimize, by pop only 1, and overwrite the next?
-                STK_POPN(2);
+                STK_POP();
+                STK_POP();
                 STK_PUSH(new_dt);
 
                 // FIXME: Implement mark & sweep garbage collector!?
@@ -154,7 +141,8 @@ Datum *VM::run()
                     new_dt_int(  STK_AT(1)->to_int()
                                + STK_AT(2)->to_int());
                 // TODO: Optimize, by pop only 1, and overwrite the next?
-                STK_POPN(2);
+                STK_POP();
+                STK_POP();
                 STK_PUSH(new_dt);
 
                 // FIXME: Implement mark & sweep garbage collector!?
@@ -168,11 +156,11 @@ Datum *VM::run()
             }
 
             default:
-                log("Unkown op: " + to_string(m_cur->m_op));
+                log("Unkown op: " + to_string(op.m_op));
                 return nullptr;
         }
 
-        m_cur = m_cur->m_next;
+        m_ip++;
     }
     if (GET_STK_SIZE <= 0)
         return nullptr;
