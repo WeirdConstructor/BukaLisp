@@ -22,12 +22,14 @@ class LILASMParser : public json::Parser
 
       lilvm::Operation *m_cur_op;
       lilvm::VM        &m_vm;
+      bool              m_second;
 
 
   public:
     LILASMParser(lilvm::VM &vm)
         : m_state(INIT),
           m_cur_op(nullptr),
+          m_second(false),
           m_vm(vm)
     {}
     virtual ~LILASMParser() { }
@@ -47,6 +49,7 @@ class LILASMParser : public json::Parser
 
             case READ_PROG:
                 m_state = READ_OP;
+                m_second = false;
                 m_cur_op = new Operation(NOP);
                 break;
 
@@ -96,10 +99,22 @@ class LILASMParser : public json::Parser
             return;
         }
 
-        if (bIsFloat)
-            m_cur_op->m_1.d = stod(csNumber);
+        if (m_second)
+        {
+            if (bIsFloat)
+                m_cur_op->m_2.d = stod(csNumber);
+            else
+                m_cur_op->m_2.i = stoll(csNumber);
+        }
         else
-            m_cur_op->m_1.i = stoll(csNumber);
+        {
+            if (bIsFloat)
+                m_cur_op->m_1.d = stod(csNumber);
+            else
+                m_cur_op->m_1.i = stoll(csNumber);
+        }
+
+        m_second = true;
     }
 
     virtual void onValueString(const std::string &sString)
@@ -131,6 +146,10 @@ class LILASMParser : public json::Parser
         HANDLE_OP_TYPE(LE_I)
         HANDLE_OP_TYPE(GT_I)
         HANDLE_OP_TYPE(GE_I)
+        HANDLE_OP_TYPE(PUSH_ENV)
+        HANDLE_OP_TYPE(POP_ENV)
+        HANDLE_OP_TYPE(SET_ENV)
+        HANDLE_OP_TYPE(GET_ENV)
         else
             cout << "ERROR: Unknown OP type: " << sString << endl;
     }
@@ -201,6 +220,7 @@ bool run_test_prog(const std::string &filepath)
         }
 
         Datum *d = vm.run();
+        if (!d) return 1;
         return d->to_int() == 23 ? 0 : 1;
     }
     catch (const std::exception &e)

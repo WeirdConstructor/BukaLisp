@@ -30,10 +30,10 @@ enum OPCODE
 
     PUSH_ENV,
     POP_ENV,
-    SET_ARG,    // saves into argv-stack
-    GET_ARG,    // reads from argv-stack
-    PUSH_FUNC, // captures argv-stack
-    CALL_FUNC, // restores argv-stack, needs to push a new argv for storing args
+    SET_ENV,   // saves into env-stack
+    GET_ENV,   // reads from env-stack
+    PUSH_FUNC, // captures env-stack
+    CALL_FUNC, // restores env-stack, needs to push a new env for storing args
     RETURN
 };
 //---------------------------------------------------------------------------
@@ -49,6 +49,11 @@ struct Operation
         double d;
     } m_1;
 
+    union {
+        int64_t i;
+        double d;
+    } m_2;
+
     Operation  *m_next;
 
     Operation(OPCODE o)
@@ -56,6 +61,7 @@ struct Operation
           m_next(nullptr)
     {
         m_1.i = 0;
+        m_2.i = 0;
     }
 };
 //---------------------------------------------------------------------------
@@ -109,9 +115,17 @@ struct EnvFrame
 {
     size_t     m_return_adr;
     size_t     m_len;
-    Datum    **m_args;
+    Datum    **m_env;
 
-    EnvFrame() : m_return_adr(0), m_len(0), m_args(nullptr) { }
+    EnvFrame(size_t s)
+        : m_return_adr(0), m_len(s), m_env(nullptr)
+    {
+        m_env = new Datum*[m_len];
+        for (int i = 0; i < m_len; i++)
+            m_env[i] = nullptr;
+    }
+
+    ~EnvFrame() { delete m_env; }
 };
 //---------------------------------------------------------------------------
 
@@ -120,7 +134,7 @@ class VM
     private:
         std::vector<Operation *> m_ops;
         std::vector<Datum *>     m_stack;
-        std::vector<EnvFrame>    m_env_stack;
+        std::vector<EnvFrame *>  m_env_stack;
 
         size_t                   m_ip;
 

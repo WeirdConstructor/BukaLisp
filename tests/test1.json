@@ -1,0 +1,13 @@
+[
+    ["PUSH_I", -3],
+    ["PUSH_D", 13.23],
+    ["PUSH_ENV", 2],
+    ["SET_ENV", 1, 0],
+    ["GET_ENV", 0, 0],
+    ["GET_ENV", 0, 0],
+    ["ADD_I"],
+    ["SET_ENV", 2, 0],
+    ["GET_ENV", 0, 0],
+    ["GET_ENV", 0, 1],
+    ["ADD_I"]
+]

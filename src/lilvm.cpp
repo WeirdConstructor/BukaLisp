@@ -41,6 +41,10 @@ const char *OPCODE2NAME(OPCODE c)
         case LE_I:           return "LE_I";
         case GT_I:           return "GT_I";
         case GE_I:           return "GE_I";
+        case PUSH_ENV:       return "PUSH_ENV";
+        case POP_ENV:        return "POP_ENV";
+        case SET_ENV:        return "SET_ENV";
+        case GET_ENV:        return "GET_ENV";
         default:             return "unknown";
     }
 }
@@ -146,6 +150,84 @@ Datum *VM::run()
                 STK_PUSH(new_dt);
 
                 // FIXME: Implement mark & sweep garbage collector!?
+                break;
+            }
+
+            case PUSH_ENV:
+            {
+                // TODO: Sometime optimize this with EnvFrame pools,
+                //       because functions are called regularily.
+                m_env_stack.push_back(new EnvFrame(op.m_1.i));
+                break;
+            }
+
+            case POP_ENV:
+            {
+                // TODO: Sometime optimize this with EnvFrame pools,
+                //       because functions are called regularily.
+                EnvFrame *frm = m_env_stack.back();
+                m_env_stack.pop_back();
+                delete frm;
+                break;
+            }
+
+            case SET_ENV:
+            {
+                if (m_env_stack.empty())
+                {
+                    cout << "ERROR: Access to empty env stack" << endl;
+                    return nullptr;
+                }
+                EnvFrame *ef = m_env_stack.back();
+
+                int cnt   = op.m_1.i;
+                int start = op.m_2.i;
+                int stkoffs = 1;
+                for (int i = start; i < (start + cnt); i++)
+                {
+                    if (i >= ef->m_len)
+                    {
+                        cout << "ERROR: Access outside of env frame" << endl;
+                        return nullptr;
+                    }
+
+                    ef->m_env[i] = STK_AT(stkoffs);
+                    stkoffs++;
+                }
+                for (int i = 1; i < stkoffs; i++)
+                {
+                    STK_POP();
+                }
+                break;
+            }
+
+            case GET_ENV:
+            {
+                if (m_env_stack.empty())
+                {
+                    cout << "ERROR: Access to empty env stack" << endl;
+                    return nullptr;
+                }
+
+                int stkoffs = op.m_1.i;
+                int idx     = op.m_2.i;
+
+                if (stkoffs >= m_env_stack.size())
+                {
+                    cout << "ERROR: Access to non existing env frame" << endl;
+                    return nullptr;
+                }
+
+                EnvFrame *ef = m_env_stack[m_env_stack.size() - (stkoffs + 1)];
+                if (idx >= ef->m_len)
+                {
+                    cout << "ERROR: Access outside of env frame" << endl;
+                    return nullptr;
+                }
+
+                Datum *dt = ef->m_env[idx];
+                if (!dt) dt = new_dt_int(0);
+                STK_PUSH(dt);
                 break;
             }
 
