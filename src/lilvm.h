@@ -70,11 +70,14 @@ enum Type
 {
     T_NIL,
     T_INT,
-    T_DBL
+    T_DBL,
+    T_FUNC
 };
 //---------------------------------------------------------------------------
 
 struct Datum;
+
+struct EnvFrame;
 
 struct Datum
 {
@@ -83,13 +86,14 @@ struct Datum
     union {
         int64_t i;
         double d;
+        EnvFrame *ef;
     } m_d;
 
     Datum *m_next;
 
     Datum(Type t) : m_type(t), m_next(nullptr)
     {
-        m_d.i    = 0;
+        m_d.i = 0;
     }
 
     std::string to_string()
