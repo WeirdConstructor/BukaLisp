@@ -32,13 +32,14 @@ const char *OPCODE2NAME(OPCODE c)
     switch (c)
     {
         case NOP:            return "NOP";
+        case TRC:            return "TRC";
         case PUSH_I:         return "PUSH_I";
         case PUSH_D:         return "PUSH_D";
         case DBG_DUMP_STACK: return "DBG_DUMP_STACK";
         case ADD_I:          return "ADD_I";
         case ADD_D:          return "ADD_D";
-        case GOTO:           return "GOTO";
-        case BRANCH_IF:      return "BRANCH_IF";
+        case JMP:            return "JMP";
+        case BR_IF:          return "BRANCH_IF";
         case LT_D:           return "LT_D";
         case LE_D:           return "LE_D";
         case GT_D:           return "GT_D";
@@ -47,9 +48,6 @@ const char *OPCODE2NAME(OPCODE c)
         case LE_I:           return "LE_I";
         case GT_I:           return "GT_I";
         case GE_I:           return "GE_I";
-        case DEF_ARGS:       return "DEF_ARGS";
-        case CALL:           return "CALL";
-        case RET:            return "RET";
         default:             return "unknown";
     }
 }
@@ -99,7 +97,7 @@ Datum *VM::new_datum(Type t)
 }
 //---------------------------------------------------------------------------
 
-void VM::run()
+Datum *VM::run()
 {
     m_cur = m_prog;
 
@@ -111,13 +109,18 @@ void VM::run()
             break;
         }
 
-        cout << "(stks=" << GET_STK_SIZE << ") TRC: " << OPCODE2NAME(m_cur->m_op)
-             << endl;
+        if (m_enable_trace_log)
+            cout << "(stks=" << GET_STK_SIZE << ") TRC: " << OPCODE2NAME(m_cur->m_op)
+                 << endl;
         Operation &op = *m_cur;
 
         switch (op.m_op)
         {
             case NOP:
+                break;
+
+            case TRC:
+                m_enable_trace_log = op.m_1.i == 1;
                 break;
 
             case PUSH_I:
@@ -166,12 +169,14 @@ void VM::run()
 
             default:
                 log("Unkown op: " + to_string(m_cur->m_op));
-                return;
+                return nullptr;
         }
 
         m_cur = m_cur->m_next;
-
     }
+    if (GET_STK_SIZE <= 0)
+        return nullptr;
+    return STK_AT(1);
 }
 //---------------------------------------------------------------------------
 

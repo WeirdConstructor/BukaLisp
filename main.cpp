@@ -115,13 +115,14 @@ class LILASMParser : public json::Parser
 
         if (sString == "") m_cur_op->m_op = NOP;
         HANDLE_OP_TYPE(NOP)
+        HANDLE_OP_TYPE(TRC)
         HANDLE_OP_TYPE(PUSH_I)
         HANDLE_OP_TYPE(PUSH_D)
         HANDLE_OP_TYPE(DBG_DUMP_STACK)
         HANDLE_OP_TYPE(ADD_I)
         HANDLE_OP_TYPE(ADD_D)
-        HANDLE_OP_TYPE(GOTO)
-        HANDLE_OP_TYPE(BRANCH_IF)
+        HANDLE_OP_TYPE(JMP)
+        HANDLE_OP_TYPE(BR_IF)
         HANDLE_OP_TYPE(LT_D)
         HANDLE_OP_TYPE(LE_D)
         HANDLE_OP_TYPE(GT_D)
@@ -130,9 +131,6 @@ class LILASMParser : public json::Parser
         HANDLE_OP_TYPE(LE_I)
         HANDLE_OP_TYPE(GT_I)
         HANDLE_OP_TYPE(GE_I)
-        HANDLE_OP_TYPE(DEF_ARGS)
-        HANDLE_OP_TYPE(CALL)
-        HANDLE_OP_TYPE(RET)
         else
             cout << "ERROR: Unknown OP type: " << sString << endl;
     }
@@ -159,8 +157,8 @@ UTF8Buffer *slurp(const std::string &filepath)
         input_file.read(unneccesary_buffer_just_to_copy, size);
         input_file.close();
 
-        cout << "read(" << size << ")["
-             << unneccesary_buffer_just_to_copy << "]" << endl;
+//        cout << "read(" << size << ")["
+//             << unneccesary_buffer_just_to_copy << "]" << endl;
 
         UTF8Buffer *u8b =
             new UTF8Buffer(unneccesary_buffer_just_to_copy, size);
@@ -176,22 +174,15 @@ UTF8Buffer *slurp(const std::string &filepath)
 }
 //---------------------------------------------------------------------------
 
-int main(int argc, char *argv[])
+bool run_test_prog(const std::string &filepath)
 {
-    using namespace std;
-
-    std::string input_file_path = "input.json";
-
-    if (argc > 1)
-        input_file_path = string(argv[1]);
-
     try
     {
         VM vm;
 
         LILASMParser theParser(vm);
 
-        UTF8Buffer *u8b = slurp(input_file_path);
+        UTF8Buffer *u8b = slurp(filepath);
         if (!u8b)
         {
             cout << "ERROR: No input?!" << endl;
@@ -209,14 +200,51 @@ int main(int argc, char *argv[])
             delete u8b;
         }
 
-        vm.run();
-        return 0;
+        Datum *d = vm.run();
+        return d->to_int() == 23 ? 0 : 1;
     }
     catch (const std::exception &e)
     {
         cout << "Exception: " << e.what() << endl;
         return 1;
     }
+}
+//---------------------------------------------------------------------------
+
+// TODO: Implement test suite
+// TODO: Implement basic comparsion and jump operations
+// TODO: Implement argv stack
+// TODO: Implement function type (pointer, arity and argv-stack are members)
+int main(int argc, char *argv[])
+{
+    using namespace std;
+
+    std::string input_file_path = "input.json";
+
+    if (argc > 1)
+        input_file_path = string(argv[1]);
+
+    if (input_file_path == "tests")
+    {
+        for (int i = 0; i < 100; i++)
+        {
+            std::string path = "tests\\test" + to_string(i) + ".json";
+            ifstream input_file(path.c_str(), ios::in);
+            if (!input_file.is_open())
+                break;
+            input_file.close();
+
+            if (run_test_prog(path) > 0)
+            {
+                cout << "*** FAIL: " << path << endl;
+                break;
+            }
+            else
+                cout << "OK: " << path << endl;
+        }
+    }
+    else
+        return run_test_prog(input_file_path);
 }
 //---------------------------------------------------------------------------
 

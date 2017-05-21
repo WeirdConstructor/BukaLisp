@@ -9,6 +9,7 @@ namespace lilvm
 enum OPCODE
 {
     NOP,
+    TRC,
     PUSH_I,
     PUSH_D,
     DBG_DUMP_STACK,
@@ -16,20 +17,24 @@ enum OPCODE
     ADD_D,
 
     // TODO:
-    GOTO,
-    BRANCH_IF,  // x != 0
-    LT_D,       // (DBL) <
-    LE_D,       // (DBL) <=
-    GT_D,       // (DBL) >
-    GE_D,       // (DBL) >=
-    LT_I,       // (INT) <
-    LE_I,       // (INT) <=
-    GT_I,       // (INT) >
-    GE_I,       // (INT) >=
+    JMP,
+    BR_IF,  // x != 0
+    LT_D,   // (DBL) <
+    LE_D,   // (DBL) <=
+    GT_D,   // (DBL) >
+    GE_D,   // (DBL) >=
+    LT_I,   // (INT) <
+    LE_I,   // (INT) <=
+    GT_I,   // (INT) >
+    GE_I,   // (INT) >=
 
-    DEF_ARGS, // pop data from the stack, put them into an array
-    CALL,
-    RET
+    PUSH_ARGV,
+    POP_ARGV,
+    SET_ARG,    // saves into argv-stack
+    GET_ARG,    // reads from argv-stack
+    PUSH_FUNC, // captures argv-stack
+    CALL_FUNC, // restores argv-stack, needs to push a new argv for storing args
+    RETURN
 };
 //---------------------------------------------------------------------------
 
@@ -115,11 +120,14 @@ class VM
         Datum              **m_stack_max;
         Datum              **m_stack_bottom;
 
+        bool                m_enable_trace_log;
+
     public:
         VM()
             : m_prog(nullptr),
               m_last(nullptr),
               m_cur(nullptr),
+              m_enable_trace_log(false),
               m_stack_size(1024),
 
               // needs to be bigger than one operation can push onto
@@ -152,7 +160,7 @@ class VM
         void dump_stack(const std::string &msg);
         void log(const std::string &error);
         void append(Operation *op);
-        void run();
+        Datum *run();
 
         ~VM() { }
 };
