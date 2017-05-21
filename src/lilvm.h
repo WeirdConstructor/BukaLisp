@@ -28,8 +28,8 @@ enum OPCODE
     GT_I,   // (INT) >
     GE_I,   // (INT) >=
 
-    PUSH_ARGV,
-    POP_ARGV,
+    PUSH_ENV,
+    POP_ENV,
     SET_ARG,    // saves into argv-stack
     GET_ARG,    // reads from argv-stack
     PUSH_FUNC, // captures argv-stack
@@ -73,21 +73,17 @@ struct Datum;
 struct Datum
 {
     Type m_type;
+
     union {
         int64_t i;
         double d;
     } m_d;
 
-    inline int64_t to_int()
-    { return m_type == T_INT ? m_d.i : static_cast<int64_t>(m_d.d); }
-    inline double to_dbl()
-    { return m_type == T_DBL ? m_d.d : static_cast<double>(m_d.i); }
-
     Datum *m_next;
 
     Datum(Type t) : m_type(t), m_next(nullptr)
     {
-        m_d.i = 0;
+        m_d.i    = 0;
     }
 
     std::string to_string()
@@ -101,26 +97,48 @@ struct Datum
             return "NIL";
         }
     }
+
+    inline int64_t to_int()
+    { return m_type == T_INT ? m_d.i : static_cast<int64_t>(m_d.d); }
+    inline double to_dbl()
+    { return m_type == T_DBL ? m_d.d : static_cast<double>(m_d.i); }
 };
 //---------------------------------------------------------------------------
 
+struct EnvFrame
+{
+    size_t     m_return_adr;
+    size_t     m_len;
+    Datum    **m_args;
+
+    EnvFrame() : m_return_adr(0), m_len(0), m_args(nullptr) { }
+};
+//---------------------------------------------------------------------------
+
+struct Program
+{
+    Operation **m_ops;
+    size_t      m_len;
+};
 //---------------------------------------------------------------------------
 
 class VM
 {
     private:
-        Operation           *m_prog;
-        Operation           *m_last;
-        Operation           *m_cur;
+        Operation               *m_prog;
+        Operation               *m_last;
+        Operation               *m_cur;
 
-        Datum              **m_stack;
-        size_t               m_stack_size;
-        size_t               m_stack_safetyzone;
-        Datum              **m_stack_top;
-        Datum              **m_stack_max;
-        Datum              **m_stack_bottom;
+        Datum                  **m_stack;
+        size_t                   m_stack_size;
+        size_t                   m_stack_safetyzone;
+        Datum                  **m_stack_top;
+        Datum                  **m_stack_max;
+        Datum                  **m_stack_bottom;
 
-        bool                m_enable_trace_log;
+        std::vector<EnvFrame>    m_env_stack;
+
+        bool                     m_enable_trace_log;
 
     public:
         VM()
