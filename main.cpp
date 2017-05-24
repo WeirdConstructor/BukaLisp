@@ -2,6 +2,7 @@
 #include <fstream>
 #include "lilvm.h"
 #include "JSON.h"
+#include "bukalisp/code_emitter.h"
 
 //---------------------------------------------------------------------------
 
@@ -221,10 +222,62 @@ bool run_test_prog(const std::string &filepath)
 }
 //---------------------------------------------------------------------------
 
-// TODO: Implement test suite
+void ast_debug_walker(bukalisp::ASTNode *n, int indent_level = 0)
+{
+    using namespace bukalisp;
+
+    for (int i = 0; i < 4 * indent_level; i++)
+        cout << " ";
+
+    switch (n->m_type)
+    {
+        case A_DBL:
+            cout << "* DBL (" << n->m_num.d << ")" << endl; break;
+
+        case A_INT:
+            cout << "* INT (" << n->m_num.i << ")" << endl; break;
+
+        case A_VAR:
+            cout << "* VAR (" << n->m_text << ")" << endl; break;
+
+        case A_LIST:
+        {
+            cout << "* LIST" << endl;
+            for (auto child : n->m_childs)
+                ast_debug_walker(child, indent_level + 1);
+            break;
+        }
+        default:
+            cout << "ERROR: Unknown ASTNode Type!" << endl;
+    }
+}
+//---------------------------------------------------------------------------
+
+void test_parser(const std::string &input)
+{
+    using namespace bukalisp;
+    Tokenizer tok;
+    Parser p(tok);
+
+    tok.tokenize(input);
+    ASTNode *anode = p.parse();
+    if (anode)
+    {
+        ast_debug_walker(anode);
+
+        bukalisp::ASTJSONCodeEmitter code_emit;
+        code_emit.open_output_file("code_emit_test.json");
+        code_emit.emit_json(anode);
+    }
+    else
+        cout << "ERROR: Compile Error!" << endl;
+}
+//---------------------------------------------------------------------------
+
 // TODO: Implement basic comparsion and jump operations
 // TODO: Implement argv stack
 // TODO: Implement function type (pointer, arity and argv-stack are members)
+
 int main(int argc, char *argv[])
 {
     using namespace std;
@@ -252,6 +305,11 @@ int main(int argc, char *argv[])
             else
                 cout << "OK: " << path << endl;
         }
+    }
+    else if (input_file_path == "parser_test")
+    {
+        if (argc > 2) test_parser(argv[2]);
+        else          test_parser("");
     }
     else
         return run_test_prog(input_file_path);

@@ -16,6 +16,12 @@ enum OPCODE : int8_t
     DBG_DUMP_ENVSTACK,
     ADD_I,
     ADD_D,
+    SUB_I,
+    SUB_D,
+    MUL_I,
+    MUL_D,
+    DIV_I,
+    DIV_D,
 
     // TODO:
     JMP,

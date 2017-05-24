@@ -17,6 +17,12 @@ const char *OPCODE_NAMES[] = {
     "DBG_DUMP_ENVSTACK",
     "ADD_I",
     "ADD_D",
+    "SUB_I",
+    "SUB_D",
+    "MUL_I",
+    "MUL_D",
+    "DIV_I",
+    "DIV_D",
 
     "JMP",
     "BR",
@@ -194,12 +200,37 @@ Datum *VM::run()
                 break;
             }
 
+            case SUB_D:
+            {
+                Datum *new_dt =
+                    new_dt_dbl(  STK_AT(2)->to_dbl()
+                               - STK_AT(1)->to_dbl());
+                STK_POP();
+                STK_POP();
+                STK_PUSH(new_dt);
+
+                // FIXME: Implement mark & sweep garbage collector!?
+                break;
+            }
+
+            case SUB_I:
+            {
+                Datum *new_dt =
+                    new_dt_dbl(  STK_AT(2)->to_int()
+                               - STK_AT(1)->to_int());
+                STK_POP();
+                STK_POP();
+                STK_PUSH(new_dt);
+
+                // FIXME: Implement mark & sweep garbage collector!?
+                break;
+            }
+
             case ADD_D:
             {
                 Datum *new_dt =
-                    new_dt_dbl(  STK_AT(1)->to_dbl()
-                               + STK_AT(2)->to_dbl());
-                // TODO: Optimize, by pop only 1, and overwrite the next?
+                    new_dt_dbl(  STK_AT(2)->to_dbl()
+                               + STK_AT(1)->to_dbl());
                 STK_POP();
                 STK_POP();
                 STK_PUSH(new_dt);
@@ -211,9 +242,60 @@ Datum *VM::run()
             case ADD_I:
             {
                 Datum *new_dt =
+                    new_dt_int(  STK_AT(2)->to_int()
+                               + STK_AT(1)->to_int());
+                STK_POP();
+                STK_POP();
+                STK_PUSH(new_dt);
+
+                // FIXME: Implement mark & sweep garbage collector!?
+                break;
+            }
+
+            case MUL_D:
+            {
+                Datum *new_dt =
+                    new_dt_dbl(  STK_AT(2)->to_dbl()
+                               * STK_AT(1)->to_dbl());
+                STK_POP();
+                STK_POP();
+                STK_PUSH(new_dt);
+
+                // FIXME: Implement mark & sweep garbage collector!?
+                break;
+            }
+
+            case MUL_I:
+            {
+                Datum *new_dt =
+                    new_dt_int(  STK_AT(2)->to_int()
+                               * STK_AT(1)->to_int());
+                STK_POP();
+                STK_POP();
+                STK_PUSH(new_dt);
+
+                // FIXME: Implement mark & sweep garbage collector!?
+                break;
+            }
+
+            case DIV_D:
+            {
+                Datum *new_dt =
+                    new_dt_dbl(  STK_AT(2)->to_dbl()
+                               / STK_AT(1)->to_dbl());
+                STK_POP();
+                STK_POP();
+                STK_PUSH(new_dt);
+
+                // FIXME: Implement mark & sweep garbage collector!?
+                break;
+            }
+
+            case DIV_I:
+            {
+                Datum *new_dt =
                     new_dt_int(  STK_AT(1)->to_int()
-                               + STK_AT(2)->to_int());
-                // TODO: Optimize, by pop only 1, and overwrite the next?
+                               / STK_AT(2)->to_int());
                 STK_POP();
                 STK_POP();
                 STK_PUSH(new_dt);

@@ -8,6 +8,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 add_library(lilvm_lib STATIC
     external/endian.cpp
     external/JSON.cpp
+    src/bukalisp/code_emitter.cpp
     src/lilvm.cpp
 )
 
