@@ -129,28 +129,18 @@ class LILASMParser : public json::Parser
         else if (sString == #type) m_cur_op->m_op = type;
 
         if (sString == "") m_cur_op->m_op = NOP;
-        HANDLE_OP_TYPE(NOP)
-        HANDLE_OP_TYPE(TRC)
-        HANDLE_OP_TYPE(PUSH_I)
-        HANDLE_OP_TYPE(PUSH_D)
-        HANDLE_OP_TYPE(DBG_DUMP_STACK)
-        HANDLE_OP_TYPE(ADD_I)
-        HANDLE_OP_TYPE(ADD_D)
-        HANDLE_OP_TYPE(JMP)
-        HANDLE_OP_TYPE(BR_IF)
-        HANDLE_OP_TYPE(LT_D)
-        HANDLE_OP_TYPE(LE_D)
-        HANDLE_OP_TYPE(GT_D)
-        HANDLE_OP_TYPE(GE_D)
-        HANDLE_OP_TYPE(LT_I)
-        HANDLE_OP_TYPE(LE_I)
-        HANDLE_OP_TYPE(GT_I)
-        HANDLE_OP_TYPE(GE_I)
-        HANDLE_OP_TYPE(PUSH_ENV)
-        HANDLE_OP_TYPE(POP_ENV)
-        HANDLE_OP_TYPE(SET_ENV)
-        HANDLE_OP_TYPE(GET_ENV)
-        else
+
+        bool found = false;
+        for (int i = 0; OPCODE_NAMES[i][0] != '\0'; i++)
+        {
+            if (sString == OPCODE_NAMES[i])
+            {
+                m_cur_op->m_op = (OPCODE) i;
+                found = true;
+            }
+        }
+
+        if (!found)
             cout << "ERROR: Unknown OP type: " << sString << endl;
     }
 };
@@ -166,7 +156,7 @@ UTF8Buffer *slurp(const std::string &filepath)
 
     if (input_file.is_open())
     {
-        size_t size = input_file.tellg();
+        size_t size = (size_t) input_file.tellg();
 
         // FIXME (maybe, but not yet)
         char *unneccesary_buffer_just_to_copy
@@ -213,7 +203,7 @@ bool run_test_prog(const std::string &filepath)
             theParser.parse(u8b);
             delete u8b;
         }
-        catch (UTF8Buffer_exception &e)
+        catch (UTF8Buffer_exception &)
         {
             cout << "UTF-8 error!" << endl;
             delete u8b;
@@ -254,7 +244,7 @@ int main(int argc, char *argv[])
                 break;
             input_file.close();
 
-            if (run_test_prog(path) > 0)
+            if (run_test_prog(path))
             {
                 cout << "*** FAIL: " << path << endl;
                 break;

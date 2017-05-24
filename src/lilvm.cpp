@@ -8,6 +8,39 @@ namespace lilvm
 {
 //---------------------------------------------------------------------------
 
+const char *OPCODE_NAMES[] = {
+    "NOP",
+    "TRC",
+    "PUSH_I",
+    "PUSH_D",
+    "DBG_DUMP_STACK",
+    "DBG_DUMP_ENVSTACK",
+    "ADD_I",
+    "ADD_D",
+
+    "JMP",
+    "BR",
+    "BR_IF",
+    "LT_D",
+    "LE_D",
+    "GT_D",
+    "GE_D",
+    "LT_I",
+    "LE_I",
+    "GT_I",
+    "GE_I",
+
+    "PUSH_ENV",
+    "POP_ENV",
+    "SET_ENV",
+    "GET_ENV",
+    "PUSH_FUNC",
+    "CALL_FUNC",
+    "RETURN",
+    ""
+};
+//---------------------------------------------------------------------------
+
 void VM::log(const string &error)
 {
     cout << error << endl;
@@ -22,31 +55,55 @@ void VM::append(Operation *op)
 
 const char *OPCODE2NAME(OPCODE c)
 {
+    return OPCODE_NAMES[c];
     switch (c)
     {
-        case NOP:            return "NOP";
-        case TRC:            return "TRC";
-        case PUSH_I:         return "PUSH_I";
-        case PUSH_D:         return "PUSH_D";
-        case DBG_DUMP_STACK: return "DBG_DUMP_STACK";
-        case ADD_I:          return "ADD_I";
-        case ADD_D:          return "ADD_D";
-        case JMP:            return "JMP";
-        case BR_IF:          return "BRANCH_IF";
-        case LT_D:           return "LT_D";
-        case LE_D:           return "LE_D";
-        case GT_D:           return "GT_D";
-        case GE_D:           return "GE_D";
-        case LT_I:           return "LT_I";
-        case LE_I:           return "LE_I";
-        case GT_I:           return "GT_I";
-        case GE_I:           return "GE_I";
-        case PUSH_ENV:       return "PUSH_ENV";
-        case POP_ENV:        return "POP_ENV";
-        case SET_ENV:        return "SET_ENV";
-        case GET_ENV:        return "GET_ENV";
-        default:             return "unknown";
+        case NOP:               return "NOP";
+        case TRC:               return "TRC";
+        case PUSH_I:            return "PUSH_I";
+        case PUSH_D:            return "PUSH_D";
+        case DBG_DUMP_STACK:    return "DBG_DUMP_STACK";
+        case DBG_DUMP_ENVSTACK: return "DBG_DUMP_ENVSTACK";
+        case ADD_I:             return "ADD_I";
+        case ADD_D:             return "ADD_D";
+        case JMP:               return "JMP";
+        case BR_IF:             return "BRANCH_IF";
+        case LT_D:              return "LT_D";
+        case LE_D:              return "LE_D";
+        case GT_D:              return "GT_D";
+        case GE_D:              return "GE_D";
+        case LT_I:              return "LT_I";
+        case LE_I:              return "LE_I";
+        case GT_I:              return "GT_I";
+        case GE_I:              return "GE_I";
+        case PUSH_ENV:          return "PUSH_ENV";
+        case POP_ENV:           return "POP_ENV";
+        case SET_ENV:           return "SET_ENV";
+        case GET_ENV:           return "GET_ENV";
+        default:                return "unknown";
     }
+}
+//---------------------------------------------------------------------------
+
+void VM::dump_envstack(const std::string &msg)
+{
+    int offs = 0;
+
+    cout << "### BEGIN ENV STACK DUMP {" << msg << "}" << endl;
+    for (int i = m_env_stack.size() - 1; i >= 0; i--)
+    {
+        cout << "    [" << i << "] ";
+        SimpleVec &sv = m_env_stack[i]->m_d.vec;
+        for (size_t d = 0; d < sv.len; d++)
+        {
+            if (sv.elems[d])
+                cout << "(" << d << ": " << sv.elems[d]->to_string() << ")";
+            else
+                cout << "(" << d << "  " << "null" << ")";
+        }
+        cout << endl;
+    }
+    cout << "### END ENV STACK DUMP {" << msg << "}" << endl;
 }
 //---------------------------------------------------------------------------
 
@@ -55,7 +112,7 @@ void VM::dump_stack(const std::string &msg)
     int offs = 0;
 
     cout << "### BEGIN STACK DUMP {" << msg << "}" << endl;
-    for (int i = 0; i < m_stack.size(); i++)
+    for (size_t i = 0; i < m_stack.size(); i++)
     {
         Datum *d = m_stack[i];
         cout << "    " << i << ": " << d->to_string() << endl;
@@ -64,9 +121,26 @@ void VM::dump_stack(const std::string &msg)
 }
 //---------------------------------------------------------------------------
 
+void DatumPool::grow()
+{
+    size_t new_chunk_size = (m_allocated.size() + 1) * 2;
+    Datum *dt = new Datum[new_chunk_size];
+    for (size_t i = 0; i < new_chunk_size; i++)
+    {
+        m_allocated.push_back(dt);
+        dt->m_next = m_free_list;
+        m_free_list = dt;
+
+        dt++;
+    }
+
+    cout << "Datum pool grew to " << m_allocated.size() << endl;
+}
+//---------------------------------------------------------------------------
+
 Datum *VM::new_dt_int(int64_t i)
 {
-    Datum *dt = new_datum(T_INT);
+    Datum *dt = m_datum_pool.new_datum(T_INT);
     dt->m_d.i = i;
     return dt;
 }
@@ -74,15 +148,9 @@ Datum *VM::new_dt_int(int64_t i)
 
 Datum *VM::new_dt_dbl(double d)
 {
-    Datum *dt = new_datum(T_DBL);
+    Datum *dt = m_datum_pool.new_datum(T_DBL);
     dt->m_d.d = d;
     return dt;
-}
-//---------------------------------------------------------------------------
-
-Datum *VM::new_datum(Type t)
-{
-    return new Datum(t);
 }
 //---------------------------------------------------------------------------
 
@@ -101,7 +169,8 @@ Datum *VM::run()
         Operation &op = *(m_ops[m_ip]);
 
         if (m_enable_trace_log)
-            cout << "(stks=" << GET_STK_SIZE << ") TRC: " << OPCODE2NAME(op.m_op)
+            cout << "TRC (stks=" << GET_STK_SIZE << ") IP="
+                 << m_ip << ": " << OPCODE2NAME(op.m_op)
                  << endl;
 
         switch (op.m_op)
@@ -155,52 +224,20 @@ Datum *VM::run()
 
             case PUSH_ENV:
             {
-                // TODO: Sometime optimize this with EnvFrame pools,
+                // TODO: Sometime optimize this with vector pools,
                 //       because functions are called regularily.
-                m_env_stack.push_back(new EnvFrame(op.m_1.i));
+                m_env_stack.push_back(
+                    m_datum_pool.new_vector(T_VEC, (size_t) op.m_1.i));
                 break;
             }
 
             case POP_ENV:
             {
-                // TODO: Sometime optimize this with EnvFrame pools,
-                //       because functions are called regularily.
-                EnvFrame *frm = m_env_stack.back();
                 m_env_stack.pop_back();
-                delete frm;
                 break;
             }
 
             case SET_ENV:
-            {
-                if (m_env_stack.empty())
-                {
-                    cout << "ERROR: Access to empty env stack" << endl;
-                    return nullptr;
-                }
-                EnvFrame *ef = m_env_stack.back();
-
-                int cnt   = op.m_1.i;
-                int start = op.m_2.i;
-                int stkoffs = 1;
-                for (int i = start; i < (start + cnt); i++)
-                {
-                    if (i >= ef->m_len)
-                    {
-                        cout << "ERROR: Access outside of env frame" << endl;
-                        return nullptr;
-                    }
-
-                    ef->m_env[i] = STK_AT(stkoffs);
-                    stkoffs++;
-                }
-                for (int i = 1; i < stkoffs; i++)
-                {
-                    STK_POP();
-                }
-                break;
-            }
-
             case GET_ENV:
             {
                 if (m_env_stack.empty())
@@ -209,8 +246,8 @@ Datum *VM::run()
                     return nullptr;
                 }
 
-                int stkoffs = op.m_1.i;
-                int idx     = op.m_2.i;
+                size_t stkoffs = (size_t) op.m_1.i;
+                size_t idx     = (size_t) op.m_2.i;
 
                 if (stkoffs >= m_env_stack.size())
                 {
@@ -218,16 +255,54 @@ Datum *VM::run()
                     return nullptr;
                 }
 
-                EnvFrame *ef = m_env_stack[m_env_stack.size() - (stkoffs + 1)];
-                if (idx >= ef->m_len)
+                SimpleVec &sv =
+                    m_env_stack[m_env_stack.size() - (stkoffs + 1)]->m_d.vec;
+                if (idx >= sv.len)
                 {
                     cout << "ERROR: Access outside of env frame" << endl;
                     return nullptr;
                 }
 
-                Datum *dt = ef->m_env[idx];
-                if (!dt) dt = new_dt_int(0);
-                STK_PUSH(dt);
+                if (op.m_op == SET_ENV)
+                {
+                    sv.elems[idx] = STK_AT(1);
+                    STK_POP();
+                }
+                else
+                {
+                    Datum *dt = sv.elems[idx];
+                    if (!dt) dt = new_dt_int(0);
+                    STK_PUSH(dt);
+                }
+                break;
+            }
+
+            case JMP:
+            {
+                size_t pos = (size_t) op.m_1.i;
+
+                if (pos < 0 || pos > m_ops.size())
+                {
+                    cout << "ERROR: Invalid JMP adress: " << pos << endl;
+                    return nullptr;
+                }
+
+                m_ip = pos - 1;
+                break;
+            }
+
+            case BR:
+            {
+                int offs = (int) op.m_1.i;
+                int dest = m_ip + offs;
+
+                if (dest < 0 || dest >= (int) m_ops.size())
+                {
+                    cout << "ERROR: Invalid BR offset: " << offs << endl;
+                    return nullptr;
+                }
+
+                m_ip = m_ip + (offs - 1); // -1 because of m_ip++ at the end
                 break;
             }
 
@@ -237,8 +312,14 @@ Datum *VM::run()
                 break;
             }
 
+            case DBG_DUMP_ENVSTACK:
+            {
+                dump_envstack("DBG_DUMP_ENVSTACK");
+                break;
+            }
+
             default:
-                log("Unkown op: " + to_string(op.m_op));
+                log("Unkown op: " + std::string(OPCODE2NAME(op.m_op)));
                 return nullptr;
         }
 
