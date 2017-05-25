@@ -81,7 +81,7 @@ void ASTJSONCodeEmitter::emit_binary_op(ASTNode *n)
 }
 //---------------------------------------------------------------------------
 
-void ASTJSONCodeEmitter::emit_let(ASTNode *n
+void ASTJSONCodeEmitter::emit_let(ASTNode *n)
 {
     // TODO: Rename CodeEmitter => Compiler & CodeEmitter
     // TODO: Environment
