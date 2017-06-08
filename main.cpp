@@ -2,6 +2,7 @@
 #include <fstream>
 #include "lilvm.h"
 #include "JSON.h"
+#include "symtbl.h"
 #include "bukalisp/code_emitter.h"
 
 //---------------------------------------------------------------------------
@@ -19,11 +20,13 @@ class LILASMParser : public json::Parser
           READ_OP
       };
 
+      SymTable *m_symtbl;
       State     m_state;
 
       lilvm::Operation *m_cur_op;
       lilvm::VM        &m_vm;
       bool              m_second;
+      bool              m_sym;
 
 
   public:
@@ -31,7 +34,9 @@ class LILASMParser : public json::Parser
         : m_state(INIT),
           m_cur_op(nullptr),
           m_second(false),
-          m_vm(vm)
+          m_vm(vm),
+          m_symtbl(new SymTable(1000)),
+          m_sym(false)
     {}
     virtual ~LILASMParser() { }
 
@@ -51,6 +56,7 @@ class LILASMParser : public json::Parser
             case READ_PROG:
                 m_state = READ_OP;
                 m_second = false;
+                m_sym    = false;
                 m_cur_op = new Operation(NOP);
                 break;
 
@@ -126,23 +132,33 @@ class LILASMParser : public json::Parser
             return;
         }
 
-#define HANDLE_OP_TYPE(type) \
-        else if (sString == #type) m_cur_op->m_op = type;
-
-        if (sString == "") m_cur_op->m_op = NOP;
-
-        bool found = false;
-        for (int i = 0; OPCODE_NAMES[i][0] != '\0'; i++)
+        if (m_sym)
         {
-            if (sString == OPCODE_NAMES[i])
-            {
-                m_cur_op->m_op = (OPCODE) i;
-                found = true;
-            }
+            Sym *sym = m_symtbl->str2sym(sString);
+            if (m_second)
+                m_cur_op->m_2.sym = sym;
+            else
+                m_cur_op->m_1.sym = sym;
         }
+        else
+        {
+            m_sym = true;
 
-        if (!found)
-            cout << "ERROR: Unknown OP type: " << sString << endl;
+            if (sString == "") m_cur_op->m_op = NOP;
+
+            bool found = false;
+            for (int i = 0; OPCODE_NAMES[i][0] != '\0'; i++)
+            {
+                if (sString == OPCODE_NAMES[i])
+                {
+                    m_cur_op->m_op = (OPCODE) i;
+                    found = true;
+                }
+            }
+
+            if (!found)
+                cout << "ERROR: Unknown OP type: " << sString << endl;
+        }
     }
 };
 //---------------------------------------------------------------------------
@@ -184,41 +200,57 @@ UTF8Buffer *slurp(const std::string &filepath)
 }
 //---------------------------------------------------------------------------
 
-bool run_test_prog(const std::string &filepath)
+bool run_test_prog_ok(const std::string &filepath)
 {
     try
     {
-        VM vm;
-
-        LILASMParser theParser(vm);
-
-        UTF8Buffer *u8b = slurp(filepath);
-        if (!u8b)
+        int retcode = -11;
         {
-            cout << "ERROR: No input?!" << endl;
-            return 1;
+            VM vm;
+
+            LILASMParser theParser(vm);
+
+            UTF8Buffer *u8b = slurp(filepath);
+            if (!u8b)
+            {
+                cout << "ERROR: No input?!" << endl;
+                return false;
+            }
+
+            try
+            {
+                theParser.parse(u8b);
+                delete u8b;
+            }
+            catch (UTF8Buffer_exception &)
+            {
+                cout << "UTF-8 error!" << endl;
+                delete u8b;
+            }
+
+            Datum *d = vm.run();
+            if (!d) return false;
+
+            retcode = (int) d->to_int();
         }
 
-        try
+        if (Datum::s_instance_counter > 0)
         {
-            theParser.parse(u8b);
-            delete u8b;
-        }
-        catch (UTF8Buffer_exception &)
-        {
-            cout << "UTF-8 error!" << endl;
-            delete u8b;
+            cout << "ERROR: "
+                 << Datum::s_instance_counter << " friggin leaked Datums!"
+                 << endl;
+            return false;
         }
 
-        Datum *d = vm.run();
-        if (!d) return 1;
-        return d->to_int() == 23 ? 0 : 1;
+        return retcode == 23 ? true : false;
     }
     catch (const std::exception &e)
     {
         cout << "Exception: " << e.what() << endl;
-        return 1;
+        return false;
     }
+
+    return false;
 }
 //---------------------------------------------------------------------------
 
@@ -253,6 +285,7 @@ void ast_debug_walker(bukalisp::ASTNode *n, int indent_level = 0)
 }
 //---------------------------------------------------------------------------
 
+// TODO: Improve test suite handling of compilation!?
 void test_parser(const std::string &input)
 {
     using namespace bukalisp;
@@ -297,13 +330,15 @@ int main(int argc, char *argv[])
                 break;
             input_file.close();
 
-            if (run_test_prog(path))
+            if (run_test_prog_ok(path))
+            {
+                cout << "OK: " << path << endl;
+            }
+            else
             {
                 cout << "*** FAIL: " << path << endl;
                 break;
             }
-            else
-                cout << "OK: " << path << endl;
         }
     }
     else if (input_file_path == "parser_test")
@@ -312,7 +347,18 @@ int main(int argc, char *argv[])
         else          test_parser("");
     }
     else
-        return run_test_prog(input_file_path);
+    {
+        if (run_test_prog_ok(input_file_path))
+        {
+            cout << "OK: " << input_file_path << endl;
+            return 0;
+        }
+        else
+        {
+            cout << "*** FAIL: " << input_file_path << endl;
+            return 1;
+        }
+    }
 }
 //---------------------------------------------------------------------------
 

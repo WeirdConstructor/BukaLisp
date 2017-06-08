@@ -1,0 +1,11 @@
+[
+    ["PUSH_SYM", "XY"],
+    ["PUSH_I", 0],
+    ["ADD_I"],
+    ["PUSH_SYM", "XY"],
+    ["PUSH_I", 0],
+    ["ADD_I"],
+    ["SUB_I"],
+    ["PUSH_I", 23],
+    ["ADD_I"]
+]

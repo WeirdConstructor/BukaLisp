@@ -55,7 +55,7 @@ void ASTJSONCodeEmitter::emit_binary_op(ASTNode *n)
             || op == "-"
             || op == "i-")
             emit_json_op("PUSH_I", "0");
-        else if (   op == "*" 
+        else if (   op == "*"
                  || op == "i*"
                  || op == "/"
                  || op == "i/")
@@ -83,8 +83,7 @@ void ASTJSONCodeEmitter::emit_binary_op(ASTNode *n)
 
 void ASTJSONCodeEmitter::emit_let(ASTNode *n)
 {
-    // TODO: Rename CodeEmitter => Compiler & CodeEmitter
-    // TODO: Environment
+    m_env = std::make_shared<Environment>(m_env);
 }
 //---------------------------------------------------------------------------
 

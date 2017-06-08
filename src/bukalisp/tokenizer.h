@@ -147,7 +147,6 @@ class Tokenizer
             m_u8buf.reset();
             m_u8buf.append_bytes(sCode.data(), sCode.size());
 
-
             while (m_u8buf.length() > 0)
             {
                 char c = m_u8buf.first_byte(true);
