@@ -1,0 +1,10 @@
+[
+    ["#DEBUG_SYM", "BR_IF"],
+    ["PUSH_I", 1],
+    ["BR_IF", 2],
+    ["PUSH_I", 10],
+    ["PUSH_I", 0],
+    ["BR_IF", 2],
+    ["PUSH_I", 23],
+    ["NOP"]
+]

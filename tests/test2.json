@@ -1,4 +1,5 @@
 [
+    ["#DEBUG_SYM", "GET_ENV, SET_ENV 2"],
     ["PUSH_I", -5],
     ["PUSH_I", 8],
     ["PUSH_I", 9],

@@ -10,49 +10,43 @@ namespace lilvm
 
 unsigned int Datum::s_instance_counter = 0;
 
+Datum g_nil_datum;
+Datum *DT_NIL = &g_nil_datum;
+
 //---------------------------------------------------------------------------
 
 const char *OPCODE_NAMES[] = {
-    "NOP",
-    "TRC",
-    "PUSH_I",
-    "PUSH_D",
-    "PUSH_SYM",
-    "DBG_DUMP_STACK",
-    "DBG_DUMP_ENVSTACK",
-    "PUSH_GC_USE_COUNT",
-    "ADD_I",
-    "ADD_D",
-    "SUB_I",
-    "SUB_D",
-    "MUL_I",
-    "MUL_D",
-    "DIV_I",
-    "DIV_D",
-
-    "JMP",
-    "BR",
-    "BR_IF",
-    "LT_D",
-    "LE_D",
-    "GT_D",
-    "GE_D",
-    "LT_I",
-    "LE_I",
-    "GT_I",
-    "GE_I",
-
-    "POP",
-    "PUSH_ENV",
-    "POP_ENV",
-    "SET_ENV",
-    "GET_ENV",
-    "PUSH_FUNC",
-    "PUSH_PRIM",
-    "CALL_FUNC",
-    "RETURN",
+#define X(a, b, c) b,
+    OPCODE_DEF(X)
+#undef X
     ""
 };
+//---------------------------------------------------------------------------
+
+size_t Operation::min_arg_cnt_for_op(OPCODE o)
+{
+    switch (o)
+    {
+#define X(a, b, c) case a: return c;
+        OPCODE_DEF(X)
+#undef X
+        default: return 0;
+    }
+    return 0;
+}
+//---------------------------------------------------------------------------
+
+size_t Operation::min_arg_cnt_for_op(OPCODE o, Operation &op)
+{
+    switch (o)
+    {
+        case APPEND:    return (size_t) (1 + op.m_1.i);
+        case CALL_FUNC: return (size_t) (1 + op.m_1.i);
+        case FILL_ENV:
+            return (size_t) (op.m_1.i < 0 ? -op.m_1.i : op.m_1.i);
+    }
+    return min_arg_cnt_for_op(o);
+}
 //---------------------------------------------------------------------------
 
 void VM::log(const string &error)
@@ -72,40 +66,20 @@ const char *OPCODE2NAME(OPCODE c)
     return OPCODE_NAMES[c];
     switch (c)
     {
-        case NOP:               return "NOP";
-        case TRC:               return "TRC";
-        case PUSH_I:            return "PUSH_I";
-        case PUSH_D:            return "PUSH_D";
-        case PUSH_SYM:          return "PUSH_SYM";
-        case DBG_DUMP_STACK:    return "DBG_DUMP_STACK";
-        case DBG_DUMP_ENVSTACK: return "DBG_DUMP_ENVSTACK";
-        case ADD_I:             return "ADD_I";
-        case ADD_D:             return "ADD_D";
-        case JMP:               return "JMP";
-        case BR_IF:             return "BRANCH_IF";
-        case LT_D:              return "LT_D";
-        case LE_D:              return "LE_D";
-        case GT_D:              return "GT_D";
-        case GE_D:              return "GE_D";
-        case LT_I:              return "LT_I";
-        case LE_I:              return "LE_I";
-        case GT_I:              return "GT_I";
-        case GE_I:              return "GE_I";
-        case PUSH_ENV:          return "PUSH_ENV";
-        case POP:               return "POP";
-        case POP_ENV:           return "POP_ENV";
-        case SET_ENV:           return "SET_ENV";
-        case GET_ENV:           return "GET_ENV";
+#define X(a, b, c) case a: return b;
+        OPCODE_DEF(X)
+#undef X
         default:                return "unknown";
     }
 }
 //---------------------------------------------------------------------------
 
-void VM::dump_envstack(const std::string &msg)
+void VM::dump_envstack(const std::string &msg, Operation &op)
 {
     int offs = 0;
 
-    cout << "### BEGIN ENV STACK DUMP {" << msg << "}" << endl;
+    cout << "### BEGIN ENV STACK DUMP {" << msg << "}@["
+         << op.m_debug_sym->m_str << "]" << endl;
     for (int i = m_env_stack.size() - 1; i >= 0; i--)
     {
         cout << "    [" << i << "] ";
@@ -123,11 +97,12 @@ void VM::dump_envstack(const std::string &msg)
 }
 //---------------------------------------------------------------------------
 
-void VM::dump_stack(const std::string &msg)
+void VM::dump_stack(const std::string &msg, Operation &op)
 {
     int offs = 0;
 
-    cout << "### BEGIN STACK DUMP {" << msg << "}" << endl;
+    cout << "### BEGIN STACK DUMP {" << msg << "}@["
+         << op.m_debug_sym->m_str << "]" << endl;
     for (size_t i = 0; i < m_stack.size(); i++)
     {
         Datum *d = m_stack[i];
@@ -139,13 +114,17 @@ void VM::dump_stack(const std::string &msg)
 
 void DatumPool::grow()
 {
-    size_t new_chunk_size = (m_allocated.size() + 1) * 2;
+    size_t new_base_size = m_allocated.size();
+    if (new_base_size < m_min_pool_size)
+        new_base_size = m_min_pool_size;
+    size_t new_chunk_size = new_base_size * 2;
     auto dt = new Datum[new_chunk_size];
     m_chunks.push_back(std::move(std::unique_ptr<Datum[]>(dt)));
 
     Datum *dt_ptr = &dt[0];
     for (size_t i = 0; i < new_chunk_size; i++)
     {
+        dt_ptr->m_marks = DT_MARK_FREE;
         m_allocated.push_back(dt_ptr);
         dt_ptr->m_next = m_free_list;
         m_free_list = dt_ptr;
@@ -163,7 +142,11 @@ void DatumPool::reclaim(uint8_t mark)
 
     for (auto &dt : m_allocated)
     {
-        if (dt->get_mark() != mark)
+        auto dt_mark = dt->get_mark();
+//        cout << "DT ALLOC: " << dt << ": " << dt->to_string() << ": " << std::to_string(dt_mark) << endl;
+
+        if (dt_mark == DT_MARK_FREE) continue;
+        if (dt_mark != mark)
             put_on_free_list(dt);
     }
 
@@ -199,18 +182,13 @@ Datum *VM::new_dt_sym(Sym *sym)
 Datum *VM::new_dt_external(Sym *ext_type, Datum *args)
 {
     if (!m_ext_factory)
-    {
-        std::cout << "ERROR: Unknown external type: "
-            << ext_type->m_str << std::endl;
-        return new_dt_int(0);
-    }
+        throw DatumException("No external factory for type: "
+                             + ext_type->m_str);
+
     External *ext = (*m_ext_factory)(ext_type->m_str, args);
     if (!ext)
-    {
-        std::cout << "ERROR: Unknown external type: "
-            << ext_type->m_str << std::endl;
-        return new_dt_int(0);
-    }
+        throw DatumException("Unknown external type: " + ext_type->m_str);
+
     Datum *dt = m_datum_pool.new_datum(T_EXT);
     dt->m_d.ext = ext;
     return dt;
@@ -258,311 +236,438 @@ Datum *VM::run()
 {
     int op_max_ip = m_ops.size() - 1;
 
+    size_t local_stack_size = GET_STK_SIZE;
+
     while (m_ip <= op_max_ip)
     {
-        if (check_stack_overflow())
-        {
-            cout << "ERROR: STACK OVERFLOW!" << endl;
-            break;
-        }
-
         Operation &op = *(m_ops[m_ip]);
-
-        if (m_enable_trace_log)
-            cout << "TRC (stks=" << GET_STK_SIZE << ") IP="
-                << m_ip << ": " << OPCODE2NAME(op.m_op)
-                << endl;
-
-        switch (op.m_op)
+        try
         {
-            case NOP:
-                break;
+            if (m_enable_trace_log)
+                cout << "TRC (stks=" << GET_STK_SIZE << ") IP="
+                    << m_ip << ": " << OPCODE2NAME(op.m_op)
+                    << endl;
 
-            case TRC:
-                m_enable_trace_log = op.m_1.i == 1;
-                break;
+            local_stack_size = GET_STK_SIZE;
 
-            case PUSH_I:
-                {
-                    STK_PUSH(new_dt_int(op.m_1.i));
+            if (local_stack_size > MAX_STACK_SIZE)
+            {
+                throw VMException(
+                        "Stack overflow! (" + std::to_string(local_stack_size)
+                        + " > " + to_string(MAX_STACK_SIZE) + ")",
+                        op);
+            }
+
+            if (local_stack_size < op.m_min_arg_cnt)
+            {
+                throw VMException(
+                        "Too few arguments on stack for op ("
+                        + std::to_string(local_stack_size)
+                        + "), expected "
+                        + std::to_string(op.m_min_arg_cnt),
+                        op);
+            }
+
+            switch (op.m_op)
+            {
+                case NOP:
                     break;
-                }
 
-            case PUSH_D:
-                {
-                    STK_PUSH(new_dt_dbl(op.m_1.d));
+                case TRC:
+                    m_enable_trace_log = op.m_1.i == 1;
                     break;
-                }
 
-            case PUSH_SYM:
-                {
-                    STK_PUSH(new_dt_sym(op.m_1.sym));
-                    break;
-                }
-
-            case SUB_D:
-                {
-                    Datum *new_dt =
-                        new_dt_dbl(  STK_AT(2)->to_dbl()
-                                   - STK_AT(1)->to_dbl());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-
-                    // FIXME: Implement mark & sweep garbage collector!?
-                    break;
-                }
-
-            case SUB_I:
-                {
-                    Datum *new_dt =
-                        new_dt_int(  STK_AT(2)->to_int()
-                                   - STK_AT(1)->to_int());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-
-                    // FIXME: Implement mark & sweep garbage collector!?
-                    break;
-                }
-
-            case ADD_D:
-                {
-                    Datum *new_dt =
-                        new_dt_dbl(  STK_AT(2)->to_dbl()
-                                   + STK_AT(1)->to_dbl());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-
-                    // FIXME: Implement mark & sweep garbage collector!?
-                    break;
-                }
-
-            case ADD_I:
-                {
-                    Datum *new_dt =
-                        new_dt_int(  STK_AT(2)->to_int()
-                                   + STK_AT(1)->to_int());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-
-                    // FIXME: Implement mark & sweep garbage collector!?
-                    break;
-                }
-
-            case MUL_D:
-                {
-                    Datum *new_dt =
-                        new_dt_dbl(  STK_AT(2)->to_dbl()
-                                   * STK_AT(1)->to_dbl());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-                    break;
-                }
-
-            case MUL_I:
-                {
-                    Datum *new_dt =
-                        new_dt_int(  STK_AT(2)->to_int()
-                                   * STK_AT(1)->to_int());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-                    break;
-                }
-
-            case DIV_D:
-                {
-                    Datum *new_dt =
-                        new_dt_dbl(  STK_AT(2)->to_dbl()
-                                   / STK_AT(1)->to_dbl());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-                    break;
-                }
-
-            case DIV_I:
-                {
-                    Datum *new_dt =
-                        new_dt_int(  STK_AT(1)->to_int()
-                                   / STK_AT(2)->to_int());
-                    STK_POP();
-                    STK_POP();
-                    STK_PUSH(new_dt);
-                    break;
-                }
-
-            case PUSH_ENV:
-                {
-                    // TODO: Sometime optimize this with vector pools,
-                    //       because functions are called regularily.
-                    m_env_stack.push_back(
-                        m_datum_pool.new_vector(T_VEC, (size_t) op.m_1.i));
-                    break;
-                }
-
-            case POP_ENV:
-                {
-                    m_env_stack.pop_back();
-                    break;
-                }
-
-            case POP:
-                {
-                    for (int i = 0; i < op.m_1.i; i++)
+                case DUP:
                     {
+                        STK_PUSH(STK_AT(1));
+                        break;
+                    }
+
+                case SWAP:
+                    {
+                        Datum *dt1 = STK_AT(1);
+                        Datum *dt2 = STK_AT(2);
                         STK_POP();
-                    }
-                    break;
-                }
-
-            case SET_ENV:
-            case GET_ENV:
-                {
-                    if (m_env_stack.empty())
-                    {
-                        cout << "ERROR: Access to empty env stack" << endl;
-                        return nullptr;
-                    }
-
-                    size_t stkoffs = (size_t) op.m_1.i;
-                    size_t idx     = (size_t) op.m_2.i;
-
-                    if (stkoffs >= m_env_stack.size())
-                    {
-                        cout << "ERROR: Access to non existing env frame" << endl;
-                        return nullptr;
-                    }
-
-                    SimpleVec &sv =
-                        m_env_stack[m_env_stack.size() - (stkoffs + 1)]->m_d.vec;
-                    if (idx >= sv.len)
-                    {
-                        cout << "ERROR: Access outside of env frame" << endl;
-                        return nullptr;
-                    }
-
-                    if (op.m_op == SET_ENV)
-                    {
-                        sv.elems[idx] = STK_AT(1);
                         STK_POP();
+                        STK_PUSH(dt1);
+                        STK_PUSH(dt2);
+                        break;
                     }
-                    else
+
+                case PUSH_I:
                     {
-                        Datum *dt = sv.elems[idx];
-                        if (!dt) dt = new_dt_int(0);
-                        STK_PUSH(dt);
+                        STK_PUSH(new_dt_int(op.m_1.i));
+                        break;
                     }
-                    break;
-                }
 
-            case JMP:
-                {
-                    size_t pos = (size_t) op.m_1.i;
-
-                    if (pos < 0 || pos > m_ops.size())
+                case PUSH_NIL:
                     {
-                        cout << "ERROR: Invalid JMP adress: " << pos << endl;
-                        return nullptr;
+                        STK_PUSH(DT_NIL);
+                        break;
                     }
 
-                    m_ip = pos - 1;
-                    break;
-                }
-
-            case BR:
-                {
-                    int offs = (int) op.m_1.i;
-                    int dest = m_ip + offs;
-
-                    if (dest < 0 || dest >= (int) m_ops.size())
+                case PUSH_D:
                     {
-                        cout << "ERROR: Invalid BR offset: " << offs << endl;
-                        return nullptr;
+                        STK_PUSH(new_dt_dbl(op.m_1.d));
+                        break;
                     }
 
-                    m_ip = m_ip + (offs - 1); // -1 because of m_ip++ at the end
-                    break;
-                }
-
-            case PUSH_PRIM:
-                {
-                    size_t id = (size_t) op.m_1.i;
-                    if (m_primitives.size() <= id)
+                case PUSH_SYM:
                     {
-                        cout << "ERROR: Unknown primitive id=" << id << endl;
-                        return nullptr;
+                        STK_PUSH(new_dt_sym(op.m_1.sym));
+                        break;
                     }
 
-                    if (!m_primitives[id])
+                case SUB_D:
                     {
-                        cout << "ERROR: Invalid primitive id=" << id << endl;
-                        return nullptr;
-                    }
-
-                    STK_PUSH(new_dt_prim(m_primitives[id]));
-                    break;
-                };
-
-            case CALL_FUNC:
-                {
-                    size_t argc   = (size_t) op.m_1.i;
-                    bool   retval = op.m_2.i == 0 ? false : true;
-
-                    auto &dt = STK_AT(1);
-                    if (dt->m_type != T_PRIM)
-                    {
-                        cout << "ERROR: Uncallable value on top of the stack!"
-                             << endl;
-                        dump_stack("CALL_FUNC");
-                        return nullptr;
-                    }
-
-                    Datum *ret = (*dt->m_d.func)(this, m_stack, argc, retval);
-
-                    for (size_t i = 0; i < argc + 1; i++)
+                        Datum *new_dt =
+                            new_dt_dbl(  STK_AT(2)->to_dbl()
+                                       - STK_AT(1)->to_dbl());
                         STK_POP();
-
-                    if (retval)
-                    {
-                        if (!ret) ret = new_dt_int(0);
-                        STK_PUSH(ret);
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
                     }
 
-                    break;
-                }
+                case SUB_I:
+                    {
+                        Datum *new_dt =
+                            new_dt_int(  STK_AT(2)->to_int()
+                                       - STK_AT(1)->to_int());
+                        STK_POP();
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
+                    }
 
-            case DBG_DUMP_STACK:
-                {
-                    dump_stack("DBG_DUMP_STACK");
-                    break;
-                }
+                case ADD_D:
+                    {
+                        Datum *new_dt =
+                            new_dt_dbl(  STK_AT(2)->to_dbl()
+                                       + STK_AT(1)->to_dbl());
+                        STK_POP();
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
+                    }
 
-            case DBG_DUMP_ENVSTACK:
-                {
-                    dump_envstack("DBG_DUMP_ENVSTACK");
-                    break;
-                }
+                case ADD_I:
+                    {
+                        Datum *new_dt =
+                            new_dt_int(  STK_AT(2)->to_int()
+                                       + STK_AT(1)->to_int());
+                        STK_POP();
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
+                    }
 
-            case PUSH_GC_USE_COUNT:
-                {
-                    STK_PUSH(new_dt_int(m_datum_pool.get_datums_in_use_count()));
-                    break;
-                }
+                case MUL_D:
+                    {
+                        Datum *new_dt =
+                            new_dt_dbl(  STK_AT(2)->to_dbl()
+                                       * STK_AT(1)->to_dbl());
+                        STK_POP();
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
+                    }
 
-            default:
-                log("Unkown op: " + std::string(OPCODE2NAME(op.m_op)));
-                return nullptr;
+                case MUL_I:
+                    {
+                        Datum *new_dt =
+                            new_dt_int(  STK_AT(2)->to_int()
+                                       * STK_AT(1)->to_int());
+                        STK_POP();
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
+                    }
+
+                case DIV_D:
+                    {
+                        Datum *new_dt =
+                            new_dt_dbl(  STK_AT(2)->to_dbl()
+                                       / STK_AT(1)->to_dbl());
+                        STK_POP();
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
+                    }
+
+                case DIV_I:
+                    {
+                        Datum *new_dt =
+                            new_dt_int(  STK_AT(1)->to_int()
+                                       / STK_AT(2)->to_int());
+                        STK_POP();
+                        STK_POP();
+                        STK_PUSH(new_dt);
+                        break;
+                    }
+
+                case PUSH_ENV:
+                    {
+                        // TODO: Sometime optimize this with vector pools,
+                        //       because functions are called regularily.
+                        m_env_stack.push_back(
+                            m_datum_pool.new_vector(T_VEC, (size_t) op.m_1.i));
+                        break;
+                    }
+
+                case FILL_ENV:
+                    {
+                        size_t fill_cnt = (size_t) op.m_1.i;
+
+                        if (m_env_stack.empty())
+                            throw VMException("Access to empty env stack", op);
+                        SimpleVec &sv =
+                            m_env_stack[m_env_stack.size() - 1]->m_d.vec;
+
+                        if (fill_cnt >= sv.len)
+                            throw VMException(
+                                "Pushed env too small for fill ("
+                                + std::to_string(fill_cnt)
+                                + " >= "
+                                + std::to_string(sv.len),
+                                op);
+
+                        for (size_t i = 0; i < fill_cnt; i++)
+                            sv.elems[i] = STK_AT(i + 1);
+
+                        for (size_t i = 0; i < fill_cnt; i++)
+                            STK_POP();
+                        break;
+                    }
+
+                case POP_ENV:
+                    {
+                        if (m_env_stack.empty())
+                            throw VMException("Access to empty env stack", op);
+                        m_env_stack.pop_back();
+                        break;
+                    }
+
+                case POP:
+                    {
+                        for (int i = 0; i < op.m_1.i; i++)
+                        {
+                            STK_POP();
+                        }
+                        break;
+                    }
+
+                case APPEND:
+                    {
+                        Datum *tail = STK_AT(1);
+                        for (int i = 0; i < op.m_1.i; i++)
+                        {
+                            Datum *dt = STK_AT(i + 2);
+                            dt->m_next = tail;
+                            tail = dt;
+                        }
+                        for (int i = 0; i < op.m_1.i + 1; i++)
+                            STK_POP();
+                        STK_PUSH(tail);
+                        break;
+                    }
+
+                case TAIL:
+                    {
+                        Datum *list = STK_AT(1);
+                        STK_POP();
+                        if (list->m_next) STK_PUSH(list->m_next);
+                        else              STK_PUSH(DT_NIL);
+                        break;
+                    }
+
+                case LIST_LEN:
+                    {
+                        Datum *dt = STK_AT(1);
+                        if (!dt->m_next)
+                        {
+                            STK_PUSH(DT_NIL);
+                            break;
+                        }
+
+                        int64_t len = 1;
+                        while (dt)
+                        {
+                            dt = dt->m_next;
+                            len++;
+                        }
+
+                        STK_PUSH(new_dt_int(len));
+                        break;
+                    }
+
+                case IS_LIST:
+                    {
+                        Datum *dt = STK_AT(1);
+                        STK_PUSH(new_dt_int(dt->m_next ? 1 : 0));
+                        break;
+                    }
+
+                case IS_NIL:
+                    {
+                        Datum *dt = STK_AT(1);
+                        STK_PUSH(new_dt_int(dt->m_type == T_NIL ? 1 : 0));
+                        break;
+                    }
+
+                case SET_ENV:
+                case GET_ENV:
+                    {
+                        if (m_env_stack.empty())
+                            throw VMException("Access to empty env stack", op);
+
+                        size_t stkoffs = (size_t) op.m_1.i;
+                        size_t idx     = (size_t) op.m_2.i;
+
+                        if (stkoffs >= m_env_stack.size())
+                            throw VMException("Access to non existing env frame", op);
+
+                        SimpleVec &sv =
+                            m_env_stack[m_env_stack.size() - (stkoffs + 1)]->m_d.vec;
+                        if (idx >= sv.len)
+                            throw VMException("Access outside of env frame", op);
+
+                        if (op.m_op == SET_ENV)
+                        {
+                            sv.elems[idx] = STK_AT(1);
+                            STK_POP();
+                        }
+                        else
+                        {
+                            Datum *dt = sv.elems[idx];
+                            if (!dt) dt = DT_NIL;
+                            STK_PUSH(dt);
+                        }
+                        break;
+                    }
+
+                case JMP:
+                    {
+                        size_t pos = (size_t) op.m_1.i;
+
+                        if (pos < 0 || pos > m_ops.size())
+                            throw VMException("Invalid JMP address: "
+                                              + std::to_string(pos), op);
+
+                        m_ip = pos - 1;
+                        break;
+                    }
+
+                case BR:
+                    {
+                        int offs = (int) op.m_1.i;
+                        int dest = m_ip + offs;
+
+                        if (dest < 0 || dest >= (int) m_ops.size())
+                            throw VMException("Invalid BR offset: "
+                                              + std::to_string(offs), op);
+
+                        m_ip = m_ip + (offs - 1); // -1 because of m_ip++ at the end
+                        break;
+                    }
+
+                case BR_IF:
+                    {
+                        int offs = (int) op.m_1.i;
+                        int dest = m_ip + offs;
+
+                        if (dest < 0 || dest >= (int) m_ops.size())
+                            throw VMException("Invalid BR offset: "
+                                              + std::to_string(offs), op);
+
+                        Datum *dt = STK_AT(1);
+                        STK_POP();
+                        if (dt->to_int() != 0)
+                            m_ip = m_ip + (offs - 1); // -1 because of m_ip++ at the end
+                        break;
+                    }
+
+                case PUSH_PRIM:
+                    {
+                        size_t id = (size_t) op.m_1.i;
+                        if (m_primitives.size() <= id)
+                            throw VMException("Unknown primitive id: "
+                                              + std::to_string(id), op);
+
+                        if (!m_primitives[id])
+                            throw VMException("Invalid primitive at id: "
+                                              + std::to_string(id), op);
+
+                        STK_PUSH(new_dt_prim(m_primitives[id]));
+                        break;
+                    };
+
+                case CALL_FUNC:
+                    {
+                        size_t argc   = (size_t) op.m_1.i;
+                        bool   retval = op.m_2.i == 0 ? false : true;
+
+                        auto &dt = STK_AT(1);
+                        if (dt->m_type != T_PRIM)
+                            throw VMException(
+                                "Uncallable value on top of the stack: "
+                                + dt->to_string(), op);
+
+                        Datum *ret = (*dt->m_d.func)(this, m_stack, argc, retval);
+
+                        for (size_t i = 0; i < argc + 1; i++)
+                            STK_POP();
+
+                        if (retval)
+                        {
+                            if (!ret) ret = new_dt_int(0);
+                            STK_PUSH(ret);
+                        }
+
+                        break;
+                    }
+
+                case DBG_DUMP_STACK:
+                    {
+                        dump_stack("DBG_DUMP_STACK", op);
+                        break;
+                    }
+
+                case DBG_DUMP_ENVSTACK:
+                    {
+                        dump_envstack("DBG_DUMP_ENVSTACK", op);
+                        break;
+                    }
+
+                case PUSH_GC_USE_COUNT:
+                    {
+                        STK_PUSH(
+                            new_dt_int(
+                                m_datum_pool.get_datums_in_use_count()));
+                        break;
+                    }
+
+                default:
+                    throw VMException("Unknown OP", op);
+            }
+
+        }
+        catch (DatumException &e)
+        {
+            throw VMException(e.what(), op);
+        }
+        catch (std::exception &)
+        {
+            throw;
         }
 
         m_ip++;
+
+        m_datum_pool.collect_if_needed();
     }
     if (GET_STK_SIZE <= 0)
         return nullptr;
+    local_stack_size = GET_STK_SIZE;
     return STK_AT(1);
 }
 //---------------------------------------------------------------------------

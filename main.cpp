@@ -10,6 +10,17 @@
 using namespace lilvm;
 using namespace std;
 
+class BukLiVMException : public std::exception
+{
+    private:
+        std::string m_err;
+    public:
+        BukLiVMException(const std::string &err) : m_err(err) { }
+        virtual const char *what() const noexcept { return m_err.c_str(); }
+        virtual ~BukLiVMException() { }
+};
+//---------------------------------------------------------------------------
+
 class LILASMParser : public json::Parser
 {
   private:
@@ -22,11 +33,13 @@ class LILASMParser : public json::Parser
 
       SymTable *m_symtbl;
       State     m_state;
+      Sym      *m_cur_debug_sym;
 
       lilvm::Operation *m_cur_op;
       lilvm::VM        &m_vm;
       bool              m_second;
       bool              m_sym;
+      bool              m_debug_sym;
 
 
   public:
@@ -36,8 +49,14 @@ class LILASMParser : public json::Parser
           m_second(false),
           m_vm(vm),
           m_symtbl(new SymTable(1000)),
-          m_sym(false)
-    {}
+          m_sym(false),
+          m_debug_sym(false)
+    {
+        m_cur_debug_sym = m_symtbl->str2sym("");
+    }
+
+    Sym *last_debug_sym() { return m_cur_debug_sym; }
+
     virtual ~LILASMParser() { }
 
     virtual void onObjectStart()                      {}
@@ -54,10 +73,11 @@ class LILASMParser : public json::Parser
                 break;
 
             case READ_PROG:
-                m_state = READ_OP;
-                m_second = false;
-                m_sym    = false;
-                m_cur_op = new Operation(NOP);
+                m_state     = READ_OP;
+                m_second    = false;
+                m_sym       = false;
+                m_debug_sym = false;
+                m_cur_op    = new Operation(NOP);
                 break;
 
             default:
@@ -75,8 +95,15 @@ class LILASMParser : public json::Parser
         switch (m_state)
         {
             case READ_OP: // opening "[" in the file
-                m_vm.append(m_cur_op);
-                m_cur_op = nullptr;
+                if (m_cur_op)
+                {
+                    m_cur_op->m_min_arg_cnt =
+                        Operation::min_arg_cnt_for_op(
+                            m_cur_op->m_op,
+                            *m_cur_op);
+                    m_vm.append(m_cur_op);
+                    m_cur_op = nullptr;
+                }
 
                 m_state = READ_PROG;
                 break;
@@ -93,7 +120,7 @@ class LILASMParser : public json::Parser
     }
     virtual void onError(UTF8Buffer *u8Buf, const char *csError)
     {
-        cout << "ERROR: Parsing the JSON: " << csError << endl;
+        throw BukLiVMException("Parsing the JSON: " + string(csError));
     }
 
     virtual void onValueBoolean(bool bValue) { (void) bValue; }
@@ -102,8 +129,7 @@ class LILASMParser : public json::Parser
     {
         if (!m_cur_op)
         {
-            cout << "ERROR: Bad OP sequence in JSON, bad OP type?" << endl;
-            return;
+            throw BukLiVMException("Bad OP sequence in JSON, bad OP type?");
         }
 
         if (m_second)
@@ -128,11 +154,14 @@ class LILASMParser : public json::Parser
     {
         if (!m_cur_op)
         {
-            cout << "ERROR: Can't define OP type at this point!" << endl;
-            return;
+            throw BukLiVMException("Can't define OP type at this point!");
         }
 
-        if (m_sym)
+        if (m_debug_sym)
+        {
+            m_cur_debug_sym = m_symtbl->str2sym(sString);
+        }
+        else if (m_sym)
         {
             Sym *sym = m_symtbl->str2sym(sString);
             if (m_second)
@@ -144,6 +173,12 @@ class LILASMParser : public json::Parser
         {
             m_sym = true;
 
+            if (sString == "#DEBUG_SYM")
+            {
+                m_debug_sym = true;
+                return;
+            }
+
             if (sString == "") m_cur_op->m_op = NOP;
 
             bool found = false;
@@ -151,13 +186,14 @@ class LILASMParser : public json::Parser
             {
                 if (sString == OPCODE_NAMES[i])
                 {
-                    m_cur_op->m_op = (OPCODE) i;
+                    m_cur_op->m_op        = (OPCODE) i;
+                    m_cur_op->m_debug_sym = m_cur_debug_sym;
                     found = true;
                 }
             }
 
             if (!found)
-                cout << "ERROR: Unknown OP type: " << sString << endl;
+                throw BukLiVMException("Unknown OP type: " + sString);
         }
     }
 };
@@ -171,36 +207,31 @@ UTF8Buffer *slurp(const std::string &filepath)
     ifstream input_file(filepath.c_str(),
                         ios::in | ios::binary | ios::ate);
 
-    if (input_file.is_open())
-    {
-        size_t size = (size_t) input_file.tellg();
+    if (!input_file.is_open())
+        throw BukLiVMException("Couldn't open '" + filepath + "'");
 
-        // FIXME (maybe, but not yet)
-        char *unneccesary_buffer_just_to_copy
-            = new char[size];
+    size_t size = (size_t) input_file.tellg();
 
-        input_file.seekg(0, ios::beg);
-        input_file.read(unneccesary_buffer_just_to_copy, size);
-        input_file.close();
+    // FIXME (maybe, but not yet)
+    char *unneccesary_buffer_just_to_copy
+        = new char[size];
+
+    input_file.seekg(0, ios::beg);
+    input_file.read(unneccesary_buffer_just_to_copy, size);
+    input_file.close();
 
 //        cout << "read(" << size << ")["
 //             << unneccesary_buffer_just_to_copy << "]" << endl;
 
-        UTF8Buffer *u8b =
-            new UTF8Buffer(unneccesary_buffer_just_to_copy, size);
-        delete[] unneccesary_buffer_just_to_copy;
+    UTF8Buffer *u8b =
+        new UTF8Buffer(unneccesary_buffer_just_to_copy, size);
+    delete[] unneccesary_buffer_just_to_copy;
 
-        return u8b;
-    }
-    else
-    {
-        cout << "ERROR: Couldn't open: '" << filepath << endl;
-        return nullptr;
-    }
+    return u8b;
 }
 //---------------------------------------------------------------------------
 
-bool run_test_prog_ok(const std::string &filepath)
+bool run_test_prog_ok(const std::string &filepath, Sym *&last_debug_sym)
 {
     try
     {
@@ -212,20 +243,27 @@ bool run_test_prog_ok(const std::string &filepath)
 
             UTF8Buffer *u8b = slurp(filepath);
             if (!u8b)
-            {
-                cout << "ERROR: No input?!" << endl;
-                return false;
-            }
+                throw BukLiVMException("No input from '" + filepath + "'");
 
             try
             {
                 theParser.parse(u8b);
+                last_debug_sym = theParser.last_debug_sym();
                 delete u8b;
+            }
+            catch (std::exception &e)
+            {
+                cerr << "ERROR: " << e.what() << endl;
+                last_debug_sym = theParser.last_debug_sym();
+                delete u8b;
+                return false;
             }
             catch (UTF8Buffer_exception &)
             {
-                cout << "UTF-8 error!" << endl;
+                cerr << "UTF-8 error!" << endl;
+                last_debug_sym = theParser.last_debug_sym();
                 delete u8b;
+                return false;
             }
 
             Datum *d = vm.run();
@@ -234,19 +272,18 @@ bool run_test_prog_ok(const std::string &filepath)
             retcode = (int) d->to_int();
         }
 
-        if (Datum::s_instance_counter > 0)
+        if (Datum::s_instance_counter > 1)
         {
-            cout << "ERROR: "
-                 << Datum::s_instance_counter << " friggin leaked Datums!"
-                 << endl;
-            return false;
+            std::stringstream ss;
+            ss << (Datum::s_instance_counter - 1) << " friggin leaked Datums!";
+            throw BukLiVMException(ss.str());
         }
 
         return retcode == 23 ? true : false;
     }
     catch (const std::exception &e)
     {
-        cout << "Exception: " << e.what() << endl;
+        cerr << "ERROR: " << e.what() << endl;
         return false;
     }
 
@@ -280,7 +317,8 @@ void ast_debug_walker(bukalisp::ASTNode *n, int indent_level = 0)
             break;
         }
         default:
-            cout << "ERROR: Unknown ASTNode Type!" << endl;
+            throw BukLiVMException("Unknown ASTNode Type: "
+                                   + to_string(n->m_type));
     }
 }
 //---------------------------------------------------------------------------
@@ -303,7 +341,7 @@ void test_parser(const std::string &input)
         code_emit.emit_json(anode);
     }
     else
-        cout << "ERROR: Compile Error!" << endl;
+        throw BukLiVMException("BukaLISP Compile Error!");
 }
 //---------------------------------------------------------------------------
 
@@ -313,51 +351,71 @@ void test_parser(const std::string &input)
 
 int main(int argc, char *argv[])
 {
-    using namespace std;
-
-    std::string input_file_path = "input.json";
-
-    if (argc > 1)
-        input_file_path = string(argv[1]);
-
-    if (input_file_path == "tests")
+    try
     {
-        for (int i = 0; i < 100; i++)
-        {
-            std::string path = "tests\\test" + to_string(i) + ".json";
-            ifstream input_file(path.c_str(), ios::in);
-            if (!input_file.is_open())
-                break;
-            input_file.close();
+        using namespace std;
 
-            if (run_test_prog_ok(path))
+        std::string input_file_path = "input.json";
+        Sym *last_debug_sym = nullptr;
+
+        if (argc > 1)
+            input_file_path = string(argv[1]);
+
+        if (input_file_path == "tests")
+        {
+            for (int i = 0; i < 100; i++)
             {
-                cout << "OK: " << path << endl;
-            }
-            else
-            {
-                cout << "*** FAIL: " << path << endl;
-                break;
+                std::string path = "tests\\test" + to_string(i) + ".json";
+                ifstream input_file(path.c_str(), ios::in);
+                if (!input_file.is_open())
+                    break;
+                input_file.close();
+
+
+                if (run_test_prog_ok(path, last_debug_sym))
+                {
+                    cout << "OK: " << path
+                         << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
+                         << endl;
+                }
+                else
+                {
+                    cout << "*** FAIL: " << path
+                         << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
+                         << endl;
+                    break;
+                }
             }
         }
-    }
-    else if (input_file_path == "parser_test")
-    {
-        if (argc > 2) test_parser(argv[2]);
-        else          test_parser("");
-    }
-    else
-    {
-        if (run_test_prog_ok(input_file_path))
+        else if (input_file_path == "parser_test")
         {
-            cout << "OK: " << input_file_path << endl;
-            return 0;
+            if (argc > 2) test_parser(argv[2]);
+            else          test_parser("");
         }
         else
         {
-            cout << "*** FAIL: " << input_file_path << endl;
-            return 1;
+            if (run_test_prog_ok(input_file_path, last_debug_sym))
+            {
+                cout << "OK: " << input_file_path
+                               << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
+                               << endl;
+                return 0;
+            }
+            else
+            {
+                cout << "*** FAIL: " << input_file_path
+                     << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
+                     << endl;
+                return 1;
+            }
         }
+
+        return 0;
+    }
+    catch (std::exception &e)
+    {
+        cerr << "Exception: " << e.what() << endl;
+        return 1;
     }
 }
 //---------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include <sstream>
 #include <functional>
 #include "symtbl.h"
 
@@ -10,59 +11,80 @@ namespace lilvm
 {
 //---------------------------------------------------------------------------
 
+#define OPCODE_DEF(X) \
+    X(NOP,               "NOP"              , 0) \
+    X(TRC,               "TRC"              , 0) \
+    X(DUP,               "DUP"              , 1) \
+    X(SWAP,              "SWAP"             , 2) \
+    X(POP,               "POP"              , 1) \
+    X(PUSH_I,            "PUSH_I"           , 0) \
+    X(PUSH_D,            "PUSH_D"           , 0) \
+    X(PUSH_NIL,          "PUSH_NIL"         , 0) \
+    X(PUSH_SYM,          "PUSH_SYM"         , 0) \
+    X(DBG_DUMP_STACK,    "DBG_DUMP_STACK"   , 0) \
+    X(DBG_DUMP_ENVSTACK, "DBG_DUMP_ENVSTACK", 0) \
+    X(PUSH_GC_USE_COUNT, "PUSH_GC_USE_COUNT", 0) \
+    X(ADD_I,             "ADD_I"            , 2) \
+    X(ADD_D,             "ADD_D"            , 2) \
+    X(SUB_I,             "SUB_I"            , 2) \
+    X(SUB_D,             "SUB_D"            , 2) \
+    X(MUL_I,             "MUL_I"            , 2) \
+    X(MUL_D,             "MUL_D"            , 2) \
+    X(DIV_I,             "DIV_I"            , 2) \
+    X(DIV_D,             "DIV_D"            , 2) \
+    \
+    X(JMP,               "JMP"              , 0) \
+    X(BR,                "BR"               , 0) \
+    X(BR_IF,             "BR_IF"            , 1) \
+    X(LT_D,              "LT_D"             , 2) \
+    X(LE_D,              "LE_D"             , 2) \
+    X(GT_D,              "GT_D"             , 2) \
+    X(GE_D,              "GE_D"             , 2) \
+    X(LT_I,              "LT_I"             , 2) \
+    X(LE_I,              "LE_I"             , 2) \
+    X(GT_I,              "GT_I"             , 2) \
+    X(GE_I,              "GE_I"             , 2) \
+    \
+    X(IS_LIST,           "IS_LIST"          , 1) \
+    X(IS_NIL,            "IS_NIL"           , 1) \
+    X(APPEND,            "APPEND"           , 0) \
+    X(TAIL,              "TAIL"             , 1) \
+    X(LIST_LEN,          "LIST_LEN"         , 1) \
+    \
+    X(PUSH_ENV,          "PUSH_ENV"         , 0) \
+    X(POP_ENV,           "POP_ENV"          , 0) \
+    X(FILL_ENV,          "FILL_ENV"         , 0) \
+    X(SET_ENV,           "SET_ENV"          , 0) \
+    X(GET_ENV,           "GET_ENV"          , 0) \
+    X(PUSH_FUNC,         "PUSH_FUNC"        , 0) \
+    X(PUSH_PRIM,         "PUSH_PRIM"        , 0) \
+    \
+    X(CALL_FUNC,         "CALL_FUNC"        , 1) \
+    X(RETURN,            "RETURN"           , 0) \
+
 enum OPCODE : int8_t
 {
-    NOP,
-    TRC,
-    PUSH_I,
-    PUSH_D,
-    PUSH_SYM,
-    DBG_DUMP_STACK,
-    DBG_DUMP_ENVSTACK,
-    PUSH_GC_USE_COUNT,
-    ADD_I,
-    ADD_D,
-    SUB_I,
-    SUB_D,
-    MUL_I,
-    MUL_D,
-    DIV_I,
-    DIV_D,
-
-    // TODO:
-    JMP,
-    BR,
-    BR_IF,  // x != 0
-    LT_D,   // (DBL) <
-    LE_D,   // (DBL) <=
-    GT_D,   // (DBL) >
-    GE_D,   // (DBL) >=
-    LT_I,   // (INT) <
-    LE_I,   // (INT) <=
-    GT_I,   // (INT) >
-    GE_I,   // (INT) >=
-
-    POP,
-    PUSH_ENV,
-    POP_ENV,
-    SET_ENV,   // saves into env-stack
-    GET_ENV,   // reads from env-stack
-    PUSH_FUNC, // captures env-stack
-    PUSH_PRIM, // pushes primitive operation on the stack for calling
-    CALL_FUNC,
-    // for funcs: restores env-stack, needs to push a new env for storing args
-    // for prims: internally it needs to pop the given args off the stack
-    RETURN
+#define X(a, b, c) a,
+    OPCODE_DEF(X)
+#undef X
+    __LAST_OPCODE
 };
 //---------------------------------------------------------------------------
 
 const char *OPCODE_NAMES[];
+
+const char *OPCODE2NAME(OPCODE c);
 
 struct Operation;
 
 struct Operation
 {
     OPCODE  m_op;
+    size_t  m_min_arg_cnt;
+    Sym    *m_debug_sym;
+
+    static size_t min_arg_cnt_for_op(OPCODE o);
+    static size_t min_arg_cnt_for_op(OPCODE o, Operation &op);
 
     union {
         int64_t i;
@@ -76,12 +98,13 @@ struct Operation
         Sym   *sym;
     } m_2;
 
-    Operation  *m_next;
+    Operation *m_next;
 
     Operation(OPCODE o)
         : m_op(o),
           m_next(nullptr)
     {
+        m_min_arg_cnt = min_arg_cnt_for_op(o);
         m_1.i = 0;
         m_2.i = 0;
     }
@@ -153,6 +176,9 @@ struct Datum
     static unsigned int s_instance_counter;
 
     Type    m_type;
+#define DT_MARK_FREE    0x08
+#define DT_MARK_WHITE   0x01
+#define DT_MARK_BLACK   0x00
     uint8_t m_marks;
 
     union {
@@ -194,24 +220,42 @@ struct Datum
         }
     }
 
-    std::string to_string()
+    std::string to_string(bool in_list = false)
     {
+        std::string ret;
+
+        if (!in_list && m_next)
+            ret = "(";
+
         if (m_type == T_INT)
-            return std::to_string(m_d.i);
+            ret += std::to_string(m_d.i);
         else if (m_type == T_DBL)
-            return std::to_string(m_d.d);
+            ret += std::to_string(m_d.d);
         else if (m_type == T_SYM)
-            return m_d.sym->m_str;
+            ret += m_d.sym->m_str;
         else // T_NIL
         {
-            return "NIL";
+            ret += "NIL";
         }
+
+        if (in_list)
+            ret = " " + ret;
+
+        if (m_next)
+        {
+            if (in_list)
+                return ret + m_next->to_string(true);
+            else
+                return ret + m_next->to_string(true) + ")";
+        }
+
+        return ret;
     }
 
     inline void clear_contents()
     {
         m_next  = nullptr;
-        m_marks = 0;
+        m_marks = DT_MARK_BLACK;
         m_d.i   = 0;
     }
 
@@ -240,16 +284,23 @@ struct Datum
     inline uint8_t get_mark() { return m_marks & 0x0F; }
 
     inline int64_t to_int()
-    { return m_type == T_INT ? m_d.i :
-             m_type == T_DBL ? static_cast<int64_t>(m_d.d) :
-             m_type == T_SYM ? (int64_t) m_d.sym
-                             : m_d.i; }
+    { return m_type == T_INT ? m_d.i
+             : m_type == T_DBL ? static_cast<int64_t>(m_d.d)
+             : m_type == T_SYM ? (int64_t) m_d.sym
+             : m_type == T_NIL ? 0
+             :                   m_d.i; }
     inline double to_dbl()
-    { return m_type == T_DBL ? m_d.d :
-             m_type == T_INT ? static_cast<double>(m_d.i) :
-             m_type == T_SYM ? (double) (int64_t) m_d.sym
-                             : m_d.d; }
+    { return m_type == T_DBL ? m_d.d
+             : m_type == T_INT ? static_cast<double>(m_d.i)
+             : m_type == T_SYM ? (double) (int64_t) m_d.sym
+             : m_type == T_NIL ? 0.0
+             :                   m_d.d; }
 };
+//---------------------------------------------------------------------------
+
+extern Datum  g_nil_datum;
+extern Datum *DT_NIL;
+
 //---------------------------------------------------------------------------
 
 class DatumPool
@@ -266,6 +317,9 @@ class DatumPool
         unsigned int                           m_datums_in_use;
         int                                    m_cur_mark_color;
 
+        bool                                   m_need_collect;
+        size_t                                 m_min_pool_size;
+
         inline void put_on_free_list(Datum *dt)
         {
             if (dt->m_type == T_VEC)
@@ -277,6 +331,7 @@ class DatumPool
                 dt->m_d.vec.elems = nullptr;
             }
 
+            dt->m_marks = DT_MARK_FREE;
             dt->m_next = m_free_list;
             m_free_list = dt;
             m_datums_in_use--;
@@ -287,9 +342,19 @@ class DatumPool
 
 
     public:
-        DatumPool()
-            : m_free_list(nullptr), m_datums_in_use(0)
+        DatumPool(size_t min_pool_size)
+            : m_free_list(nullptr), m_datums_in_use(0), m_need_collect(false),
+              m_min_pool_size(min_pool_size)
         {
+        }
+
+        void collect_if_needed()
+        {
+            if (m_need_collect)
+            {
+                collect();
+                m_need_collect = false;
+            }
         }
 
         Datum *new_vector(Type t, size_t len)
@@ -307,10 +372,8 @@ class DatumPool
         {
             if (!m_free_list)
             {
-                collect();
-
-                if (!m_free_list)
-                    grow();
+                m_need_collect = true;
+                grow();
             }
             m_datums_in_use++;
 
@@ -331,7 +394,12 @@ class DatumPool
 
         void collect()
         {
-            m_cur_mark_color = m_cur_mark_color == 0 ? 1 : 0;
+            m_cur_mark_color =
+                m_cur_mark_color == DT_MARK_BLACK
+                ? DT_MARK_WHITE
+                : DT_MARK_BLACK;
+
+            DT_NIL->mark(m_cur_mark_color);
 
             for (auto &root_set : m_root_sets)
             {
@@ -346,6 +414,41 @@ class DatumPool
 };
 //---------------------------------------------------------------------------
 
+class DatumException : public std::exception
+{
+    private:
+        std::string m_err;
+    public:
+        DatumException(const std::string &err)
+        {
+            m_err = err;
+        }
+
+        virtual const char *what() const noexcept { return m_err.c_str(); }
+        virtual ~DatumException() { }
+};
+//---------------------------------------------------------------------------
+
+class VMException : public std::exception
+{
+    private:
+        std::string m_err;
+    public:
+        VMException(const std::string &err, Operation &op)
+        {
+            std::stringstream ss;
+            ss << "[" << op.m_debug_sym->m_str << "]@"
+               << OPCODE2NAME(op.m_op)
+               << ": " << err;
+            m_err = ss.str();
+        }
+
+        virtual const char *what() const noexcept { return m_err.c_str(); }
+        virtual ~VMException() { }
+};
+//---------------------------------------------------------------------------
+
+#define MAX_STACK_SIZE 1000000
 class VM
 {
     private:
@@ -369,7 +472,8 @@ class VM
             : m_enable_trace_log(false),
               m_ip(0),
               m_cur_mark_color(0),
-              m_ext_factory(ext_fac)
+              m_ext_factory(ext_fac),
+              m_datum_pool(25)
         {
             m_datum_pool.add_root_sets(&m_stack);
             m_datum_pool.add_root_sets(&m_env_stack);
@@ -377,9 +481,9 @@ class VM
             init_core_primitives();
         }
 
-#       define STK_PUSH(datum)  do { m_stack.push_back(datum); } while(0);
-#       define STK_POP()        do { m_stack.pop_back(); } while(0);
-#       define STK_AT(o)        (m_stack[m_stack.size() - o])
+#       define STK_PUSH(datum)  do { m_stack.push_back(datum); } while(0)
+#       define STK_POP()        do { m_stack.pop_back(); } while(0)
+#       define STK_AT(o)        (m_stack[local_stack_size - (o)])
 #       define GET_STK_SIZE     (m_stack.size())
 
         void init_core_primitives();
@@ -397,12 +501,6 @@ class VM
             m_primitives[id] = new Datum::PrimFunc(prim);
         }
 
-        inline bool check_stack_overflow()
-        {
-            // TODO: Check some limit, so we dont gobble up the machine!
-            return false;
-        }
-
         Datum *new_dt_int(int64_t i);
         Datum *new_dt_dbl(double d);
         Datum *new_dt_external(Sym *ext_type, Datum *args);
@@ -412,8 +510,8 @@ class VM
         void pop(size_t cnt);
         void push(Datum *dt);
 
-        void dump_stack(const std::string &msg);
-        void dump_envstack(const std::string &msg);
+        void dump_stack(const std::string &msg, Operation &op);
+        void dump_envstack(const std::string &msg, Operation &op);
         void log(const std::string &error);
         void append(Operation *op);
         Datum *run();

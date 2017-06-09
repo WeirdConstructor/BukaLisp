@@ -1,0 +1,13 @@
+[
+    ["#DEBUG_SYM", "IS_NIL, SWAP"],
+    ["PUSH_NIL"],
+    ["IS_NIL"],
+    ["PUSH_I", 21],
+    ["IS_NIL"],
+    ["ADD_I"],
+    ["ADD_I"],
+    ["SWAP"],
+    ["IS_NIL"],
+    ["ADD_I"],
+    ["ADD_I"]
+]

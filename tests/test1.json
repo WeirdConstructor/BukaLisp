@@ -1,4 +1,5 @@
 [
+    ["#DEBUG_SYM", "PUSH_ENV, SET_ENV, GET_ENV"],
     ["PUSH_I", -3],
     ["PUSH_D", 13.23],
     ["PUSH_ENV", 2],

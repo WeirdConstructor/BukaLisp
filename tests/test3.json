@@ -1,6 +1,7 @@
 [
+    ["#DEBUG_SYM", "JMP"],
     ["PUSH_D", 23.0],
-    ["JMP", 3],
+    ["JMP", 4],
     ["PUSH_D", 42.0],
     ["PUSH_I", 0],
     ["ADD_I"]
