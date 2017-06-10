@@ -309,11 +309,6 @@ struct Datum
 
     inline uint8_t get_mark() { return m_marks & 0x0F; }
 
-    inline std::string to_sym_str()
-    {
-        return m_type 
-    }
-
     inline int64_t to_int()
     { return m_type == T_INT ? m_d.i
              : m_type == T_DBL ? static_cast<int64_t>(m_d.d)
