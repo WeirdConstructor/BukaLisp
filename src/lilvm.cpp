@@ -10,9 +10,6 @@ namespace lilvm
 
 unsigned int Datum::s_instance_counter = 0;
 
-Datum g_nil_datum;
-Datum *DT_NIL = &g_nil_datum;
-
 //---------------------------------------------------------------------------
 
 const char *OPCODE_NAMES[] = {
@@ -152,6 +149,9 @@ void DatumPool::reclaim(uint8_t mark)
 
     cout << "Datums in use before gc: " << in_use_before
         << ", after: " << m_datums_in_use << endl;
+
+    m_next_collect_countdown =
+        (m_allocated.size() - m_datums_in_use) / 2;
 }
 //---------------------------------------------------------------------------
 
@@ -195,13 +195,30 @@ Datum *VM::new_dt_external(Sym *ext_type, Datum *args)
 }
 //---------------------------------------------------------------------------
 
-Datum *VM::new_dt_prim(Datum::PrimFunc *func)
-{
+Datum *VM::new_dt_prim(Datum::PrimFunc *func) {
     Datum *dt = m_datum_pool.new_datum(T_PRIM);
     dt->m_d.func = func;
     return dt;
 }
 //---------------------------------------------------------------------------
+
+Datum *VM::new_dt_clos(int64_t op_idx)
+{
+    Datum *dt =
+        m_datum_pool.new_vector(
+            T_CLOS, 1 + m_env_stack.size());
+
+    SimpleVec &sv = dt->m_d.vec;
+    sv.elems[0] = new_dt_int(op_idx);
+    size_t i = 1;
+    for (auto &dtp : m_env_stack)
+        sv.elems[i++] = dtp;
+
+    return dt;
+}
+//---------------------------------------------------------------------------
+
+Datum *VM::new_dt_nil() { return m_datum_pool.new_datum(T_NIL); }
 
 void VM::pop(size_t cnt)
 {
@@ -244,9 +261,10 @@ Datum *VM::run()
         try
         {
             if (m_enable_trace_log)
-                cout << "TRC (stks=" << GET_STK_SIZE << ") IP="
-                    << m_ip << ": " << OPCODE2NAME(op.m_op)
-                    << endl;
+                cout << "TRC (ds=" << GET_STK_SIZE
+                     << ",es=" << m_env_stack.size() << ") IP="
+                     << m_ip << ": " << OPCODE2NAME(op.m_op)
+                     << endl;
 
             local_stack_size = GET_STK_SIZE;
 
@@ -302,7 +320,7 @@ Datum *VM::run()
 
                 case PUSH_NIL:
                     {
-                        STK_PUSH(DT_NIL);
+                        STK_PUSH(new_dt_nil());
                         break;
                     }
 
@@ -477,7 +495,7 @@ Datum *VM::run()
                         Datum *list = STK_AT(1);
                         STK_POP();
                         if (list->m_next) STK_PUSH(list->m_next);
-                        else              STK_PUSH(DT_NIL);
+                        else              STK_PUSH(new_dt_nil());
                         break;
                     }
 
@@ -486,7 +504,7 @@ Datum *VM::run()
                         Datum *dt = STK_AT(1);
                         if (!dt->m_next)
                         {
-                            STK_PUSH(DT_NIL);
+                            STK_PUSH(new_dt_nil());
                             break;
                         }
 
@@ -540,7 +558,7 @@ Datum *VM::run()
                         else
                         {
                             Datum *dt = sv.elems[idx];
-                            if (!dt) dt = DT_NIL;
+                            if (!dt) dt = new_dt_nil();
                             STK_PUSH(dt);
                         }
                         break;
@@ -587,6 +605,14 @@ Datum *VM::run()
                         break;
                     }
 
+                case PUSH_CLOS_CONT:
+                    {
+                        size_t skip_offs = (size_t) op.m_1.i;
+                        STK_PUSH(new_dt_clos(m_ip));
+                        m_ip += skip_offs;
+                        break;
+                    }
+
                 case PUSH_PRIM:
                     {
                         size_t id = (size_t) op.m_1.i;
@@ -608,22 +634,92 @@ Datum *VM::run()
                         bool   retval = op.m_2.i == 0 ? false : true;
 
                         auto &dt = STK_AT(1);
-                        if (dt->m_type != T_PRIM)
+                        if (dt->m_type != T_PRIM && dt->m_type != T_CLOS)
                             throw VMException(
                                 "Uncallable value on top of the stack: "
                                 + dt->to_string(), op);
 
-                        Datum *ret = (*dt->m_d.func)(this, m_stack, argc, retval);
-
-                        for (size_t i = 0; i < argc + 1; i++)
-                            STK_POP();
-
-                        if (retval)
+                        if (dt->m_type == T_PRIM)
                         {
-                            if (!ret) ret = new_dt_int(0);
-                            STK_PUSH(ret);
+                            Datum *ret = (*dt->m_d.func)(this, m_stack, argc, retval);
+
+                            for (size_t i = 0; i < argc + 1; i++)
+                                STK_POP();
+
+                            if (retval)
+                            {
+                                if (!ret) ret = new_dt_int(0);
+                                STK_PUSH(ret);
+                            }
+                        }
+                        else // T_CLOS
+                        {
+                            // Make closure one time continuation for returning:
+                            Datum *dt_cont = new_dt_clos(m_ip);
+
+                            SimpleVec &sv = dt->m_d.vec;
+
+                            // Write new environment stack:
+                            size_t new_stack_len = sv.len - 1;
+                            m_env_stack.resize(new_stack_len + 1);
+
+                            for (int i = new_stack_len; i > 0; i--)
+                                m_env_stack[new_stack_len - i] =
+                                    sv.elems[i];
+
+                            // Create new environment for variables:
+                            Datum *dt_arg_env =
+                                m_datum_pool.new_vector(T_VEC, argc);
+
+                            // Store all arguments in the new arg env:
+                            SimpleVec &sv_args = dt_arg_env->m_d.vec;
+                            for (size_t i = 1; i <= argc; i++)
+                                sv_args.elems[i - 1] = STK_AT(1 + i);
+
+                            m_env_stack[new_stack_len] = dt_arg_env;
+
+                            // Store closure one time cont in the stack:
+                            STK_AT(argc + 1) = dt_cont;
+
+                            for (size_t i = 0; i < argc; i++)
+                                STK_POP();
+
+                            m_ip = (size_t) sv.elems[0]->to_int();
                         }
 
+                        break;
+                    }
+
+                case RETURN:
+                    {
+                        Datum *dt_ret  = STK_AT(1);
+                        Datum *dt_cont = STK_AT(2);
+
+                        if (dt_cont->m_type != T_CLOS)
+                        {
+                            throw VMException(
+                                "Continuation Closure not found on Stack!", op);
+                        }
+
+                        SimpleVec &sv = dt_cont->m_d.vec;
+
+                        // Write new environment stack:
+                        size_t new_stack_len = sv.len - 1;
+                        m_env_stack.resize(new_stack_len);
+
+                        for (int i = new_stack_len; i > 0; i--)
+                            m_env_stack[new_stack_len - i] =
+                                sv.elems[i];
+
+                        m_ip = (size_t) sv.elems[0]->to_int();
+                        STK_AT(2) = STK_AT(1);
+                        STK_POP();
+
+//                        Get return value STK_AT(1)
+//                            Restore m_env_stack from closure on stack STK_AT(2)
+
+//                        Restore m_ip from closure at STK_AT(2)
+//                        Replace STK_AT(2) with STK_AT(1) and pop 1 value
                         break;
                     }
 

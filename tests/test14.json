@@ -1,0 +1,15 @@
+[
+    ["#DEBUG_SYM", "CALL_FUNC 1 ARG"],
+
+    ["PUSH_CLOS_CONT", 4],
+    ["GET_ENV", 0, 0],
+    ["PUSH_I", 12],
+    ["ADD_I"],
+    ["RETURN"],
+
+    ["PUSH_I", 11],
+    ["SWAP"],
+    ["CALL_FUNC", 1],
+
+    ["NOP"]
+]

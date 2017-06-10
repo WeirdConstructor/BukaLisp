@@ -1,0 +1,29 @@
+[
+    ["#DEBUG_SYM", "ENV CLOSURE MUTATION"],
+
+    ["PUSH_ENV", 1],
+
+    ["PUSH_I", 1],
+    ["SET_ENV", 0, 0],
+
+    ["PUSH_CLOS_CONT", 6],
+    ["GET_ENV", 0, 0],
+    ["GET_ENV", 1, 0],
+    ["ADD_I"],
+    ["PUSH_I", 2],
+    ["SET_ENV", 1, 0],
+    ["RETURN"],
+
+    ["POP_ENV"],
+
+    ["DUP"],
+    ["PUSH_I", 20],
+
+    ["SWAP"],
+    ["CALL_FUNC", 1],
+
+    ["SWAP"],
+    ["CALL_FUNC", 1],
+
+    ["NOP"]
+]

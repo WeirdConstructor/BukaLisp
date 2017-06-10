@@ -56,11 +56,11 @@ namespace lilvm
     X(FILL_ENV,          "FILL_ENV"         , 0) \
     X(SET_ENV,           "SET_ENV"          , 0) \
     X(GET_ENV,           "GET_ENV"          , 0) \
-    X(PUSH_FUNC,         "PUSH_FUNC"        , 0) \
+    X(PUSH_CLOS_CONT,    "PUSH_CLOS_CONT"   , 0) \
     X(PUSH_PRIM,         "PUSH_PRIM"        , 0) \
     \
     X(CALL_FUNC,         "CALL_FUNC"        , 1) \
-    X(RETURN,            "RETURN"           , 0) \
+    X(RETURN,            "RETURN"           , 2) \
 
 enum OPCODE : int8_t
 {
@@ -118,7 +118,7 @@ enum Type
     T_DBL,
     T_VEC,
     T_REF,
-    T_FUNC,
+    T_CLOS,
     T_PRIM,
     T_SYM,
     T_EXT
@@ -227,12 +227,18 @@ struct Datum
         if (!in_list && m_next)
             ret = "(";
 
+        // TODO: Handle T_VEC and T_CLOS!
+
         if (m_type == T_INT)
             ret += std::to_string(m_d.i);
         else if (m_type == T_DBL)
             ret += std::to_string(m_d.d);
         else if (m_type == T_SYM)
             ret += m_d.sym->m_str;
+        else if (m_type == T_PRIM)
+            ret += "#<primitive:" + std::to_string((uint64_t) m_d.func) + ">";
+        else if (m_type == T_CLOS)
+            ret += "#<closure:" + std::to_string((uint64_t) this) + ":" + std::to_string(m_d.vec.len) + ">";
         else // T_NIL
         {
             ret += "NIL";
@@ -266,7 +272,7 @@ struct Datum
         m_marks = (m_marks & 0xF0) | (0x0F & mark);
         if (m_next) m_next->mark(mark);
 
-        if (m_type == T_VEC)
+        if (m_type == T_VEC || m_type == T_CLOS)
         {
             for (size_t i = 0; i < m_d.vec.len; i++)
             {
@@ -298,11 +304,6 @@ struct Datum
 };
 //---------------------------------------------------------------------------
 
-extern Datum  g_nil_datum;
-extern Datum *DT_NIL;
-
-//---------------------------------------------------------------------------
-
 class DatumPool
 {
     private:
@@ -317,6 +318,7 @@ class DatumPool
         unsigned int                           m_datums_in_use;
         int                                    m_cur_mark_color;
 
+        size_t                                 m_next_collect_countdown;
         bool                                   m_need_collect;
         size_t                                 m_min_pool_size;
 
@@ -344,7 +346,8 @@ class DatumPool
     public:
         DatumPool(size_t min_pool_size)
             : m_free_list(nullptr), m_datums_in_use(0), m_need_collect(false),
-              m_min_pool_size(min_pool_size)
+              m_min_pool_size(min_pool_size),
+              m_next_collect_countdown(0)
         {
         }
 
@@ -370,17 +373,25 @@ class DatumPool
 
         Datum *new_datum(Type t)
         {
+            if (m_next_collect_countdown == 0)
+            {
+                m_need_collect = true;
+            }
+            else
+                m_next_collect_countdown--;
+
             if (!m_free_list)
             {
                 m_need_collect = true;
                 grow();
             }
-            m_datums_in_use++;
 
             Datum *newdt = m_free_list;
             m_free_list = newdt->m_next;
+            m_datums_in_use++;
 
             newdt->clear_contents();
+            newdt->mark(m_cur_mark_color);
             newdt->m_type = t;
             return newdt;
         }
@@ -398,8 +409,6 @@ class DatumPool
                 m_cur_mark_color == DT_MARK_BLACK
                 ? DT_MARK_WHITE
                 : DT_MARK_BLACK;
-
-            DT_NIL->mark(m_cur_mark_color);
 
             for (auto &root_set : m_root_sets)
             {
@@ -501,11 +510,13 @@ class VM
             m_primitives[id] = new Datum::PrimFunc(prim);
         }
 
+        Datum *new_dt_clos(int64_t op_idx);
         Datum *new_dt_int(int64_t i);
         Datum *new_dt_dbl(double d);
         Datum *new_dt_external(Sym *ext_type, Datum *args);
         Datum *new_dt_prim(Datum::PrimFunc *func);
         Datum *new_dt_sym(Sym *sym);
+        Datum *new_dt_nil();
 
         void pop(size_t cnt);
         void push(Datum *dt);
