@@ -36,6 +36,9 @@ namespace lilvm
     X(JMP,               "JMP"              , 0) \
     X(BR,                "BR"               , 0) \
     X(BR_IF,             "BR_IF"            , 1) \
+    X(BR_NIF,            "BR_NIF"           , 1) \
+    X(EQ_I,              "EQ_I"             , 2) \
+    X(EQ_D,              "EQ_D"             , 2) \
     X(LT_D,              "LT_D"             , 2) \
     X(LE_D,              "LE_D"             , 2) \
     X(GT_D,              "GT_D"             , 2) \
@@ -227,7 +230,7 @@ struct Datum
         if (!in_list && m_next)
             ret = "(";
 
-        // TODO: Handle T_VEC and T_CLOS!
+        // TODO: Handle T_VEC
 
         if (m_type == T_INT)
             ret += std::to_string(m_d.i);
@@ -256,6 +259,23 @@ struct Datum
         }
 
         return ret;
+    }
+
+    void for_each_in_list(std::function<bool(Datum *dt)> func)
+    {
+        Datum *dt = this;
+        if (!dt->m_next)
+        {
+            func(dt);
+            return;
+        }
+
+        while (dt)
+        {
+            if (!func(dt))
+                break;
+            dt = dt->m_next;
+        }
     }
 
     inline void clear_contents()
@@ -288,6 +308,11 @@ struct Datum
     }
 
     inline uint8_t get_mark() { return m_marks & 0x0F; }
+
+    inline std::string to_sym_str()
+    {
+        return m_type 
+    }
 
     inline int64_t to_int()
     { return m_type == T_INT ? m_d.i
