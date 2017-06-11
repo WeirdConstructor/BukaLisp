@@ -20,10 +20,15 @@ namespace lilvm
     X(PUSH_I,            "PUSH_I"           , 0) \
     X(PUSH_D,            "PUSH_D"           , 0) \
     X(PUSH_NIL,          "PUSH_NIL"         , 0) \
+    X(PUSH_REF,          "PUSH_REF"         , 1) \
     X(PUSH_SYM,          "PUSH_SYM"         , 0) \
     X(DBG_DUMP_STACK,    "DBG_DUMP_STACK"   , 0) \
     X(DBG_DUMP_ENVSTACK, "DBG_DUMP_ENVSTACK", 0) \
     X(PUSH_GC_USE_COUNT, "PUSH_GC_USE_COUNT", 0) \
+    \
+    X(SET_REF,           "SET_REF"          , 2) \
+    X(GET_REF,           "GET_REF"          , 1) \
+    \
     X(ADD_I,             "ADD_I"            , 2) \
     X(ADD_D,             "ADD_D"            , 2) \
     X(SUB_I,             "SUB_I"            , 2) \
@@ -62,7 +67,10 @@ namespace lilvm
     X(PUSH_CLOS_CONT,    "PUSH_CLOS_CONT"   , 0) \
     X(PUSH_PRIM,         "PUSH_PRIM"        , 0) \
     \
-    X(CALL_FUNC,         "CALL_FUNC"        , 1) \
+    X(GET,               "GET"              , 1) \
+    X(SET,               "SET"              , 1) \
+    X(CALL,              "CALL"             , 1) \
+    X(TAILCALL,          "TAILCALL"         , 1) \
     X(RETURN,            "RETURN"           , 2) \
 
 enum OPCODE : int8_t
@@ -157,7 +165,7 @@ class External
 
         virtual Datum *get(VM *vm, Datum *field)                = 0;
         virtual void   set(VM *vm, Datum *field, Datum *val)    = 0;
-        virtual void  call(VM *vm, Datum *field, Datum *args)   = 0;
+        virtual Datum *call(VM *vm, Datum *field, Datum *args)   = 0;
 };
 //---------------------------------------------------------------------------
 
@@ -173,8 +181,8 @@ class ExternalFactory
 
 struct Datum
 {
-    typedef std::function<Datum*(VM *vm, std::vector<Datum *> &stack,
-                                 int argc, bool retval)> PrimFunc;
+    typedef std::function<
+        Datum*(VM *vm, std::vector<Datum *> &stack, int argc)> PrimFunc;
 
     static unsigned int s_instance_counter;
 
@@ -210,11 +218,11 @@ struct Datum
         m_d.ref = nullptr;
     }
 
-    ~Datum()
+    void release_memory()
     {
-        s_instance_counter--;
-
         if (m_type == T_VEC && m_d.vec.elems)
+            delete[] m_d.vec.elems;
+        else if (m_type == T_CLOS && m_d.vec.elems)
             delete[] m_d.vec.elems;
         else if (m_type == T_EXT && m_d.ext)
         {
@@ -223,14 +231,19 @@ struct Datum
         }
     }
 
+    ~Datum()
+    {
+        release_memory();
+        s_instance_counter--;
+    }
+
+    // TODO: pass more state about serialization! Extra method (to_string_list...?)
     std::string to_string(bool in_list = false)
     {
         std::string ret;
 
         if (!in_list && m_next)
             ret = "(";
-
-        // TODO: Handle T_VEC
 
         if (m_type == T_INT)
             ret += std::to_string(m_d.i);
@@ -242,6 +255,8 @@ struct Datum
             ret += "#<primitive:" + std::to_string((uint64_t) m_d.func) + ">";
         else if (m_type == T_CLOS)
             ret += "#<closure:" + std::to_string((uint64_t) this) + ":" + std::to_string(m_d.vec.len) + ">";
+        else if (m_type == T_REF)
+            ret += "{" + (m_d.ref ? m_d.ref->to_string() : "NIL") + "}";
         else // T_NIL
         {
             ret += "NIL";
@@ -266,7 +281,8 @@ struct Datum
         Datum *dt = this;
         if (!dt->m_next)
         {
-            func(dt);
+            if (dt->m_type != T_NIL)
+                func(dt);
             return;
         }
 
@@ -276,6 +292,13 @@ struct Datum
                 break;
             dt = dt->m_next;
         }
+    }
+
+    void convert_to_ref(Datum *dt)
+    {
+        release_memory();
+        m_type = T_REF;
+        m_d.ref = dt;
     }
 
     inline void clear_contents()
@@ -344,15 +367,7 @@ class DatumPool
 
         inline void put_on_free_list(Datum *dt)
         {
-            if (dt->m_type == T_VEC)
-            {
-                if (dt->m_d.vec.elems)
-                    delete[] dt->m_d.vec.elems;
-
-                dt->m_d.vec.len   = 0;
-                dt->m_d.vec.elems = nullptr;
-            }
-
+            dt->release_memory();
             dt->m_marks = DT_MARK_FREE;
             dt->m_next = m_free_list;
             m_free_list = dt;
@@ -537,6 +552,7 @@ class VM
         Datum *new_dt_prim(Datum::PrimFunc *func);
         Datum *new_dt_sym(Sym *sym);
         Datum *new_dt_nil();
+        Datum *new_dt_ref(Datum *dt);
 
         void pop(size_t cnt);
         void push(Datum *dt);

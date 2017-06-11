@@ -1,0 +1,15 @@
+[
+    ["#DEBUG_SYM", "REF"],
+
+    ["PUSH_I", 10],
+    ["PUSH_REF"],
+    ["GET_REF"],
+
+    ["PUSH_I", 13],
+    ["PUSH_REF"],
+    ["GET_REF"],
+
+    ["ADD_I"],
+
+    ["NOP"]
+]

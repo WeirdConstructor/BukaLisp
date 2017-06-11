@@ -37,8 +37,11 @@ size_t Operation::min_arg_cnt_for_op(OPCODE o, Operation &op)
 {
     switch (o)
     {
-        case APPEND:    return (size_t) (1 + op.m_1.i);
-        case CALL_FUNC: return (size_t) (1 + op.m_1.i);
+        case APPEND:   return (size_t) (1 + op.m_1.i);
+        case GET:      return (size_t) (1 + op.m_1.i);
+        case SET:      return (size_t) (1 + op.m_1.i);
+        case CALL:     return (size_t) (1 + op.m_1.i);
+        case TAILCALL: return (size_t) (1 + op.m_1.i);
         case FILL_ENV:
             return (size_t) (op.m_1.i < 0 ? -op.m_1.i : op.m_1.i);
     }
@@ -79,7 +82,7 @@ void VM::dump_envstack(const std::string &msg, Operation &op)
          << op.m_debug_sym->m_str << "]" << endl;
     for (int i = m_env_stack.size() - 1; i >= 0; i--)
     {
-        cout << "    [" << i << "] ";
+        cout << "    [" << ((m_env_stack.size() - 1) - i) << "] ";
         SimpleVec &sv = m_env_stack[i]->m_d.vec;
         for (size_t d = 0; d < sv.len; d++)
         {
@@ -219,6 +222,16 @@ Datum *VM::new_dt_clos(int64_t op_idx)
 //---------------------------------------------------------------------------
 
 Datum *VM::new_dt_nil() { return m_datum_pool.new_datum(T_NIL); }
+//---------------------------------------------------------------------------
+
+Datum *VM::new_dt_ref(Datum *dt)
+{
+    Datum *dt_ref = m_datum_pool.new_datum(T_REF);
+    dt_ref->m_d.ref = dt;
+    return dt_ref;
+}
+//---------------------------------------------------------------------------
+
 
 void VM::pop(size_t cnt)
 {
@@ -235,9 +248,9 @@ void VM::push(Datum *dt)
 
 void VM::init_core_primitives()
 {
-    register_primitive(0, [this](VM *vm, std::vector<Datum *> &s, size_t ac, bool retval){
+    register_primitive(0, [this](VM *vm, std::vector<Datum *> &s, size_t ac){
         m_datum_pool.collect();
-        return retval ? new_dt_int(0) : nullptr;
+        return new_dt_int(m_datum_pool.get_datums_in_use_count());
     });
 
 //    register_primitive(1, [](VM *vm, std::vector<Datum *> &s, size_t ac){

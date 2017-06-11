@@ -1,5 +1,5 @@
 [
-    ["#DEBUG_SYM", "GC_USE_COUNT, PUSH_PRIM, CALL_FUNC and GC"],
+    ["#DEBUG_SYM", "GC_USE_COUNT, PUSH_PRIM, CALL and GC"],
     ["PUSH_I", 1],
     ["POP",    1],
     ["PUSH_I", 1],
@@ -20,8 +20,7 @@
     ["PUSH_I", 1],
     ["POP",    8],
     ["PUSH_PRIM", 0],
-    ["CALL_FUNC", 0, 0],
-    ["PUSH_GC_USE_COUNT"],
+    ["CALL", 0],
     ["PUSH_I", 22],
     ["ADD_I"]
 ]

@@ -1,0 +1,24 @@
+[
+    ["#DEBUG_SYM", "TAILCALL"],
+    ["PUSH_ENV", 2],
+
+    ["PUSH_CLOS_CONT", 2],
+        ["PUSH_I", 11],
+        ["RETURN"],
+    ["SET_ENV", 0, 1],
+
+    ["PUSH_CLOS_CONT", 4],
+
+        ["PUSH_I", 12],
+        ["SET_ENV", 1, 0],
+
+        ["GET_ENV", 1, 1],
+        ["TAILCALL"],
+    ["CALL"],
+
+    ["GET_ENV", 0, 0],
+    ["ADD_I"],
+
+    ["POP_ENV"],
+    ["NOP"]
+]

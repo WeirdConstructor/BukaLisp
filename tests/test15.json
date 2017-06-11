@@ -20,10 +20,10 @@
     ["PUSH_I", 20],
 
     ["SWAP"],
-    ["CALL_FUNC", 1],
+    ["CALL", 1],
 
     ["SWAP"],
-    ["CALL_FUNC", 1],
+    ["CALL", 1],
 
     ["NOP"]
 ]
