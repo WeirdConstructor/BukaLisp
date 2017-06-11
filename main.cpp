@@ -231,7 +231,7 @@ UTF8Buffer *slurp(const std::string &filepath)
 }
 //---------------------------------------------------------------------------
 
-bool run_test_prog_ok(const std::string &filepath, Sym *&last_debug_sym)
+bool run_test_prog(UTF8Buffer *input, Sym *&last_debug_sym)
 {
     try
     {
@@ -241,28 +241,21 @@ bool run_test_prog_ok(const std::string &filepath, Sym *&last_debug_sym)
 
             LILASMParser theParser(vm);
 
-            UTF8Buffer *u8b = slurp(filepath);
-            if (!u8b)
-                throw BukLiVMException("No input from '" + filepath + "'");
-
             try
             {
-                theParser.parse(u8b);
+                theParser.parse(input);
                 last_debug_sym = theParser.last_debug_sym();
-                delete u8b;
             }
             catch (std::exception &e)
             {
                 cerr << "ERROR: " << e.what() << endl;
                 last_debug_sym = theParser.last_debug_sym();
-                delete u8b;
                 return false;
             }
             catch (UTF8Buffer_exception &)
             {
                 cerr << "UTF-8 error!" << endl;
                 last_debug_sym = theParser.last_debug_sym();
-                delete u8b;
                 return false;
             }
 
@@ -291,6 +284,15 @@ bool run_test_prog_ok(const std::string &filepath, Sym *&last_debug_sym)
 }
 //---------------------------------------------------------------------------
 
+bool run_test_prog_ok(const std::string &filepath, Sym *&last_debug_sym)
+{
+    UTF8Buffer *u8b = slurp(filepath);
+    bool ret = run_test_prog(u8b, last_debug_sym);
+    delete u8b;
+    return ret;
+}
+//---------------------------------------------------------------------------
+
 void ast_debug_walker(bukalisp::ASTNode *n, int indent_level = 0)
 {
     using namespace bukalisp;
@@ -316,6 +318,15 @@ void ast_debug_walker(bukalisp::ASTNode *n, int indent_level = 0)
                 ast_debug_walker(child, indent_level + 1);
             break;
         }
+
+        case A_LLIST:
+        {
+            cout << "* LLIST" << endl;
+            for (auto child : n->m_childs)
+                ast_debug_walker(child, indent_level + 1);
+            break;
+        }
+
         default:
             throw BukLiVMException("Unknown ASTNode Type: "
                                    + to_string(n->m_type));
@@ -330,15 +341,59 @@ void test_parser(const std::string &input)
     Tokenizer tok;
     Parser p(tok);
 
-    tok.tokenize(input);
+    tok.tokenize("stdin", input);
     ASTNode *anode = p.parse();
     if (anode)
     {
         ast_debug_walker(anode);
 
         bukalisp::ASTJSONCodeEmitter code_emit;
-        code_emit.open_output_file("code_emit_test.json");
+        std::fstream out(input.c_str(), std::ios::out);
+        code_emit.set_output(&out);
         code_emit.emit_json(anode);
+    }
+    else
+        throw BukLiVMException("BukaLISP Compile Error!");
+}
+//---------------------------------------------------------------------------
+
+void test_case(const std::string &inp_file)
+{
+    using namespace bukalisp;
+    Tokenizer tok;
+    Parser p(tok);
+
+    auto u8b = slurp(inp_file);
+    tok.tokenize(inp_file, u8b->as_string());
+    delete u8b;
+
+    ASTNode *anode = p.parse();
+    if (anode)
+    {
+        ast_debug_walker(anode);
+
+        bukalisp::ASTJSONCodeEmitter code_emit;
+        std::stringstream os;
+        code_emit.set_output(&os);
+        code_emit.emit_json(anode);
+        std::string js = os.str();
+
+        cout << "EXEC<<" << js << ">>" << endl;
+        UTF8Buffer u8b(js.data(), js.size());
+
+        Sym *last_debug_sym = nullptr;
+        if (run_test_prog(&u8b, last_debug_sym))
+        {
+            cout << "OK: " << inp_file
+                 << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
+                 << endl;
+        }
+        else
+        {
+            cout << "*** FAIL: " << inp_file
+                 << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
+                 << endl;
+        }
     }
     else
         throw BukLiVMException("BukaLISP Compile Error!");
@@ -391,6 +446,10 @@ int main(int argc, char *argv[])
         {
             if (argc > 2) test_parser(argv[2]);
             else          test_parser("");
+        }
+        else if (input_file_path.substr(input_file_path.size() - 4, 4) == "bkli")
+        {
+            test_case(input_file_path);
         }
         else
         {

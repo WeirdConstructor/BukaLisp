@@ -1,5 +1,6 @@
 #include "code_emitter.h"
 #include <iostream>
+#include "strutil.h"
 
 using namespace std;
 
@@ -7,17 +8,23 @@ namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
-void ASTJSONCodeEmitter::open_output_file(const std::string &path)
+void ASTJSONCodeEmitter::emit_line(const std::string &line)
 {
-    m_out_file_stream = new std::fstream(path.c_str(), std::ios::out);
+    if (m_out_stream)
+        *m_out_stream << line << endl;
 }
 //---------------------------------------------------------------------------
 
-void ASTJSONCodeEmitter::emit_line(const std::string &line)
+void ASTJSONCodeEmitter::emit_op(const string &op,
+                                 const string &arg1,
+                                 const string &arg2)
 {
-    if (m_out_file_stream)
-        *m_out_file_stream << line << endl;
-    cout << line << endl;
+    if (arg1.empty())
+        *m_out_stream << "[\"" << op << "\"]," << endl;
+    else if (arg2.empty())
+        *m_out_stream << "[\"" << op << "\", " << arg1 << "]," << endl;
+    else
+        *m_out_stream << "[\"" << op << "\", " << arg1 << ", " << arg2 << "]," << endl;
 }
 //---------------------------------------------------------------------------
 
@@ -25,18 +32,13 @@ void ASTJSONCodeEmitter::emit_json_op(const string &op,
                                       const string &operands)
 {
 
-    if (m_out_file_stream)
+    if (m_out_stream)
     {
         if (operands.empty())
-            *m_out_file_stream << "[\"" << op << "\"]," << endl;
+            *m_out_stream << "[\"" << op << "\"]," << endl;
         else
-            *m_out_file_stream << "[\"" << op << "\", " << operands << "]," << endl;
+            *m_out_stream << "[\"" << op << "\", " << operands << "]," << endl;
     }
-
-    if (operands.empty())
-        cout << "[\"" << op << "\"]," << endl;
-    else
-        cout << "[\"" << op << "\", " << operands << "]," << endl;
 }
 //---------------------------------------------------------------------------
 
@@ -60,8 +62,6 @@ void ASTJSONCodeEmitter::emit_binary_op(ASTNode *n)
                  || op == "/"
                  || op == "i/")
             emit_json_op("PUSH_I", "1");
-        else
-            emit_json_op("NOP");
     }
     else // nr_op >= 2
     {
@@ -106,8 +106,7 @@ void ASTJSONCodeEmitter::emit_form(ASTNode *n)
 
     const string op = first_sym->m_text;
 
-    if (
-           op == "+"  || op == "-"  || op == "*"  || op == "/"
+    if (   op == "+"  || op == "-"  || op == "*"  || op == "/"
         || op == "i+" || op == "i-" || op == "i*" || op == "i/")
         emit_binary_op(n);
     else if (op == "let")
@@ -119,6 +118,19 @@ void ASTJSONCodeEmitter::emit_form(ASTNode *n)
         cout << "ERROR: Unknown operation!" << endl;
         return;
     }
+}
+//---------------------------------------------------------------------------
+
+void ASTJSONCodeEmitter::emit_list(ASTNode *n)
+{
+    int len = 0;
+    for (auto ch : n->m_childs)
+    {
+        emit(ch);
+        len++;
+    }
+
+    emit_op("APPEND", to_string(len - 1));
 }
 //---------------------------------------------------------------------------
 
@@ -145,9 +157,25 @@ void ASTJSONCodeEmitter::emit(ASTNode *n)
             else if (op == "i*")  emit_json_op("MUL_I");
             else if (op == "/")   emit_json_op("DIV_D");
             else if (op == "i/")  emit_json_op("DIV_I");
+            else if (op == ">")   emit_json_op("GT_D");
+            else if (op == "i>")  emit_json_op("GT_I");
+            else if (op == ">=")  emit_json_op("GE_D");
+            else if (op == "i>=") emit_json_op("GE_I");
+            else if (op == "<")   emit_json_op("LT_D");
+            else if (op == "i<")  emit_json_op("LT_I");
+            else if (op == "<=")  emit_json_op("LE_D");
+            else if (op == "i<=") emit_json_op("LE_I");
+            else if (op == "==")  emit_json_op("EQ_D");
+            else if (op == "i==") emit_json_op("EQ_I");
 
             // >, <, ==, != , <=, >=
             else                 emit_json_op("NOP");
+            break;
+        }
+
+        case A_LLIST:
+        {
+            emit_list(n);
             break;
         }
 
@@ -165,13 +193,14 @@ void ASTJSONCodeEmitter::emit(ASTNode *n)
 void ASTJSONCodeEmitter::emit_json(bukalisp::ASTNode *n)
 {
     emit_line("[");
+    emit_line("[\"#DEBUG_SYM\", \""
+        + str_replace(str_replace(n->m_input_name, "\\", "\\\\"),
+                                                   "\"", "\\\"")
+        + "\"],");
     emit(n);
     emit_line("[\"DBG_DUMP_STACK\"],");
     emit_line("[\"NOP\"]");
     emit_line("]");
-
-    if (m_out_file_stream)
-        delete m_out_file_stream;
 }
 //---------------------------------------------------------------------------
 }

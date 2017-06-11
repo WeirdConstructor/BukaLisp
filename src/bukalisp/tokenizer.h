@@ -48,6 +48,7 @@ struct Token
     TokenType       m_token_id;
     std::string     m_text;
     int             m_line;
+    std::string     m_input_name;
     union {
         double  d;
         int64_t i;
@@ -115,11 +116,13 @@ class Tokenizer
         std::vector<Token>   m_tokens;
         unsigned int         m_token_pos;
         int                  m_cur_line;
+        std::string          m_input_name;
 
     protected:
         void push(Token t)
         {
-            t.m_line = m_cur_line;
+            t.m_line       = m_cur_line;
+            t.m_input_name = m_input_name;
             m_tokens.push_back(t);
         }
 
@@ -138,11 +141,12 @@ class Tokenizer
             return false;
         }
 
-        void tokenize(const std::string &sCode)
+        void tokenize(const std::string &input_name, const std::string &sCode)
         {
             m_tokens.clear();
-            m_token_pos = 0;
-            m_cur_line  = 1;
+            m_token_pos  = 0;
+            m_cur_line   = 1;
+            m_input_name = input_name;
 
             m_u8buf.reset();
             m_u8buf.append_bytes(sCode.data(), sCode.size());

@@ -141,8 +141,8 @@ case DIV_D:
 case DIV_I:
 {
     Datum *new_dt =
-        new_dt_int(  STK_AT(1)->to_int()
-                   / STK_AT(2)->to_int());
+        new_dt_int(  STK_AT(2)->to_int()
+                   / STK_AT(1)->to_int());
     STK_AT(2) = new_dt; STK_POP();
     break;
 }

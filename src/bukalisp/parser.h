@@ -32,7 +32,8 @@ enum ASTNodeType
     A_INT,
     A_DBL,
     A_VAR,
-    A_LIST
+    A_LIST,
+    A_LLIST
 };
 //---------------------------------------------------------------------------
 
@@ -42,6 +43,7 @@ struct ASTNode
     ASTNodeType m_type;
     std::string m_text;
     int         m_line;
+    std::string m_input_name;
     union {
         double  d;
         int64_t i;
@@ -52,8 +54,10 @@ struct ASTNode
         m_text = tok.m_text;
         if (tok.m_token_id == T_INT)
             m_num.i  = tok.m_num.i;
-        else if (tok.m_token_id == T_INT)
+        else if (tok.m_token_id == T_DBL)
             m_num.d  = tok.m_num.d;
+        m_line       = tok.m_line;
+        m_input_name = tok.m_input_name;
     }
 
     ASTNode *clone() { return new ASTNode(*this); }
@@ -85,13 +89,13 @@ class Parser
             std::cout << "ERROR [" << t.m_line << "] :" << what << std::endl;
         }
 
-        ASTNode *parse_sequence(char end_delim, ASTNode *seq = nullptr)
+        ASTNode *parse_sequence(ASTNodeType type, char end_delim, ASTNode *seq = nullptr)
         {
             Token t = m_tok.peek();
             m_tok.next();
 
             if (!seq)
-                seq = new ASTNode(A_LIST, t);
+                seq = new ASTNode(type, t);
 
             while (t.m_token_id != T_EOF)
             {
@@ -110,7 +114,7 @@ class Parser
             t = m_tok.peek();
 
             if (t.m_token_id == T_CHR_TOK && t.nth(0) == '{')
-                return parse_sequence('}', seq);
+                return parse_sequence(type, '}', seq);
 
             return seq;
         }
@@ -128,7 +132,8 @@ class Parser
                 {
                     switch (t.nth(0))
                     {
-                        case '(': return parse_sequence(')');
+                        case '(': return parse_sequence(A_LIST, ')');
+                        case '[': return parse_sequence(A_LLIST, ']');
                         case '{':
                         {
                             log_error("Unexpected '{'", t);
@@ -144,7 +149,7 @@ class Parser
                             {
                                 ASTNode *seq = new ASTNode(A_LIST, t);
                                 seq->m_childs.push_back(var);
-                                return parse_sequence('}', seq);
+                                return parse_sequence(A_LIST, '}', seq);
                             }
 
                             return var;
