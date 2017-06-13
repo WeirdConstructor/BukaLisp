@@ -325,7 +325,7 @@ OutputPad ASTJSONCodeEmitter::emit_list(ASTNode *n)
         len++;
     }
 
-    o.add("LIST", to_string(len - 1));
+    o.add("PUSH_LIST", to_string(len - 1));
 
     return o;
 }
