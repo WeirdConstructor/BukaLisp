@@ -11,6 +11,27 @@ namespace lilvm
 {
 //---------------------------------------------------------------------------
 
+// What do I need?
+/*
+    arithmetics, functions, primitives, external field objects,
+    looping (by count, by elements of list), list manipulation,
+    mathematic primitives, inclusion of rng somehow?
+    modules/include/import
+    (maybe rudimentary (define-library?) and (import ...)?)
+
+    a way to call into a bukli-function!
+        => global registry
+            (garbage collector honors it)
+        => function in VM() that calls a globally registered function
+*/
+
+// TODO: Add IS_REF
+// TODO: Add PREPEND
+// TODO: Add APPEND (O(n))
+// TODO: Add SET_TAIL (ohne automatisches SET_REF!)
+// TODO: Add SHALLOWCLONE
+// TODO: Add DEEPCLONE
+
 #define OPCODE_DEF(X) \
     X(NOP,               "NOP"              , 0) \
     X(TRC,               "TRC"              , 0) \
@@ -55,9 +76,13 @@ namespace lilvm
     \
     X(IS_LIST,           "IS_LIST"          , 1) \
     X(IS_NIL,            "IS_NIL"           , 1) \
-    X(APPEND,            "APPEND"           , 0) \
+    X(PUSH_LIST,         "PUSH_LIST"        , 0) \
     X(TAIL,              "TAIL"             , 1) \
     X(LIST_LEN,          "LIST_LEN"         , 1) \
+    X(IS_VEC,            "IS_VEC"           , 1) \
+    X(VEC_LEN,           "VEC_LEN"          , 1) \
+    X(PUSH_VEC,          "PUSH_VEC"         , 0) \
+    X(AT_VEC,            "AT_VEC"           , 2) \
     \
     X(PUSH_ENV,          "PUSH_ENV"         , 0) \
     X(POP_ENV,           "POP_ENV"          , 0) \
@@ -243,7 +268,7 @@ struct Datum
         std::string ret;
 
         if (!in_list && m_next)
-            ret = "(";
+            ret = "[";
 
         if (m_type == T_INT)
             ret += std::to_string(m_d.i);
@@ -255,8 +280,28 @@ struct Datum
             ret += "#<primitive:" + std::to_string((uint64_t) m_d.func) + ">";
         else if (m_type == T_CLOS)
             ret += "#<closure:" + std::to_string((uint64_t) this) + ":" + std::to_string(m_d.vec.len) + ">";
+        else if (m_type == T_VEC)
+        {
+            SimpleVec &sv = m_d.vec;
+            ret += "#[";
+            for (size_t i = 0; i < sv.len; i++)
+            {
+                if (sv.elems[i]) ret += sv.elems[i]->to_string();
+                else             ret += "NIL";
+                if (i != (sv.len - 1))
+                {
+                    ret += ", ";
+                }
+            }
+            ret += "]";
+        }
         else if (m_type == T_REF)
-            ret += "{" + (m_d.ref ? m_d.ref->to_string() : "NIL") + "}";
+        {
+            if (m_next || in_list)
+                ret += (m_d.ref ? m_d.ref->to_string() : "NIL");
+            else
+                ret += "[" + (m_d.ref ? m_d.ref->to_string() : "NIL") + "]";
+        }
         else // T_NIL
         {
             ret += "NIL";
@@ -270,7 +315,7 @@ struct Datum
             if (in_list)
                 return ret + m_next->to_string(true);
             else
-                return ret + m_next->to_string(true) + ")";
+                return ret + m_next->to_string(true) + "]";
         }
 
         return ret;
@@ -328,6 +373,8 @@ struct Datum
             if (m_d.ref)
                 m_d.ref->mark(mark);
         }
+
+        // TODO: Mark T_SYM!
     }
 
     inline uint8_t get_mark() { return m_marks & 0x0F; }
@@ -337,12 +384,14 @@ struct Datum
              : m_type == T_DBL ? static_cast<int64_t>(m_d.d)
              : m_type == T_SYM ? (int64_t) m_d.sym
              : m_type == T_NIL ? 0
+             : m_type == T_REF ? m_d.ref->to_int()
              :                   m_d.i; }
     inline double to_dbl()
     { return m_type == T_DBL ? m_d.d
              : m_type == T_INT ? static_cast<double>(m_d.i)
              : m_type == T_SYM ? (double) (int64_t) m_d.sym
              : m_type == T_NIL ? 0.0
+             : m_type == T_REF ? m_d.ref->to_dbl()
              :                   m_d.d; }
 };
 //---------------------------------------------------------------------------
@@ -454,6 +503,8 @@ class DatumPool
             }
 
             reclaim(m_cur_mark_color);
+
+            // TODO: Reclaim and set new mark in SymTbl!
         }
 };
 //---------------------------------------------------------------------------

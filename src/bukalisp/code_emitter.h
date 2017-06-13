@@ -2,6 +2,7 @@
 #include "symtbl.h"
 #include <fstream>
 #include <memory>
+#include "strutil.h"
 
 namespace bukalisp
 {
@@ -13,13 +14,20 @@ namespace bukalisp
     //    b =>       1
     struct Environment
     {
+        enum SlotType
+        {
+            SLT_VAR,
+            SLT_PRIM
+        };
         struct Slot
         {
             lilvm::Sym    *sym;
-            size_t  idx;
+            size_t         idx;
+            SlotType       type;
 
-            Slot() : sym(0), idx(0) {}
-            Slot(lilvm::Sym *s, size_t i) : sym(s), idx(i) { }
+            Slot() : sym(0), idx(0), type(SLT_VAR) {}
+            Slot(lilvm::Sym *s, size_t i) : sym(s), idx(i), type(SLT_VAR) { }
+            Slot(lilvm::Sym *s, size_t i, SlotType t) : sym(s), idx(i), type(t) { }
         };
         std::shared_ptr<Environment>            m_parent;
         std::vector<Slot>                       m_env;
@@ -29,18 +37,22 @@ namespace bukalisp
         {
         }
 
-        size_t new_env_pos_for(lilvm::Sym *sym)
+        size_t new_env_pos_for(lilvm::Sym *sym, SlotType type = SLT_VAR)
         {
             Slot slot;
-            if (get_env_pos_for(sym, slot))
-                return slot.idx;
+            size_t depth = 0;
+            if (get_env_pos_for(sym, slot, depth))
+            {
+                if (depth <= 0)
+                    return slot.idx;
+            }
 
-            slot = Slot(sym, m_env.size());
+            slot = Slot(sym, m_env.size(), type);
             m_env.push_back(slot);
             return slot.idx;
         }
 
-        bool get_env_pos_for(lilvm::Sym *sym, Slot &slot)
+        bool get_env_pos_for(lilvm::Sym *sym, Slot &slot, size_t &depth)
         {
             for (auto &p : m_env)
             {
@@ -51,7 +63,57 @@ namespace bukalisp
                 }
             }
 
+            if (m_parent)
+            {
+                depth++;
+                return m_parent->get_env_pos_for(sym, slot, depth);
+            }
+
             return false;
+        }
+    };
+
+    class OutputPad
+    {
+        public:
+            struct OpText
+            {
+                size_t      m_line;
+                std::string m_input_name;
+                std::string m_op_text;
+
+                OpText(ASTNode *n, const std::string &text);
+            };
+
+        private:
+            ASTNode                                *m_node;
+            std::unique_ptr<std::vector<OpText>>    m_ops;
+
+        public:
+            OutputPad(ASTNode *n)
+                : m_node(n), m_ops(std::make_unique<std::vector<OpText>>())
+            {
+            }
+
+
+        void add_str(const std::string &op, std::string arg1 = "");
+        void add(const std::string &op, std::string arg1 = "", std::string arg2 = "");
+        void append(OutputPad &p)
+        {
+            for (auto &op : *p.m_ops)
+                m_ops->push_back(op);
+        }
+
+        void output(std::ostream &o)
+        {
+            for (auto &op : *m_ops)
+            {
+                std::string info = op.m_input_name + ":" + std::to_string(op.m_line);
+                info = str_replace(str_replace(info, "\\", "\\\\"), "\"", "\\\"");
+                o << "       [\"#DEBUG_SYM\",\"" << info << "\"], " << std::endl;
+                o << op.m_op_text;
+            }
+            o << std::endl;
         }
     };
 
@@ -61,31 +123,36 @@ namespace bukalisp
             std::ostream                   *m_out_stream;
             lilvm::SymTable                *m_symtbl;
             std::shared_ptr<Environment>    m_env;
+            std::shared_ptr<Environment>    m_root;
 
-            void emit_line(const std::string &line);
-            void emit_json_op(const std::string &op,
-                              const std::string &operands = "");
-            void emit_op(const std::string &op,
-                         const std::string &arg1 = "",
-                         const std::string &arg2 = "");
+            OutputPad emit_block(ASTNode *n, size_t offs);
+            OutputPad emit_atom(ASTNode *n);
 
         public:
             ASTJSONCodeEmitter()
                 : m_out_stream(nullptr),
                   m_symtbl(nullptr)
-            {}
+            {
+                m_root = std::make_shared<Environment>(std::shared_ptr<Environment>());
+            }
 
-            void set_symbol_table(lilvm::SymTable *symtbl)
+            void push_root_primtive(const std::string &primname)
+            {
+                m_root->new_env_pos_for(
+                    m_symtbl->str2sym(primname), Environment::SLT_PRIM);
+            }
+
+            void set_symtbl(lilvm::SymTable *symtbl)
             {
                 m_symtbl = symtbl;
             }
 
             void set_output(std::ostream *o) { m_out_stream = o; }
-            void emit_binary_op(ASTNode *n);
-            void emit_form(ASTNode *n);
-            void emit_let(ASTNode *n);
-            void emit_list(ASTNode *n);
-            void emit(ASTNode *n);
+            OutputPad emit_binary_op(ASTNode *n);
+            OutputPad emit_form(ASTNode *n);
+            OutputPad emit_let(ASTNode *n);
+            OutputPad emit_list(ASTNode *n);
+            OutputPad emit(ASTNode *n);
             void emit_json(ASTNode *n);
     };
 

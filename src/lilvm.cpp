@@ -37,11 +37,14 @@ size_t Operation::min_arg_cnt_for_op(OPCODE o, Operation &op)
 {
     switch (o)
     {
-        case APPEND:   return (size_t) (1 + op.m_1.i);
+        case PUSH_LIST:return (size_t) (1 + op.m_1.i);
+        case PUSH_VEC: return (size_t) (1 + op.m_1.i);
         case GET:      return (size_t) (1 + op.m_1.i);
         case SET:      return (size_t) (1 + op.m_1.i);
         case CALL:     return (size_t) (1 + op.m_1.i);
         case TAILCALL: return (size_t) (1 + op.m_1.i);
+        case TAIL:
+            return (size_t) (op.m_1.i == 0 ? 2 : 1);
         case FILL_ENV:
             return (size_t) (op.m_1.i < 0 ? -op.m_1.i : op.m_1.i);
     }
@@ -232,7 +235,6 @@ Datum *VM::new_dt_ref(Datum *dt)
 }
 //---------------------------------------------------------------------------
 
-
 void VM::pop(size_t cnt)
 {
     for (size_t i = 0; i < cnt; i++)
@@ -248,9 +250,16 @@ void VM::push(Datum *dt)
 
 void VM::init_core_primitives()
 {
+    // PRIM *get-datums-in-use-count*
     register_primitive(0, [this](VM *vm, std::vector<Datum *> &s, size_t ac){
         m_datum_pool.collect();
         return new_dt_int(m_datum_pool.get_datums_in_use_count());
+    });
+
+    // PRIM *value*
+    register_primitive(1, [this](VM *vm, std::vector<Datum *> &s, size_t ac){
+        if (ac <= 0) return new_dt_nil();
+        else         return s[s.size() - 2];
     });
 
 //    register_primitive(1, [](VM *vm, std::vector<Datum *> &s, size_t ac){

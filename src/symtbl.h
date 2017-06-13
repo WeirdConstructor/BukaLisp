@@ -12,6 +12,7 @@ struct Sym
     std::string m_str;
 
     Sym(const std::string &s) : m_str(s) { }
+    // TODO: Implement garbage collect mark field and mark() method.
 };
 //---------------------------------------------------------------------------
 
@@ -49,6 +50,9 @@ class SymTable
             for (auto &sym_pair : m_syms)
                 delete sym_pair.second;
         }
+
+        // TODO: Implement reclaim() method, which kills wrongly marked syms.
+        //       Needs to store the last reclaimed value for new Sym(...)
 
         Sym *str2sym(const std::string &s)
         {

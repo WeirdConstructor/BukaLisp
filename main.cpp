@@ -55,6 +55,8 @@ class LILASMParser : public json::Parser
         m_cur_debug_sym = m_symtbl->str2sym("");
     }
 
+    SymTable *get_symtbl() { return m_symtbl; }
+
     Sym *last_debug_sym() { return m_cur_debug_sym; }
 
     virtual ~LILASMParser() { }
@@ -308,20 +310,15 @@ void ast_debug_walker(bukalisp::ASTNode *n, int indent_level = 0)
         case A_INT:
             cout << "* INT (" << n->m_num.i << ")" << endl; break;
 
-        case A_VAR:
-            cout << "* VAR (" << n->m_text << ")" << endl; break;
+        case A_SYM:
+            cout << "* SYM (" << n->m_text << ")" << endl; break;
+
+        case A_KW:
+            cout << "* KW (" << n->m_text << ")" << endl; break;
 
         case A_LIST:
         {
             cout << "* LIST" << endl;
-            for (auto child : n->m_childs)
-                ast_debug_walker(child, indent_level + 1);
-            break;
-        }
-
-        case A_LLIST:
-        {
-            cout << "* LLIST" << endl;
             for (auto child : n->m_childs)
                 ast_debug_walker(child, indent_level + 1);
             break;
@@ -373,6 +370,11 @@ void test_case(const std::string &inp_file)
         ast_debug_walker(anode);
 
         bukalisp::ASTJSONCodeEmitter code_emit;
+        code_emit.set_symtbl(new SymTable(1000));
+
+        code_emit.push_root_primtive("*get-datum-in-use-count*");
+        code_emit.push_root_primtive("*value*");
+
         std::stringstream os;
         code_emit.set_output(&os);
         code_emit.emit_json(anode);

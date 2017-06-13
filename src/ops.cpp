@@ -215,27 +215,124 @@ case POP:
     break;
 }
 
-case APPEND:
+case PUSH_LIST:
 {
-    Datum *tail = STK_AT(1);
+    Datum *tail = new_dt_ref(STK_AT(1));
     for (int i = 0; i < op.m_1.i; i++)
     {
-        Datum *dt = STK_AT(i + 2);
+        Datum *dt = new_dt_ref(STK_AT(i + 2));
         dt->m_next = tail;
         tail = dt;
     }
     for (int i = 0; i < op.m_1.i + 1; i++)
         STK_POP();
+
     STK_PUSH(tail);
+    break;
+}
+
+case AT_VEC:
+{
+    Datum *dt = STK_AT(1);
+    if (dt->m_type != T_VEC)
+        throw VMException(
+            "Can't call this on non vector!", op);
+    Datum *dtidx = STK_AT(2);
+    size_t idx = (size_t) dtidx->to_int();
+    SimpleVec &sv = dt->m_d.vec;
+    if (idx > sv.len)
+        STK_AT(2) = new_dt_nil();
+    else
+    {
+        Datum *dtget = sv.elems[idx];
+        STK_AT(2) = dtget ? dtget : new_dt_nil();
+    }
+    STK_POP();
+    break;
+}
+
+case PUSH_VEC:
+{
+    Datum *len = STK_AT(1);
+    size_t veclen = (size_t) len->to_int();
+
+    if (op.m_1.i > (int64_t) veclen)
+        throw VMException(
+            "Can't create vector with more arguments than size", op);
+
+    Datum *vec = m_datum_pool.new_vector(T_VEC, veclen);
+    SimpleVec &sv = vec->m_d.vec;
+    for (int i = 0; i < op.m_1.i; i++)
+        sv.elems[i] = STK_AT(i + 2);
+
+    for (int i = 0; i < op.m_1.i + 1; i++)
+        STK_POP();
+
+    STK_PUSH(vec);
+    break;
+}
+
+case VEC_LEN:
+{
+    Datum *dt = STK_AT(1);
+    if (dt->m_type != T_VEC)
+        throw VMException(
+            "Can't call this on non vector!", op);
+    SimpleVec &sv = dt->m_d.vec;
+    STK_AT(1) = new_dt_int(sv.len);
+    break;
+}
+
+case IS_VEC:
+{
+    Datum *dt = STK_AT(1);
+    STK_AT(1) = new_dt_int(dt->m_type == T_VEC ? 1 : 0);
     break;
 }
 
 case TAIL:
 {
-    Datum *list = STK_AT(1);
-    STK_POP();
-    if (list->m_next) STK_PUSH(list->m_next);
-    else              STK_PUSH(new_dt_nil());
+    size_t cnt = (size_t) op.m_1.i;
+    bool   pop_2 = false;
+    Datum *list_item = nullptr;
+    if (cnt == 0)
+    {
+        cnt = (size_t) STK_AT(2)->to_int();
+        list_item = STK_AT(1);
+        pop_2 = true;
+    }
+    else
+    {
+        list_item = STK_AT(1);
+    }
+
+    if (cnt == 1)
+    {
+        list_item = list_item->m_next;
+        if (!list_item) list_item = new_dt_nil();
+    }
+    else
+    {
+        for (size_t i = 0; i < cnt; i++)
+        {
+            if (list_item->m_next)
+                list_item = list_item->m_next;
+            else
+            {
+                list_item = new_dt_nil();
+                break;
+            }
+        }
+    }
+
+    if (pop_2)
+    {
+        STK_AT(2) = list_item;
+        STK_POP();
+    }
+    else
+        STK_AT(1) = list_item;
+
     break;
 }
 
@@ -262,14 +359,14 @@ case LIST_LEN:
 case IS_LIST:
 {
     Datum *dt = STK_AT(1);
-    STK_PUSH(new_dt_int(dt->m_next ? 1 : 0));
+    STK_AT(1) = new_dt_int(dt->m_next ? 1 : 0);
     break;
 }
 
 case IS_NIL:
 {
     Datum *dt = STK_AT(1);
-    STK_PUSH(new_dt_int(dt->m_type == T_NIL ? 1 : 0));
+    STK_AT(1) = new_dt_int(dt->m_type == T_NIL ? 1 : 0);
     break;
 }
 
