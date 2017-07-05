@@ -1,26 +1,15 @@
 [
-    ["#DEBUG_SYM", "GC_USE_COUNT, PUSH_PRIM, CALL and GC"],
-    ["PUSH_I", 1],
-    ["POP",    1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["POP",    2],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["POP",    4],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["PUSH_I", 1],
-    ["POP",    8],
-    ["PUSH_PRIM", 0],
-    ["CALL", 0],
-    ["PUSH_I", 22],
-    ["ADD_I"]
+    ["#DEBUG_SYM", "PUSH_SYM, SUB on SYM"],
+    ["PUSH_ENV", 3],
+
+    ["LOAD_SYM", 0, "XY"],
+    ["LOAD_SYM", 1, "XY"],
+
+    ["ADD", 2, 0, 1],
+    ["SUB", 0, 0, 1],
+    ["LOAD_I", 2, 23],
+    ["ADD", 0, 0, 2],
+    ["RETURN", 0],
+
+    ["NOP"]
 ]

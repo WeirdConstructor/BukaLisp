@@ -2,18 +2,11 @@
 
 #include <string>
 #include <unordered_map>
+#include <memory>
+#include "atom.h"
 
 namespace lilvm
 {
-//---------------------------------------------------------------------------
-
-struct Sym
-{
-    std::string m_str;
-
-    Sym(const std::string &s) : m_str(s) { }
-    // TODO: Implement garbage collect mark field and mark() method.
-};
 //---------------------------------------------------------------------------
 
 class SymHash
@@ -28,46 +21,46 @@ typedef std::unordered_map<std::string, Sym *>            StrSymMap;
 
 // For mapping symbols to their position in an environment array.
 typedef std::unordered_map<Sym *, size_t, SymHash>        SymEnvMap;
+//---------------------------------------------------------------------------
 
 class SymTable
 {
     private:
-        uint64_t  m_next_sym_id;
         StrSymMap m_syms;
+
+        GC       *m_gc;
 
         SymTable(const SymTable &that) { }
         SymTable &operator=(const SymTable &) { }
 
     public:
 
-        SymTable(uint64_t auto_assign_offs)
-            : m_next_sym_id(auto_assign_offs + 1)
+        SymTable(GC *gc)
+            : m_gc(gc)
         {
         }
 
         ~SymTable()
         {
-            for (auto &sym_pair : m_syms)
-                delete sym_pair.second;
         }
-
-        // TODO: Implement reclaim() method, which kills wrongly marked syms.
-        //       Needs to store the last reclaimed value for new Sym(...)
 
         Sym *str2sym(const std::string &s)
         {
             auto it = m_syms.find(s);
             if (it == m_syms.end())
             {
-                Sym *newsym = new Sym(s);
-                m_syms.insert(
-                    std::pair<std::string, Sym *>(s, newsym));
+                Sym *newsym = m_gc->allocate_sym();
+                newsym->m_str = s;
+                m_syms.insert(std::pair<std::string, Sym *>(s, newsym));
                 return newsym;
             }
             else
                 return it->second;
         }
 };
+//---------------------------------------------------------------------------
+typedef std::shared_ptr<SymTable>  SymTblPtr;
+
 //---------------------------------------------------------------------------
 
 }

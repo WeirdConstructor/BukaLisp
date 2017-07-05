@@ -24,6 +24,7 @@
 #ifndef BUKALISP_TOKENIZER_H
 #define BUKALISP_TOKENIZER_H 1
 #include "utf8buffer.h"
+#include <iostream>
 #include <string>
 #include <vector>
 #include "parse_util.h"
@@ -138,6 +139,15 @@ class Tokenizer
                 return true;
             }
             return false;
+        }
+
+        void dump_tokens()
+        {
+            std::cout << "TOKENS: " << std::endl;
+            for (auto t : m_tokens)
+            {
+                std::cout << "    " << t.dump() << std::endl;
+            }
         }
 
         void tokenize(const std::string &input_name, const std::string &sCode)

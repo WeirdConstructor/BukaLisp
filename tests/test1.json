@@ -1,15 +1,12 @@
 [
-    ["#DEBUG_SYM", "PUSH_ENV, SET_ENV, GET_ENV"],
-    ["PUSH_I", -3],
-    ["PUSH_D", 13.23],
-    ["PUSH_ENV", 2],
-    ["SET_ENV", 0, 0],
-    ["GET_ENV", 0, 0],
-    ["GET_ENV", 0, 0],
-    ["ADD_I"],
-    ["SET_ENV", 0, 0],
-    ["SET_ENV", 0, 1],
-    ["GET_ENV", 0, 0],
-    ["GET_ENV", 0, 1],
-    ["ADD_I"]
+    ["#DEBUG_SYM", "LOAD, PUSH_ENV, ADD"],
+
+    ["PUSH_ENV", 3],
+
+    ["LOAD_I", 1, -3],
+    ["LOAD_D", 0, 13.23],
+
+    ["ADD", 0, 0, 0],
+    ["ADD", 2, 1, 0],
+    ["RETURN", 2]
 ]

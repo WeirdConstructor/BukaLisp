@@ -81,6 +81,8 @@ namespace bukalisp
                 size_t      m_line;
                 std::string m_input_name;
                 std::string m_op_text;
+                size_t      m_target_lbl_nr;
+                size_t      m_lbl_nr;
 
                 OpText(ASTNode *n, const std::string &text);
             };
@@ -88,30 +90,81 @@ namespace bukalisp
         private:
             ASTNode                                *m_node;
             std::unique_ptr<std::vector<OpText>>    m_ops;
+            size_t                                  m_next_with_label;
 
         public:
             OutputPad(ASTNode *n)
-                : m_node(n), m_ops(std::make_unique<std::vector<OpText>>())
+                : m_node(n), m_ops(std::make_unique<std::vector<OpText>>()),
+                  m_next_with_label(0)
             {
             }
 
 
+        size_t c_ops() { return m_ops->size(); }
         void add_str(const std::string &op, std::string arg1 = "");
         void add(const std::string &op, std::string arg1 = "", std::string arg2 = "");
+        void add_label_op(const std::string &op, size_t label_nr)
+        {
+            OpText ot(m_node, op);
+            ot.m_target_lbl_nr = label_nr;
+            m_ops->push_back(ot);
+        }
+        void def_label_for_next(size_t label_nr)
+        {
+            m_next_with_label = label_nr;
+        }
         void append(OutputPad &p)
         {
             for (auto &op : *p.m_ops)
                 m_ops->push_back(op);
         }
 
-        void output(std::ostream &o)
+        void calc_label_addr(std::vector<int64_t> &lbls)
         {
+            size_t i_max_label = 0;
             for (auto &op : *m_ops)
             {
+                if (op.m_lbl_nr)
+                {
+                    size_t lblnr = op.m_lbl_nr;
+                    if (lblnr > i_max_label)
+                        i_max_label = lblnr;
+                }
+            }
+
+            lbls.resize(i_max_label + 1, 0);
+
+            int idx = 0;
+            for (auto &op : *m_ops)
+            {
+                if (op.m_lbl_nr)
+                    lbls[op.m_lbl_nr] = idx;
+                idx++;
+            }
+        }
+
+        void output(std::ostream &o)
+        {
+            std::vector<int64_t> lbls;
+            calc_label_addr(lbls);
+
+            int idx = 0;
+            for (auto &op : *m_ops)
+            {
+                std::string op_text = op.m_op_text;
+
+                if (op.m_target_lbl_nr > 0)
+                {
+                    int64_t lbl_offs = lbls[op.m_target_lbl_nr] - idx;
+                    op_text =
+                        "[\"" + op_text + "\", " + std::to_string(lbl_offs) + "],";
+                }
+
                 std::string info = op.m_input_name + ":" + std::to_string(op.m_line);
                 info = str_replace(str_replace(info, "\\", "\\\\"), "\"", "\\\"");
                 o << "       [\"#DEBUG_SYM\",\"" << info << "\"], " << std::endl;
-                o << op.m_op_text;
+                o << op_text;
+                idx++;
             }
             o << std::endl;
         }
@@ -124,6 +177,10 @@ namespace bukalisp
             lilvm::SymTable                *m_symtbl;
             std::shared_ptr<Environment>    m_env;
             std::shared_ptr<Environment>    m_root;
+            size_t                          m_lbl_counter;
+            bool                            m_create_debug_info;
+//            std::vector<std::pair<size_t, size_t>>
+//                                            m_loop_stack;
 
             OutputPad emit_block(ASTNode *n, size_t offs);
             OutputPad emit_atom(ASTNode *n);
@@ -131,10 +188,14 @@ namespace bukalisp
         public:
             ASTJSONCodeEmitter()
                 : m_out_stream(nullptr),
-                  m_symtbl(nullptr)
+                  m_symtbl(nullptr),
+                  m_lbl_counter(0),
+                  m_create_debug_info(false)
             {
                 m_root = std::make_shared<Environment>(std::shared_ptr<Environment>());
             }
+
+            size_t new_label() { return ++m_lbl_counter; }
 
             void push_root_primtive(const std::string &primname)
             {
@@ -147,10 +208,16 @@ namespace bukalisp
                 m_symtbl = symtbl;
             }
 
+            void set_debug(bool db) { m_create_debug_info = db; }
+
             void set_output(std::ostream *o) { m_out_stream = o; }
             OutputPad emit_binary_op(ASTNode *n);
             OutputPad emit_form(ASTNode *n);
             OutputPad emit_let(ASTNode *n);
+            OutputPad emit_if(ASTNode *n);
+            OutputPad emit_while(ASTNode *n);
+            OutputPad emit_when(ASTNode *n);
+            OutputPad emit_unless(ASTNode *n);
             OutputPad emit_list(ASTNode *n);
             OutputPad emit(ASTNode *n);
             void emit_json(ASTNode *n);

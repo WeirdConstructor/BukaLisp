@@ -1,8 +1,11 @@
 [
-    ["#DEBUG_SYM", "JMP"],
-    ["PUSH_D", 23.0],
-    ["JMP", 4],
-    ["PUSH_D", 42.0],
-    ["PUSH_I", 0],
-    ["ADD_I"]
+    ["#DEBUG_SYM", "BR"],
+    ["PUSH_ENV", 3],
+
+    ["LOAD_D", 0, 22.0],
+    ["BR", 2],
+    ["LOAD_D", 0, 42.0],
+    ["LOAD_I", 1, 1],
+    ["ADD", 0, 1, 0],
+    ["RETURN", 0]
 ]

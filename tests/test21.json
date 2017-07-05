@@ -1,5 +1,5 @@
 [
-    ["#DEBUG_SYM", "PUSH_VEC, IS_VEC, VEC_LEN, AT_VEC"],
+    ["#DEBUG_SYM", "PUSH_VEC, IS_VEC, VEC_LEN, GET (from VEC)"],
     ["PUSH_ENV", 1],
     ["PUSH_I", 3],
     ["PUSH_I", 2],
@@ -19,13 +19,25 @@
 
     ["PUSH_I", 2],
     ["GET_ENV", 0, 0],
-    ["AT_VEC"],
+    ["GET", 1],
+
+    ["PUSH_I", 2],
+
+    ["ADD_I"],
+    ["ADD_I"],
+    ["ADD_I"],
+    ["ADD_I"],
+
+    ["PUSH_I", 7],
+    ["PUSH_I", 9],
+    ["GET_ENV", 0, 0],
+    ["SET", 2],
+    ["POP", 1],
 
     ["PUSH_I", 9],
+    ["GET_ENV", 0, 0],
+    ["GET", 1],
 
-    ["ADD_I"],
-    ["ADD_I"],
-    ["ADD_I"],
     ["ADD_I"],
 
     ["NOP"]

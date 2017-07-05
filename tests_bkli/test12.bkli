@@ -1,5 +1,17 @@
-(let ((a 12))
-  (i+ 10
+(let ((a 12) (c 0))
+  (i+ c (i+ 10
      (unless (< a 10)
+        (set! c 10))
+     (unless (> a 10)
        (set! a 10)
-       (set! a (+ a 3)))))
+       (set! a (+ a 3))))))
+
+;(set! c (+ a b 1 2 (- 1 2 c))
+;
+;(- 1 2 c)
+;
+;=>
+;tmp = sub 1 2
+;tmp2 = sub tmp c
+;
+;tmp3 = 

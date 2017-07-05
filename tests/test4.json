@@ -1,8 +1,18 @@
 [
-    ["#DEBUG_SYM", "BR"],
-    ["PUSH_D", 23.0],
-    ["BR", 2],
-    ["PUSH_D", 42.0],
-    ["PUSH_I", 0],
-    ["ADD_I"]
+    ["#DEBUG_SYM", "GC_USE_COUNT, PUSH_PRIM, CALL and GC"],
+
+    ["PUSH_ENV", 10],
+    ["LOAD_PRIM", 0,  0],
+    ["LOAD_I",    1, 10],
+
+    ["LOAD_VEC",  2,  0, 5],
+    ["LOAD_I",    3, 20],
+    ["VEC_SET",   2,  3, 3],
+
+    ["CALL",      0, 0, 2],
+    ["LOAD_I", 1, 18],
+    ["ADD",    0, 0, 1],
+    ["RETURN", 0],
+
+    ["NOP"]
 ]

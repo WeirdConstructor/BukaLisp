@@ -9,7 +9,7 @@ namespace bukalisp
 
 OutputPad::OpText::OpText(ASTNode *n, const std::string &text)
     : m_line(n->m_line), m_input_name(n->m_input_name),
-      m_op_text(text)
+      m_op_text(text), m_target_lbl_nr(0), m_lbl_nr(0)
 {
 }
 //---------------------------------------------------------------------------
@@ -25,7 +25,10 @@ void OutputPad::add_str(const string &op, string arg1)
     else
         ss << "[\"" << op << "\", \"" << arg1 << "\"],";
 
-    m_ops->push_back(OpText(m_node, ss.str()));
+    OpText ot(m_node, ss.str());
+    ot.m_lbl_nr = m_next_with_label;
+    m_next_with_label = 0;
+    m_ops->push_back(ot);
 }
 //---------------------------------------------------------------------------
 
@@ -40,7 +43,10 @@ void OutputPad::add(const string &op, string arg1, string arg2)
     else
         ss << "[\"" << op << "\", " << arg1 << ", " << arg2 << "],";
 
-    m_ops->push_back(OpText(m_node, ss.str()));
+    OpText ot(m_node, ss.str());
+    ot.m_lbl_nr = m_next_with_label;
+    m_next_with_label = 0;
+    m_ops->push_back(ot);
 }
 //---------------------------------------------------------------------------
 
@@ -142,6 +148,7 @@ OutputPad ASTJSONCodeEmitter::emit_let(ASTNode *n)
         o.append(emit(val));
         o.add("SET_ENV", "0", to_string(var_pos));
     }
+    o.add("POP", to_string(defs->m_childs.size()));
 
     o.append(emit_block(n, 2));
 
@@ -160,9 +167,170 @@ OutputPad ASTJSONCodeEmitter::emit_block(ASTNode *n, size_t offs)
     {
         o.append(emit(n->m_childs[i]));
 
-        if ((i + 1) != n->m_childs.size())
+        if ((i + 1) < n->m_childs.size())
             o.add("POP", "1");
     }
+
+    return o;
+}
+//---------------------------------------------------------------------------
+
+OutputPad ASTJSONCodeEmitter::emit_unless(ASTNode *n)
+{
+    OutputPad o(n);
+
+    if (n->c_num() < 3)
+    {
+        cout << "ERROR: 'unless' requires at least 2 arguments!" << endl;
+        return o;
+    }
+
+    auto lbl = new_label();
+
+    o.append(emit(n->_(1)));
+    o.add_label_op("BR_NIF", lbl);
+
+    OutputPad false_branch(emit_block(n, 2));
+    false_branch.add("BR", "2");
+    o.append(false_branch);
+
+    o.def_label_for_next(lbl);
+    o.add("PUSH_NIL");
+
+    return o;
+}
+//---------------------------------------------------------------------------
+
+OutputPad ASTJSONCodeEmitter::emit_when(ASTNode *n)
+{
+    OutputPad o(n);
+
+    if (n->c_num() < 3)
+    {
+        cout << "ERROR: 'when' requires at least 2 arguments!" << endl;
+        return o;
+    }
+
+    auto lbl = new_label();
+
+    o.append(emit(n->_(1)));
+    o.add_label_op("BR_IF", lbl);
+
+    OutputPad true_branch(emit_block(n, 2));
+    true_branch.add("BR", "2");
+    o.append(true_branch);
+
+    o.def_label_for_next(lbl);
+    o.add("PUSH_NIL");
+
+    return o;
+}
+//---------------------------------------------------------------------------
+
+OutputPad ASTJSONCodeEmitter::emit_if(ASTNode *n)
+{
+    OutputPad o(n);
+
+    // (if (== 1 0) (begin do something))
+    // (if (== 1 0) (begin if true) (begin if false))
+
+    if (n->c_num() < 3)
+    {
+        cout << "ERROR: 'if' needs at least 2 arguments!" << endl;
+        return o;
+    }
+
+    if (n->c_num() > 4)
+    {
+        cout << "ERROR: 'if' has too many arguments!" << endl;
+        return o;
+    }
+
+    if (n->c_num() == 3)
+    {
+        auto lbl = new_label();
+
+        o.append(emit(n->_(1)));
+
+        o.add_label_op("BR_NIF", lbl);
+
+        OutputPad true_branch(emit(n->_(2)));
+        true_branch.add("BR", "2");
+        o.append(true_branch);
+
+        o.def_label_for_next(lbl);
+        o.add("PUSH_NIL");
+    }
+    else
+    {
+        o.append(emit(n->_(1)));
+
+        OutputPad true_branch(emit(n->_(2)));
+        OutputPad false_branch(emit(n->_(3)));
+        true_branch.add("BR", to_string(false_branch.c_ops() + 1));
+
+        o.add("BR_NIF", std::to_string(true_branch.c_ops() + 1));
+        o.append(true_branch);
+        o.append(false_branch);
+    }
+
+    return o;
+}
+//---------------------------------------------------------------------------
+
+OutputPad ASTJSONCodeEmitter::emit_while(ASTNode *n)
+{
+    OutputPad o(n);
+
+    if (n->c_num() < 2)
+    {
+        cout << "ERROR: 'while' has too few arguments!" << endl;
+        return o;
+    }
+
+    //    m_loop_stack.push_back(std::pair<size_t, size_t>(lbl_cont, lbl_break));
+
+    // XXX: Problem: What is with the value stack if we break or continue?
+    // "PUSH_LOOP_CONT" => Pushes vector with: stack depth, env stack depth,
+    //                     continue IP offs, break IP offs
+    // That is to be stored in a new environment.
+    // "PUSH_ENV" 1 on head of the loop
+    // "PUSH_LOOP_CONT" <break IP> <continue IP> [implicitly store the current stack size]
+    // "SET_ENV" 0 1
+    // Then we can recall it using "GET_ENV"
+    // At the end of the loop, do a "POP_ENV"
+    // "BREAK"     => restores stack depth(s), pushes value currently on top of the stack
+    //                jumps to "break IP offs" (which is right before POP_ENV for the loop env)
+    // "CONTINUE"  => restores stack depth(s), jumps to contiue IP offs
+    // "POP_LOOP"
+    // TODO/FIXME: Problem: ENV_STACK needs to be restored too!
+    //             It's like storing the complete continuation.
+    // => the PUSH_LOOP
+
+
+    auto lbl_cont  = new_label();
+    auto lbl_end = new_label();
+
+    OutputPad test = emit(n->_(1));
+
+    o.append(test);
+
+    o.add_label_op("BR_NIF", lbl_end);
+    o.add("PUSH_NIL");
+
+    o.def_label_for_next(lbl_cont);
+    o.add("POP", "1");
+
+    o.append(emit_block(n, 2));
+
+    o.append(test);
+    o.add_label_op("BR_IF", lbl_cont);
+
+    // FIXME: Inserting NOP is not very elegant.
+    //        The label-system needs proper overhaul to support
+    //        multiple labels per op address.
+    o.def_label_for_next(lbl_end);
+    o.add("NOP");
 
     return o;
 }
@@ -198,7 +366,7 @@ OutputPad ASTJSONCodeEmitter::emit_form(ASTNode *n)
 
     else if (op == "." || op == "$")
     {
-        if (n->csize() < 3)
+        if (n->c_num() < 3)
         {
             cout << "ERROR: '" << op << "' requires at least 2 arguments "
                     "(object/function and field)" << endl;
@@ -234,11 +402,63 @@ OutputPad ASTJSONCodeEmitter::emit_form(ASTNode *n)
         // TODO: Emit quoted list!
         o.append(emit_atom(n));
 
+    else if (op == "set!")
+    {
+        // (set! var 10)
+        if (n->c_num() != 3)
+        {
+            cout << "ERROR: 'set!' needs exactly 2 arguments!" << endl;
+            return o;
+        }
+
+        auto sym_node = n->_(1);
+        auto val = n->_(2);
+
+        Environment::Slot s;
+        size_t depth = 0;
+
+        lilvm::Sym *sym = m_symtbl->str2sym(sym_node->m_text);
+
+        if (   !m_env
+            || !m_env->get_env_pos_for(sym, s, depth))
+        {
+            cout << "ERROR: Undefined identifier '"
+                 << sym_node->m_text << "'" << endl;
+            return o;
+        }
+
+        o.append(emit(val));
+        o.add("SET_ENV", to_string(depth), to_string(s.idx));
+    }
+    else if (op == "if")
+        o.append(emit_if(n));
+
+    else if (op == "when")
+        o.append(emit_when(n));
+
+    else if (op == "unless")
+        o.append(emit_unless(n));
+
     else if (op == "let")
         o.append(emit_let(n));
 
+    else if (op == "while")
+        o.append(emit_while(n));
+
     else if (op == "list")
         o.append(emit_list(n));
+
+    else if (op == "cdr")
+    {
+        if (n->m_childs.size() != 2)
+        {
+            cout << "ERROR: 'cdr' needs exactly 1 argument!" << endl;
+            return o;
+        }
+
+        o.append(emit(n->m_childs[1]));
+        o.add("TAIL", "1");
+    }
 
     else if (op == "car")
     {
@@ -444,8 +664,11 @@ void ASTJSONCodeEmitter::emit_json(bukalisp::ASTNode *n)
 {
     OutputPad o(n);
 
+    if (m_create_debug_info)
+        o.add("TRC", "1");
     o.append(emit(n));
-    o.add("DBG_DUMP_STACK");
+    if (m_create_debug_info)
+        o.add("DBG_DUMP_STACK");
 
     *m_out_stream << "[" << endl;
     o.output(*m_out_stream);

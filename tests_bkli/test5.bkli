@@ -1,1 +1,2 @@
-(car [])
+(let ((lst [11 12]))
+    (i+ (car lst) (car (cdr lst))))

@@ -1,21 +1,11 @@
 [
-    ["#DEBUG_SYM", "GET_ENV, SET_ENV 2"],
-    ["PUSH_I", -5],
-    ["PUSH_I", 8],
-    ["PUSH_I", 9],
-    ["PUSH_ENV", 2],
-    ["SET_ENV", 0, 0],
-    ["SET_ENV", 0, 1],
-    ["PUSH_ENV", 1],
-    ["SET_ENV", 0, 0],
-    ["PUSH_I", 10],
-    ["SET_ENV", 1, 1],
-    ["GET_ENV", 1, 0],
-    ["GET_ENV", 1, 1],
-    ["GET_ENV", 0, 0],
-    ["POP_ENV"],
-    ["GET_ENV", 0, 0],
-    ["ADD_I"],
-    ["ADD_I"],
-    ["ADD_I"]
+    ["#DEBUG_SYM", "JMP"],
+    ["PUSH_ENV", 3],
+
+    ["LOAD_D", 0, 22.0],
+    ["JMP", 4],
+    ["LOAD_D", 0, 42.0],
+    ["LOAD_I", 1, 1],
+    ["ADD", 0, 1, 0],
+    ["RETURN", 0]
 ]

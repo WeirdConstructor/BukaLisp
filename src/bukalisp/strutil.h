@@ -1,3 +1,5 @@
+#pragma once
+
 inline std::string str_replace(std::string input, const std::string& search,
                           const std::string& replace) {
     size_t pos = 0;

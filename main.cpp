@@ -1,208 +1,19 @@
 #include <cstdio>
 #include <fstream>
-#include "lilvm.h"
-#include "JSON.h"
-#include "symtbl.h"
-#include "bukalisp/code_emitter.h"
+#include <chrono>
+#include <cstdlib>
+#include <map>
+#include <memory>
+#include "utf8buffer.h"
+#include "bukalisp/parser.h"
+#include "bukalisp/atom_generator.h"
+#include "atom.h"
+#include "atom_printer.h"
 
 //---------------------------------------------------------------------------
 
 using namespace lilvm;
 using namespace std;
-
-class BukLiVMException : public std::exception
-{
-    private:
-        std::string m_err;
-    public:
-        BukLiVMException(const std::string &err) : m_err(err) { }
-        virtual const char *what() const noexcept { return m_err.c_str(); }
-        virtual ~BukLiVMException() { }
-};
-//---------------------------------------------------------------------------
-
-class LILASMParser : public json::Parser
-{
-  private:
-      enum State
-      {
-          INIT,
-          READ_PROG,
-          READ_OP
-      };
-
-      SymTable *m_symtbl;
-      State     m_state;
-      Sym      *m_cur_debug_sym;
-
-      lilvm::Operation *m_cur_op;
-      lilvm::VM        &m_vm;
-      bool              m_second;
-      bool              m_sym;
-      bool              m_debug_sym;
-
-
-  public:
-    LILASMParser(lilvm::VM &vm)
-        : m_state(INIT),
-          m_cur_op(nullptr),
-          m_second(false),
-          m_vm(vm),
-          m_symtbl(new SymTable(1000)),
-          m_sym(false),
-          m_debug_sym(false)
-    {
-        m_cur_debug_sym = m_symtbl->str2sym("");
-    }
-
-    SymTable *get_symtbl() { return m_symtbl; }
-
-    Sym *last_debug_sym() { return m_cur_debug_sym; }
-
-    virtual ~LILASMParser() { }
-
-    virtual void onObjectStart()                      {}
-    virtual void onObjectKey(const std::string &sOut) { (void) sOut; }
-    virtual void onObjectValueDone()                  { }
-    virtual void onObjectEnd()                        {}
-
-    virtual void onArrayStart()
-    {
-        switch (m_state)
-        {
-            case INIT: // opening "[" in the file
-                m_state = READ_PROG;
-                break;
-
-            case READ_PROG:
-                m_state     = READ_OP;
-                m_second    = false;
-                m_sym       = false;
-                m_debug_sym = false;
-                m_cur_op    = new Operation(NOP);
-                break;
-
-            default:
-                // Ignore it boldly
-                break;
-        }
-    }
-
-    virtual void onArrayValueDone()
-    {
-    }
-
-    virtual void onArrayEnd()
-    {
-        switch (m_state)
-        {
-            case READ_OP: // opening "[" in the file
-                if (m_cur_op)
-                {
-                    m_cur_op->m_min_arg_cnt =
-                        Operation::min_arg_cnt_for_op(
-                            m_cur_op->m_op,
-                            *m_cur_op);
-                    m_vm.append(m_cur_op);
-                    m_cur_op = nullptr;
-                }
-
-                m_state = READ_PROG;
-                break;
-
-            case READ_PROG:
-                // TODO: do something useful?
-                m_state = INIT;
-                break;
-
-            default:
-                // Ignore it boldly
-                break;
-        }
-    }
-    virtual void onError(UTF8Buffer *u8Buf, const char *csError)
-    {
-        throw BukLiVMException("Parsing the JSON: " + string(csError));
-    }
-
-    virtual void onValueBoolean(bool bValue) { (void) bValue; }
-    virtual void onValueNull()               {}
-    virtual void onValueNumber(const char *csNumber, bool bIsFloat)
-    {
-        if (!m_cur_op)
-        {
-            throw BukLiVMException("Bad OP sequence in JSON, bad OP type?");
-        }
-
-        if (m_second)
-        {
-            if (bIsFloat)
-                m_cur_op->m_2.d = stod(csNumber);
-            else
-                m_cur_op->m_2.i = stoll(csNumber);
-        }
-        else
-        {
-            if (bIsFloat)
-                m_cur_op->m_1.d = stod(csNumber);
-            else
-                m_cur_op->m_1.i = stoll(csNumber);
-        }
-
-        m_second = true;
-    }
-
-    virtual void onValueString(const std::string &sString)
-    {
-        if (!m_cur_op)
-        {
-            throw BukLiVMException("Can't define OP type at this point!");
-        }
-
-        if (m_debug_sym)
-        {
-            m_cur_debug_sym = m_symtbl->str2sym(sString);
-        }
-        else if (m_sym)
-        {
-            Sym *sym = m_symtbl->str2sym(sString);
-            if (m_second)
-                m_cur_op->m_2.sym = sym;
-            else
-                m_cur_op->m_1.sym = sym;
-        }
-        else
-        {
-            m_sym = true;
-
-            if (sString == "#DEBUG_SYM")
-            {
-                m_debug_sym = true;
-                return;
-            }
-
-            if (sString == "") m_cur_op->m_op = NOP;
-
-            bool found = false;
-            for (int i = 0; OPCODE_NAMES[i][0] != '\0'; i++)
-            {
-                if (sString == OPCODE_NAMES[i])
-                {
-                    m_cur_op->m_op        = (OPCODE) i;
-                    m_cur_op->m_debug_sym = m_cur_debug_sym;
-                    found = true;
-                }
-            }
-
-            if (!found)
-                throw BukLiVMException("Unknown OP type: " + sString);
-        }
-    }
-};
-//---------------------------------------------------------------------------
-
-int test();
-//---------------------------------------------------------------------------
 
 UTF8Buffer *slurp(const std::string &filepath)
 {
@@ -233,241 +44,335 @@ UTF8Buffer *slurp(const std::string &filepath)
 }
 //---------------------------------------------------------------------------
 
-bool run_test_prog(UTF8Buffer *input, Sym *&last_debug_sym)
+#define TEST_TRUE(b, msg) \
+    if (!(b)) throw BukLiVMException( \
+        std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
+        std::string(msg) + " in: " #b);
+
+#define TEST_EQ(a, b, msg) \
+    if ((a) != (b)) \
+        throw BukLiVMException( \
+            std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
+            std::string(msg) + ", not eq: " \
+            + std::to_string(a) + " != " + std::to_string(b));
+
+#define TEST_EQSTR(a, b, msg) \
+    if ((a) != (b)) \
+        throw BukLiVMException( \
+            std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
+            std::string(msg) + ", not eq: " \
+            + a + " != " + b);
+
+void test_gc1()
 {
-    try
+    TEST_TRUE(AtomVec::s_alloc_count == 0, "none allocated at beginning");
+
     {
-        int retcode = -11;
+        GC gc;
+
+        gc.allocate_vector(4);
+        gc.allocate_vector(4);
+        gc.allocate_vector(4);
+        AtomVec *av =
+            gc.allocate_vector(4);
+
+        TEST_EQ(AtomVec::s_alloc_count, 2 + (2 + 1) * 2,
+                "vec alloc count 1");
+        TEST_EQ(av->m_alloc, GC_SMALL_VEC_LEN, "small vecs");
+
+        gc.allocate_vector(50);
+        gc.allocate_vector(50);
+        gc.allocate_vector(50);
+        av =
+            gc.allocate_vector(50);
+
+        TEST_EQ(AtomVec::s_alloc_count, 2 + (2 + 1) * 2 + 2 + (2 + 1) * 2,
+                "vec alloc count 2");
+        TEST_EQ(av->m_alloc, GC_MEDIUM_VEC_LEN, "medium vecs");
+
+        gc.allocate_vector(1000);
+        gc.allocate_vector(1000);
+        av =
+            gc.allocate_vector(1000);
+
+        TEST_EQ(AtomVec::s_alloc_count, 2 + (2 + 1) * 2 + 2 + (2 + 1) * 2 + 3,
+                "vec alloc count 3");
+        TEST_EQ(av->m_alloc, 1000, "custom vecs");
+
+        TEST_EQ(gc.count_potentially_alive_vectors(), 11, "pot alive");
+        gc.collect();
+        TEST_EQ(gc.count_potentially_alive_vectors(), 0, "pot alive after gc");
+
+        TEST_EQ(AtomVec::s_alloc_count, 2 + (2 + 1) * 2 + 2 + (2 + 1) * 2,
+                "vec alloc count after gc");
+    }
+
+    TEST_TRUE(AtomVec::s_alloc_count == 0, "none allocated at the end");
+}
+//---------------------------------------------------------------------------
+
+class Reader
+{
+    private:
+        GC                  m_gc;
+        AtomGenerator       m_ag;
+        bukalisp::Tokenizer m_tok;
+        bukalisp::Parser    m_par;
+        AtomDebugInfo       m_deb_info;
+
+    public:
+        Reader()
+            : m_ag(&m_gc, &m_deb_info),
+              m_par(m_tok, &m_ag)
         {
-            VM vm;
+        }
 
-            LILASMParser theParser(vm);
-
-            try
+        std::string debug_info(AtomVec *v) { return m_deb_info.pos((void *) v); }
+        std::string debug_info(AtomMap *m) { return m_deb_info.pos((void *) m); }
+        std::string debug_info(Atom &a)
+        {
+            switch (a.m_type)
             {
-                theParser.parse(input);
-                last_debug_sym = theParser.last_debug_sym();
+                case T_VEC: return m_deb_info.pos((void *) a.m_d.vec); break;
+                case T_MAP: return m_deb_info.pos((void *) a.m_d.map); break;
+                default: return "?:?";
             }
-            catch (std::exception &e)
-            {
-                cerr << "ERROR: " << e.what() << endl;
-                last_debug_sym = theParser.last_debug_sym();
-                return false;
-            }
-            catch (UTF8Buffer_exception &)
-            {
-                cerr << "UTF-8 error!" << endl;
-                last_debug_sym = theParser.last_debug_sym();
-                return false;
-            }
-
-            Datum *d = vm.run();
-            if (!d) return false;
-
-            retcode = (int) d->to_int();
         }
 
-        if (Datum::s_instance_counter > 1)
+        size_t pot_alive_vecs() { return m_gc.count_potentially_alive_vectors(); }
+        size_t pot_alive_maps() { return m_gc.count_potentially_alive_maps(); }
+        size_t pot_alive_syms() { return m_gc.count_potentially_alive_syms(); }
+
+        void make_always_alive(Atom a)
         {
-            std::stringstream ss;
-            ss << (Datum::s_instance_counter - 1) << " friggin leaked Datums!";
-            throw BukLiVMException(ss.str());
+            AtomVec *av = m_gc.allocate_vector(1);
+            av->m_data[0] = a;
+            m_gc.add_root(av);
         }
 
-        return retcode == 23 ? true : false;
-    }
-    catch (const std::exception &e)
-    {
-        cerr << "ERROR: " << e.what() << endl;
-        return false;
-    }
+        void collect() { m_gc.collect(); }
 
-    return false;
-}
-//---------------------------------------------------------------------------
-
-bool run_test_prog_ok(const std::string &filepath, Sym *&last_debug_sym)
-{
-    UTF8Buffer *u8b = slurp(filepath);
-    bool ret = run_test_prog(u8b, last_debug_sym);
-    delete u8b;
-    return ret;
-}
-//---------------------------------------------------------------------------
-
-void ast_debug_walker(bukalisp::ASTNode *n, int indent_level = 0)
-{
-    using namespace bukalisp;
-
-    for (int i = 0; i < 4 * indent_level; i++)
-        cout << " ";
-
-    switch (n->m_type)
-    {
-        case A_DBL:
-            cout << "* DBL (" << n->m_num.d << ")" << endl; break;
-
-        case A_INT:
-            cout << "* INT (" << n->m_num.i << ")" << endl; break;
-
-        case A_SYM:
-            cout << "* SYM (" << n->m_text << ")" << endl; break;
-
-        case A_KW:
-            cout << "* KW (" << n->m_text << ")" << endl; break;
-
-        case A_LIST:
+        bool parse(const std::string &codename, const std::string &in)
         {
-            cout << "* LIST" << endl;
-            for (auto child : n->m_childs)
-                ast_debug_walker(child, indent_level + 1);
-            break;
+            m_tok.tokenize(codename, in);
+            // m_tok.dump_tokens();
+            return m_par.parse();
         }
 
-        default:
-            throw BukLiVMException("Unknown ASTNode Type: "
-                                   + to_string(n->m_type));
-    }
-}
+        Atom &root() { return m_ag.root(); }
+};
 //---------------------------------------------------------------------------
 
-// TODO: Improve test suite handling of compilation!?
-void test_parser(const std::string &input)
+void test_gc2()
 {
-    using namespace bukalisp;
-    Tokenizer tok;
-    Parser p(tok);
+    Reader tc;
 
-    tok.tokenize("stdin", input);
-    ASTNode *anode = p.parse();
-    if (anode)
-    {
-        ast_debug_walker(anode);
+    tc.parse("test_gc2", "(1 2 3 (4 5 6) (943 203))");
 
-        bukalisp::ASTJSONCodeEmitter code_emit;
-        std::fstream out(input.c_str(), std::ios::out);
-        code_emit.set_output(&out);
-        code_emit.emit_json(anode);
-    }
-    else
-        throw BukLiVMException("BukaLISP Compile Error!");
+    TEST_EQ(tc.pot_alive_vecs(), 3, "potentially alive before");
+
+    Atom r = tc.root();
+    tc.make_always_alive(r);
+
+    TEST_EQ(tc.pot_alive_vecs(), 4, "potentially alive before 2");
+
+    tc.collect();
+    TEST_EQ(AtomVec::s_alloc_count, 8, "after 1 vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 4, "potentially alive after");
+
+    r.m_d.vec->m_data[0] = Atom();
+
+    tc.collect();
+    TEST_EQ(AtomVec::s_alloc_count, 8, "after 2 vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 4, "potentially alive after 2");
+
+    TEST_EQ(r.m_d.vec->m_data[3].m_type, T_VEC, "3rd elem is vector");
+    r.m_d.vec->m_data[3] = Atom();
+    tc.collect();
+    TEST_EQ(AtomVec::s_alloc_count, 8, "after 3 vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 3, "potentially alive after 3");
+
+    r.m_d.vec->m_data[4] = Atom();
+    tc.collect();
+    TEST_EQ(AtomVec::s_alloc_count, 8, "after 4 vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 2, "potentially alive after 4");
 }
 //---------------------------------------------------------------------------
 
-void test_case(const std::string &inp_file)
+void test_atom_gen1()
 {
-    using namespace bukalisp;
-    Tokenizer tok;
-    Parser p(tok);
+    Reader tc;
 
-    auto u8b = slurp(inp_file);
-    tok.tokenize(inp_file, u8b->as_string());
-    delete u8b;
+    TEST_TRUE(tc.parse("test_atom_gen1", "3"), "test parse");
 
-    ASTNode *anode = p.parse();
-    if (anode)
-    {
-        ast_debug_walker(anode);
+    Atom r = tc.root();
 
-        bukalisp::ASTJSONCodeEmitter code_emit;
-        code_emit.set_symtbl(new SymTable(1000));
-
-        code_emit.push_root_primtive("*get-datum-in-use-count*");
-        code_emit.push_root_primtive("*value*");
-
-        std::stringstream os;
-        code_emit.set_output(&os);
-        code_emit.emit_json(anode);
-        std::string js = os.str();
-
-        cout << "EXEC<<" << js << ">>" << endl;
-        UTF8Buffer u8b(js.data(), js.size());
-
-        Sym *last_debug_sym = nullptr;
-        if (run_test_prog(&u8b, last_debug_sym))
-        {
-            cout << "OK: " << inp_file
-                 << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
-                 << endl;
-        }
-        else
-        {
-            cout << "*** FAIL: " << inp_file
-                 << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
-                 << endl;
-        }
-    }
-    else
-        throw BukLiVMException("BukaLISP Compile Error!");
+    TEST_EQ(r.m_type, T_INT, "basic atom type ok");
+    TEST_EQ(r.m_d.i, 3, "basic atom int ok");
 }
 //---------------------------------------------------------------------------
 
-// TODO: Implement basic comparsion and jump operations
-// TODO: Implement argv stack
-// TODO: Implement function type (pointer, arity and argv-stack are members)
+void test_atom_gen2()
+{
+    Reader tc;
+
+    TEST_TRUE(tc.parse("test_atom_gen1", "(1 2.94 (3 4 5 #t #f))"),
+              "test parse");
+
+    Atom r = tc.root();
+
+    TEST_EQ(r.m_type,       T_VEC, "atom type");
+    TEST_EQ(r.at(0).m_type, T_INT, "atom type 2");
+    TEST_EQ(r.at(1).m_type, T_DBL, "atom type 3");
+    TEST_EQ(r.at(2).m_type, T_VEC, "atom type 4");
+
+    TEST_EQ(r.at(0).to_int(), 1, "atom 1");
+    TEST_EQ(r.at(1).to_int(), 2, "atom 2");
+
+    TEST_EQ(r.at(2).m_d.vec->m_len, 5,    "atom vec len");
+    TEST_EQ(r.at(2).at(3).m_type, T_BOOL, "bool 1");
+    TEST_EQ(r.at(2).at(4).m_type, T_BOOL, "bool 2");
+    TEST_EQ(r.at(2).at(3).m_d.b, true,    "bool 1");
+    TEST_EQ(r.at(2).at(4).m_d.b, false,   "bool 2");
+}
+//---------------------------------------------------------------------------
+
+void test_maps()
+{
+    Reader tc;
+
+    TEST_TRUE(tc.parse("test_maps", "(1 2.94 { a: 123 b: (1 2 { x: 3 }) } 4)"),
+              "test parse");
+
+    Atom r = tc.root();
+
+    Atom m = r.at(2);
+
+
+    TEST_EQ(r.at(3).m_d.i, 4, "last atom");
+
+    TEST_EQ(m.at("a").m_type, T_INT, "map a key type");
+    TEST_EQ(m.at("a").m_d.i,  123,   "map a key");
+
+    TEST_EQ(m.at("b").at(2).m_type, T_MAP, "2nd map at right pos");
+
+    tc.make_always_alive(m.at("b"));
+
+    TEST_EQ(tc.pot_alive_maps(), 2, "alive map count");
+    TEST_EQ(tc.pot_alive_vecs(), 3, "alive vec count");
+    tc.collect();
+    TEST_EQ(tc.pot_alive_maps(), 1, "alive map count after gc");
+    TEST_EQ(tc.pot_alive_vecs(), 2, "alive vec count after gc");
+}
+//---------------------------------------------------------------------------
+
+void test_symbols_and_keywords()
+{
+    Reader tc;
+
+    TEST_EQ(tc.pot_alive_syms(), 0, "no syms alive at start");
+
+    tc.parse("test_symbols_and_keywords",
+             "(foo bar foo foo: baz: baz: foo:)");
+
+    Atom r = tc.root();
+
+    TEST_EQ(tc.pot_alive_syms(), 3, "some syms alive after parse");
+
+    TEST_EQ(r.at(0).m_type, T_SYM, "sym 1");
+    TEST_EQ(r.at(1).m_type, T_SYM, "sym 2");
+    TEST_EQ(r.at(2).m_type, T_SYM, "sym 3");
+    TEST_EQ(r.at(3).m_type, T_KW,  "kw 1");
+    TEST_EQ(r.at(4).m_type, T_KW,  "kw 2");
+    TEST_EQ(r.at(5).m_type, T_KW,  "kw 3");
+    TEST_EQ(r.at(6).m_type, T_KW,  "kw 4");
+
+    TEST_TRUE(r.at(0).m_d.sym == r.at(2).m_d.sym, "sym 0 eq 2");
+    TEST_TRUE(r.at(1).m_d.sym != r.at(2).m_d.sym, "sym 1 neq 2");
+    TEST_TRUE(r.at(3).m_d.sym == r.at(6).m_d.sym, "sym 3 eq 6");
+    TEST_TRUE(r.at(4).m_d.sym == r.at(5).m_d.sym, "sym 4 eq 5");
+
+    tc.collect();
+
+    TEST_EQ(tc.pot_alive_syms(), 0, "no syms alive after collect");
+}
+//---------------------------------------------------------------------------
+
+void test_maps2()
+{
+    Reader tc;
+
+    tc.parse("test_atom_printer", "({ 123 5 }{ #t 34 }{ #f 5 }");
+
+    Atom r = tc.root();
+
+    TEST_EQSTR(
+        write_atom(r),
+        "({\"123\" 5} {\"#t\" 34} {\"#f\" 5})",
+        "atom print 1");
+}
+//---------------------------------------------------------------------------
+
+void test_atom_printer()
+{
+    Reader tc;
+
+    tc.parse("test_atom_printer", "(1 2.3 foo foo: \"foo\" { axx: #t } { bxx #f } { \"test\" 123 })");
+
+    Atom r = tc.root();
+
+    TEST_EQSTR(
+        write_atom(r),
+        "(1 2.3 foo foo: \"foo\" {\"axx\" #t} {\"bxx\" #f} {\"test\" 123})",
+        "atom print 1");
+}
+//---------------------------------------------------------------------------
+
+void test_atom_debug_info()
+{
+    Reader tc;
+
+    tc.parse("XXX", "\n(1 2 3\n\n(3 \n ( 4 )))");
+    Atom r = tc.root();
+
+    TEST_EQ(r.m_type, T_VEC, "is vec");
+    TEST_EQSTR(tc.debug_info(r),             "XXX:2", "debug info 1")
+    TEST_EQSTR(tc.debug_info(r.at(3)),       "XXX:4", "debug info 2")
+    TEST_EQSTR(tc.debug_info(r.at(3).at(1)), "XXX:5", "debug info 3")
+}
+//---------------------------------------------------------------------------
 
 int main(int argc, char *argv[])
 {
+    using namespace std::chrono;
     try
     {
         using namespace std;
 
         std::string input_file_path = "input.json";
-        Sym *last_debug_sym = nullptr;
+        std::string last_debug_sym;
 
         if (argc > 1)
             input_file_path = string(argv[1]);
 
         if (input_file_path == "tests")
         {
-            for (int i = 0; i < 100; i++)
+            try
             {
-                std::string path = "tests\\test" + to_string(i) + ".json";
-                ifstream input_file(path.c_str(), ios::in);
-                if (!input_file.is_open())
-                    break;
-                input_file.close();
-
-
-                if (run_test_prog_ok(path, last_debug_sym))
-                {
-                    cout << "OK: " << path
-                         << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
-                         << endl;
-                }
-                else
-                {
-                    cout << "*** FAIL: " << path
-                         << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
-                         << endl;
-                    break;
-                }
+                test_gc1();
+                test_gc2();
+                test_atom_gen1();
+                test_atom_gen2();
+                test_symbols_and_keywords();
+                test_maps();
+                test_atom_printer();
+                test_maps2();
+                test_atom_debug_info();
+                cout << "TESTS OK" << endl;
             }
-        }
-        else if (input_file_path == "parser_test")
-        {
-            if (argc > 2) test_parser(argv[2]);
-            else          test_parser("");
-        }
-        else if (input_file_path.substr(input_file_path.size() - 4, 4) == "bkli")
-        {
-            test_case(input_file_path);
-        }
-        else
-        {
-            if (run_test_prog_ok(input_file_path, last_debug_sym))
+            catch (std::exception &e)
             {
-                cout << "OK: " << input_file_path
-                               << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
-                               << endl;
-                return 0;
-            }
-            else
-            {
-                cout << "*** FAIL: " << input_file_path
-                     << " [" << (last_debug_sym ? last_debug_sym->m_str : "") << "]"
-                     << endl;
-                return 1;
+                cerr << "TESTS FAIL, EXCEPTION: " << e.what() << endl;
             }
         }
 
@@ -479,36 +384,4 @@ int main(int argc, char *argv[])
         return 1;
     }
 }
-//---------------------------------------------------------------------------
-
-//        Operation *o = nullptr;
-//
-//        o = new Operation(NOP);
-//        vm.append(o);
-//
-//        o = new Operation(PUSH_I);
-//        o->m_1.i = 123;
-//        vm.append(o);
-//
-//        o = new Operation(PUSH_D);
-//        o->m_1.d = 432.12;
-//        vm.append(o);
-//
-//        o = new Operation(ADD_D);
-//        vm.append(o);
-//
-//        o = new Operation(PUSH_I);
-//        o->m_1.i = 123;
-//        vm.append(o);
-//
-//        o = new Operation(PUSH_D);
-//        o->m_1.d = 432.12;
-//        vm.append(o);
-//
-//        o = new Operation(ADD_I);
-//        vm.append(o);
-//
-//        o = new Operation(DBG_DUMP_STACK);
-//        vm.append(o);
-
 //---------------------------------------------------------------------------

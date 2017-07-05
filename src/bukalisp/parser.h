@@ -2,95 +2,41 @@
 #include "tokenizer.h"
 #include <iostream>
 
-/*
-
-Language:
-
-
-    (let ((a 10) (b 20)) ...)
-    (set! a 20)
-
-    let{
-        ((a 10) (b 20))
-        set!{a 120}
-        if { (> a b)
-            begin{
-                set!{a 23}
-                (set! b
-                 lambda{ (x) (+ a x) })
-            }
-        }
-    }
-*/
-
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
-enum ASTNodeType
+class SEX_Builder
 {
-    A_INT,
-    A_DBL,
-    A_KW,
-    A_SYM,
-    A_LIST
-};
-//---------------------------------------------------------------------------
+    protected:
+        std::string         m_dbg_input_name;
+        size_t              m_dbg_line;
 
-struct ASTNode;
-struct ASTNode
-{
-    ASTNodeType m_type;
-    std::string m_text;
-    int         m_line;
-    std::string m_input_name;
-    union {
-        double  d;
-        int64_t i;
-    } m_num;
+    public:
+        virtual ~SEX_Builder() { }
 
-    ASTNode(ASTNodeType t, Token &tok) : m_type(t)
-    {
-        m_text = tok.m_text;
-        if (tok.m_token_id == T_INT)
-            m_num.i  = tok.m_num.i;
-        else if (tok.m_token_id == T_DBL)
-            m_num.d  = tok.m_num.d;
-        m_line       = tok.m_line;
-        m_input_name = tok.m_input_name;
-    }
+        virtual void set_debug_info(const std::string &inp_name, size_t line)
+        {
+            m_dbg_input_name = inp_name;
+            m_dbg_line       = line;
+        }
 
-    std::string num_as_string()
-    {
-        if (m_type == A_DBL)
-            return std::to_string(m_num.d);
-        else if (m_type == A_INT)
-            return std::to_string(m_num.i);
-        else if (m_type == A_KW)
-            return m_text;
-        else
-            return std::to_string(0);
-    }
+        virtual void start_list(bool quoted = false)         = 0;
+        virtual void end_list()                              = 0;
 
-    ASTNode *clone() { return new ASTNode(*this); }
+        virtual void start_map()                             = 0;
+        virtual void start_kv_pair()                         = 0;
+        virtual void end_kv_key()                            = 0;
+        virtual void end_kv_pair()                           = 0;
+        virtual void end_map()                               = 0;
 
-    std::vector<ASTNode *> m_childs;
-
-
-    void unshift(ASTNode *n) { m_childs.insert(m_childs.begin(), n); }
-    void push(ASTNode *n) { m_childs.push_back(n); }
-    size_t csize() { return m_childs.size(); }
-    ASTNode *_(size_t idx)
-    {
-        if (idx >= m_childs.size()) return nullptr;
-        else                        return m_childs[idx];
-    }
-
-    ~ASTNode()
-    {
-        for (auto an : m_childs)
-            if (an) delete an;
-    }
+        virtual void atom_string(const std::string &str)     = 0;
+        virtual void atom_symbol(const std::string &symstr)  = 0;
+        virtual void atom_keyword(const std::string &symstr) = 0;
+        virtual void atom_int(int64_t i)                     = 0;
+        virtual void atom_dbl(double d)                      = 0;
+        virtual void atom_nil()                              = 0;
+        virtual void atom_bool(bool b)                       = 0;
 };
 //---------------------------------------------------------------------------
 
@@ -98,11 +44,12 @@ class Parser
 {
     private:
         Tokenizer   &m_tok;
+        SEX_Builder *m_builder;
         bool        m_eof;
 
     public:
-        Parser(Tokenizer &tok)
-            : m_tok(tok), m_eof(false)
+        Parser(Tokenizer &tok, SEX_Builder *builder)
+            : m_tok(tok), m_eof(false), m_builder(builder)
         {
         }
 
@@ -111,112 +58,151 @@ class Parser
             std::cout << "ERROR [" << t.m_line << "] :" << what << std::endl;
         }
 
-        ASTNode *parse_sequence(ASTNodeType type, char end_delim)
+        void debug_token(Token &t)
+        {
+            m_builder->set_debug_info(t.m_input_name, t.m_line);
+        }
+
+        bool parse_map()
         {
             m_tok.next();
             Token t = m_tok.peek();
 
-            ASTNode *seq = new ASTNode(type, t);
+            debug_token(t);
+            m_builder->start_map();
 
-            bool is_first = true;
+            while (t.m_token_id != T_EOF)
+            {
+                if (t.m_token_id == T_CHR_TOK && t.nth(0) == '}')
+                    break;
+
+                m_builder->start_kv_pair();
+
+                if (!parse())
+                    return false;
+
+                m_builder->end_kv_key();
+
+                if (!parse())
+                    return false;
+
+                m_builder->end_kv_pair();
+
+
+                t = m_tok.peek();
+            }
+
+            debug_token(t);
+            m_builder->end_map();
+
+            m_tok.next();
+
+            return true;
+        }
+
+        bool parse_sequence(bool quoted, char end_delim)
+        {
+            m_tok.next();
+            Token t = m_tok.peek();
+
+            debug_token(t);
+            m_builder->start_list(quoted);
+
             while (t.m_token_id != T_EOF)
             {
                 if (t.m_token_id == T_CHR_TOK && t.nth(0) == end_delim)
                     break;
 
-                ASTNode *f = parse();
-                if (!f) { delete seq; return nullptr; }
-                is_first = false;
-
-                seq->push(f);
+                if (!parse())
+                    return false;
 
                 t = m_tok.peek();
             }
+
+            debug_token(t);
+            m_builder->end_list();
+
             m_tok.next();
 
-            return seq;
+            return true;
         }
 
-        ASTNode *parse_atom()
+        bool parse_atom()
         {
             Token t = m_tok.peek();
+            debug_token(t);
 
             switch (t.m_token_id)
             {
-                case T_DBL:     m_tok.next(); return new ASTNode(A_DBL, t); break;
-                case T_INT:     m_tok.next(); return new ASTNode(A_INT, t); break;
-                case T_CHR_TOK: m_tok.next(); return new ASTNode(A_KW, t); break;
-                case T_STR_BODY: //          return new ASTNode(A_STR, t); break;
-                    std::cout << "STR[" << t.m_text << "]" << std::endl;
-                    log_error("Can't handle string atoms yet!", t);
-                    break;
+                case T_DBL:      m_tok.next(); m_builder->atom_dbl(t.m_num.d); break;
+                case T_INT:      m_tok.next(); m_builder->atom_int(t.m_num.i); break;
+                case T_CHR_TOK:
+                    {
+                        m_tok.next();
+
+                        if (t.m_text[t.m_text.size() - 1] == ':')
+                            m_builder->atom_keyword(
+                                t.m_text.substr(0, t.m_text.size() - 1));
+                        else if (t.m_text == "#t" || t.m_text == "#true")
+                            m_builder->atom_bool(true);
+                        else if (t.m_text == "#f" || t.m_text == "#false")
+                            m_builder->atom_bool(false);
+                        else if (t.m_text == "\"")
+                        {
+                            t = m_tok.peek();
+                            if (t.m_token_id != T_STR_BODY)
+                            {
+                                log_error("Expected string body", t);
+                                return false;
+                            }
+                            m_builder->atom_string(t.m_text);
+                            m_tok.next();
+                            m_tok.next(); // skip end '"'
+                        }
+                        else
+                            m_builder->atom_symbol(t.m_text);
+                        break;
+                    }
                 case T_BAD_NUM:
                     log_error("Expected atom", t);
-                    break;
+                    return false;
             }
-
-            return nullptr;
+            return true;
         }
 
-        ASTNode *parse()
+        bool parse()
         {
             using namespace std;
 
             Token t = m_tok.peek();
+            debug_token(t);
 
             switch (t.m_token_id)
             {
-                case T_EOF: m_tok.next(); m_eof = true; return nullptr; break;
-                case T_DBL: return parse_atom(); break;
-                case T_INT: return parse_atom(); break;
+                case T_EOF:      m_tok.next(); m_eof = true; break;
+                case T_DBL:      return parse_atom();        break;
+                case T_INT:      return parse_atom();        break;
+                case T_STR_BODY: return parse_atom();        break;
+
                 case T_CHR_TOK:
                 {
                     switch (t.nth(0))
                     {
-                        case '(': return parse_sequence(A_LIST, ')');
-                        case '[':
-                            {
-                                ASTNode *seq = parse_sequence(A_LIST, ']');
-
-                                Token t2(t);
-                                t2.m_text = "list";
-                                seq->unshift(new ASTNode(A_SYM, t2));
-                                return seq;
-                            }
-                        case '{':
-                        {
-                            log_error("Unexpected '{'", t);
-                            return nullptr;
-                        }
-                        default:
-                        {
-                            m_tok.next();
-
-                            ASTNode *var = nullptr;
-                            if (t.m_text[t.m_text.size() - 1] == ':')
-                            {
-                                Token t2(t);
-                                t2.m_text = t2.m_text.substr(0, t2.m_text.size() - 1);
-                                var = new ASTNode(A_KW, t2);
-                            }
-                            else
-                                var = new ASTNode(A_SYM, t);
-
-                            return var;
-                        }
-                        break;
+                        case '(': return parse_sequence(false, ')'); break;
+                        case '[': return parse_sequence(true, ']');  break;
+                        case '{': return parse_map(); break;
+                        case ')': log_error("unexpected ')'", t); return false;
+                        case ']': log_error("unexpected ']'", t); return false;
+                        case '}': log_error("unexpected '}'", t); return false;
+                        default: return parse_atom(); break;
                     }
                 }
-                case T_STR_BODY: //          return new ASTNode(A_STR, t); break;
-                    std::cout << "STR[" << t.m_text << "]" << std::endl;
-                    log_error("Can't handle strings yet!", t);
-                    break;
                 case T_BAD_NUM:
                     log_error("Bad number found", t);
-                    break;
+                    return false;
             }
 
-            return nullptr;
+            return true;
         }
 };
 //---------------------------------------------------------------------------
