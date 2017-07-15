@@ -21,7 +21,7 @@ class SEX_Builder
             m_dbg_line       = line;
         }
 
-        virtual void start_list(bool quoted = false)         = 0;
+        virtual void start_list()                            = 0;
         virtual void end_list()                              = 0;
 
         virtual void start_map()                             = 0;
@@ -71,9 +71,9 @@ class Parser
             debug_token(t);
             m_builder->start_map();
 
-            while (t.m_token_id != T_EOF)
+            while (t.m_token_id != TOK_EOF)
             {
-                if (t.m_token_id == T_CHR_TOK && t.nth(0) == '}')
+                if (t.m_token_id == TOK_CHR && t.nth(0) == '}')
                     break;
 
                 m_builder->start_kv_pair();
@@ -106,11 +106,18 @@ class Parser
             Token t = m_tok.peek();
 
             debug_token(t);
-            m_builder->start_list(quoted);
 
-            while (t.m_token_id != T_EOF)
+            if (quoted)
             {
-                if (t.m_token_id == T_CHR_TOK && t.nth(0) == end_delim)
+                m_builder->start_list();
+                m_builder->atom_symbol("quote");
+            }
+
+            m_builder->start_list();
+
+            while (t.m_token_id != TOK_EOF)
+            {
+                if (t.m_token_id == TOK_CHR && t.nth(0) == end_delim)
                     break;
 
                 if (!parse())
@@ -121,6 +128,9 @@ class Parser
 
             debug_token(t);
             m_builder->end_list();
+
+            if (quoted)
+                m_builder->end_list();
 
             m_tok.next();
 
@@ -134,9 +144,9 @@ class Parser
 
             switch (t.m_token_id)
             {
-                case T_DBL:      m_tok.next(); m_builder->atom_dbl(t.m_num.d); break;
-                case T_INT:      m_tok.next(); m_builder->atom_int(t.m_num.i); break;
-                case T_CHR_TOK:
+                case TOK_DBL:      m_tok.next(); m_builder->atom_dbl(t.m_num.d); break;
+                case TOK_INT:      m_tok.next(); m_builder->atom_int(t.m_num.i); break;
+                case TOK_CHR:
                     {
                         m_tok.next();
 
@@ -147,10 +157,12 @@ class Parser
                             m_builder->atom_bool(true);
                         else if (t.m_text == "#f" || t.m_text == "#false")
                             m_builder->atom_bool(false);
+                        else if (t.m_text == "nil")
+                            m_builder->atom_nil();
                         else if (t.m_text == "\"")
                         {
                             t = m_tok.peek();
-                            if (t.m_token_id != T_STR_BODY)
+                            if (t.m_token_id != TOK_STR)
                             {
                                 log_error("Expected string body", t);
                                 return false;
@@ -163,7 +175,7 @@ class Parser
                             m_builder->atom_symbol(t.m_text);
                         break;
                     }
-                case T_BAD_NUM:
+                case TOK_BAD_NUM:
                     log_error("Expected atom", t);
                     return false;
             }
@@ -179,12 +191,12 @@ class Parser
 
             switch (t.m_token_id)
             {
-                case T_EOF:      m_tok.next(); m_eof = true; break;
-                case T_DBL:      return parse_atom();        break;
-                case T_INT:      return parse_atom();        break;
-                case T_STR_BODY: return parse_atom();        break;
+                case TOK_EOF: m_tok.next(); m_eof = true; break;
+                case TOK_DBL: return parse_atom();        break;
+                case TOK_INT: return parse_atom();        break;
+                case TOK_STR: return parse_atom();        break;
 
-                case T_CHR_TOK:
+                case TOK_CHR:
                 {
                     switch (t.nth(0))
                     {
@@ -194,10 +206,21 @@ class Parser
                         case ')': log_error("unexpected ')'", t); return false;
                         case ']': log_error("unexpected ']'", t); return false;
                         case '}': log_error("unexpected '}'", t); return false;
+                        case '\'':
+                        {
+                            m_tok.next();
+                            debug_token(t);
+                            m_builder->start_list();
+                            m_builder->atom_symbol("quote");
+                            bool b = parse();
+                            debug_token(t);
+                            m_builder->end_list();
+                            return b;
+                        }
                         default: return parse_atom(); break;
                     }
                 }
-                case T_BAD_NUM:
+                case TOK_BAD_NUM:
                     log_error("Bad number found", t);
                     return false;
             }

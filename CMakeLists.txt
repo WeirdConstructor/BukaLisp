@@ -10,7 +10,7 @@ add_library(lilvm_lib STATIC
     external/JSON.cpp
     src/atom_printer.cpp
     src/atom.cpp
-#    src/bukalisp/code_emitter.cpp
+    src/bukalisp/interpreter.cpp
 #    src/lilvm.cpp
 )
 

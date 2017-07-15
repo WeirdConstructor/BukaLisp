@@ -35,12 +35,12 @@ namespace bukalisp
 
 enum TokenType
 {
-    T_EOF,
-    T_CHR_TOK,
-    T_STR_BODY,
-    T_DBL,
-    T_INT,
-    T_BAD_NUM
+    TOK_EOF,
+    TOK_CHR,
+    TOK_STR,
+    TOK_DBL,
+    TOK_INT,
+    TOK_BAD_NUM
 };
 //---------------------------------------------------------------------------
 
@@ -55,25 +55,25 @@ struct Token
         int64_t i;
     } m_num;
 
-    Token() : m_line(0), m_token_id(T_EOF), m_text("") { }
+    Token() : m_line(0), m_token_id(TOK_EOF), m_text("") { }
 
-    Token(double d)  : m_line(0), m_token_id(T_DBL) { m_num.d = d; }
-    Token(int64_t i) : m_line(0), m_token_id(T_INT) { m_num.i = i; }
+    Token(double d)  : m_line(0), m_token_id(TOK_DBL) { m_num.d = d; }
+    Token(int64_t i) : m_line(0), m_token_id(TOK_INT) { m_num.i = i; }
 
-    Token(char c) : m_line(0), m_token_id(T_CHR_TOK)
+    Token(char c) : m_line(0), m_token_id(TOK_CHR)
     {
         m_text = std::string(&c, 1);
     }
-    Token(const char *csStr) : m_line(0), m_token_id(T_CHR_TOK)
+    Token(const char *csStr) : m_line(0), m_token_id(TOK_CHR)
     {
         m_text = std::string(csStr);
     }
-    Token(UTF8Buffer &u8Tmp) : m_line(0), m_token_id(T_CHR_TOK)
+    Token(UTF8Buffer &u8Tmp) : m_line(0), m_token_id(TOK_CHR)
     {
         m_text = u8Tmp.as_string();
     }
     Token(const std::string &sStrBody)
-        : m_line(0), m_token_id(T_STR_BODY)
+        : m_line(0), m_token_id(TOK_STR)
     {
         m_text = sStrBody;
     }
@@ -88,18 +88,18 @@ struct Token
     {
         std::string s;
 
-        if (m_token_id == T_DBL)
-            s = "T_DBL=" + std::to_string(m_num.d);
-        else if (m_token_id == T_INT)
-            s = "T_INT=" + std::to_string(m_num.i);
-        else if (m_token_id == T_EOF)
-            s = "T_EOF";
-        else if (m_token_id == T_CHR_TOK)
-            s = "T_CHR_TOK[" + m_text + "]";
-        else if (m_token_id == T_STR_BODY)
-            s = "T_STR_BODY\"" + m_text + "\"";
+        if (m_token_id == TOK_DBL)
+            s = "TOK_DBL=" + std::to_string(m_num.d);
+        else if (m_token_id == TOK_INT)
+            s = "TOK_INT=" + std::to_string(m_num.i);
+        else if (m_token_id == TOK_EOF)
+            s = "TOK_EOF";
+        else if (m_token_id == TOK_CHR)
+            s = "TOK_CHR[" + m_text + "]";
+        else if (m_token_id == TOK_STR)
+            s = "TOK_STR\"" + m_text + "\"";
         else
-            s = "T_BAD_NUM";
+            s = "TOK_BAD_NUM";
 
         s += "@" + std::to_string(m_line);
 
@@ -283,7 +283,7 @@ class Tokenizer
                 if (bBadNumber)
                 {
                     Token t;
-                    t.m_token_id = T_BAD_NUM;
+                    t.m_token_id = TOK_BAD_NUM;
                     push(t);
                 }
                 else
@@ -301,7 +301,7 @@ class Tokenizer
                 if (pos != std::string::npos)
                 {
                     Token t("->");
-                    t.m_token_id = T_CHR_TOK;
+                    t.m_token_id = TOK_CHR;
                     push(t);
                     push(Token(s.substr(0, pos).c_str()));
                     push(Token(s.substr(pos + 2, s.size() - (pos + 2)).c_str()));

@@ -68,7 +68,9 @@ void AtomVec::check_size(size_t idx)
     {
         Atom *old_data = m_data;
         m_alloc = idx * 2;
+        std::cout << "FOO1 " << m_alloc << std::endl;
         m_data = new Atom[m_alloc];
+        std::cout << "FOO2 " << m_alloc << std::endl;
         for (size_t i = 0; i < m_len; i++)
             m_data[i] = old_data[i];
         delete[] old_data;
@@ -99,6 +101,15 @@ Atom AtomMap::at(const std::string &str)
 {
     auto it = m_map.find(str);
     if (it == m_map.end()) return Atom();
+    return it->second;
+}
+
+Atom AtomMap::at(const std::string &str, bool &defined)
+{
+    defined = false;
+    auto it = m_map.find(str);
+    if (it == m_map.end()) return Atom();
+    defined = true;
     return it->second;
 }
 //---------------------------------------------------------------------------

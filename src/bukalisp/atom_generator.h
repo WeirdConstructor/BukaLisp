@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+#include <vector>
 #include "bukalisp/parser.h"
 #include "atom.h"
 #include "atom_printer.h"
@@ -42,36 +44,37 @@ class AtomDebugInfo
 class AtomGenerator : public bukalisp::SEX_Builder
 {
     private:
-        GC                              *m_gc;
+        lilvm::GC                       *m_gc;
         AtomDebugInfo                   *m_deb_info;
 
-        Atom                             m_root;
+        lilvm::Atom                             m_root;
 
-        typedef std::function<void(Atom &a)>  AddFunc;
-        std::vector<std::pair<Atom, AddFunc>> m_add_stack;
+        typedef std::function<void(lilvm::Atom &a)>  AddFunc;
+        std::vector<std::pair<lilvm::Atom, AddFunc>> m_add_stack;
 
     public:
-        AtomGenerator(GC *gc, AtomDebugInfo *atd)
+        AtomGenerator(lilvm::GC *gc, AtomDebugInfo *atd)
             : m_gc(gc), m_deb_info(atd)
         {
             m_add_stack.push_back(
-                std::pair<Atom, AddFunc>(m_root, [this](Atom &a) { m_root = a; }));
+                std::pair<lilvm::Atom, AddFunc>(
+                    m_root, [this](lilvm::Atom &a) { m_root = a; }));
         }
         virtual ~AtomGenerator() { }
 
-        Atom &root() { return m_root; }
+        lilvm::Atom &root() { return m_root; }
 
-        virtual void start_list(bool quoted = false)
+        virtual void start_list()
         {
-            AtomVec *new_vec = m_gc->allocate_vector(0);
+            lilvm::AtomVec *new_vec = m_gc->allocate_vector(0);
             m_deb_info->add((void *) new_vec, m_dbg_input_name, m_dbg_line);
-            Atom a(T_VEC);
+            lilvm::Atom a(lilvm::T_VEC);
             a.m_d.vec = new_vec;
 
             m_add_stack.push_back(
-                std::pair<Atom, AddFunc>(
+                std::pair<lilvm::Atom, AddFunc>(
                     a,
-                    [new_vec](Atom &a) { new_vec->push(a); }));
+                    [new_vec](lilvm::Atom &a) { new_vec->push(a); }));
         }
 
         virtual void end_list()
@@ -83,24 +86,24 @@ class AtomGenerator : public bukalisp::SEX_Builder
 
         virtual void start_map()
         {
-            AtomMap *new_map = m_gc->allocate_map();
+            lilvm::AtomMap *new_map = m_gc->allocate_map();
             m_deb_info->add((void *) new_map, m_dbg_input_name, m_dbg_line);
-            Atom a(T_MAP);
+            lilvm::Atom a(lilvm::T_MAP);
             a.m_d.map = new_map;
 
             std::shared_ptr<std::pair<bool, std::string>> key_data
                 = std::make_shared<std::pair<bool, std::string>>(true, "");
 
             m_add_stack.push_back(
-                std::pair<Atom, AddFunc>(
+                std::pair<lilvm::Atom, AddFunc>(
                     a,
-                    [=](Atom &a)
+                    [=](lilvm::Atom &a)
                     {
                         if (key_data->first)
                         {
-                            if (   a.m_type != T_SYM
-                                && a.m_type != T_KW
-                                && a.m_type != T_STR)
+                            if (   a.m_type != lilvm::T_SYM
+                                && a.m_type != lilvm::T_KW
+                                && a.m_type != lilvm::T_STR)
                                 key_data->second = write_atom(a);
                             else
                                 key_data->second = a.m_d.sym->m_str;
@@ -126,55 +129,55 @@ class AtomGenerator : public bukalisp::SEX_Builder
             add(add_pair.first);
         }
 
-        void add(Atom &a)
+        void add(lilvm::Atom &a)
         {
             m_add_stack.back().second(a);
         }
 
         virtual void atom_string(const std::string &str)
         {
-            Atom a(T_STR);
+            lilvm::Atom a(lilvm::T_STR);
             a.m_d.sym = m_gc->new_symbol(str);
             add(a);
         }
 
         virtual void atom_symbol(const std::string &symstr)
         {
-            Atom a(T_SYM);
+            lilvm::Atom a(lilvm::T_SYM);
             a.m_d.sym = m_gc->new_symbol(symstr);
             add(a);
         }
 
         virtual void atom_keyword(const std::string &symstr)
         {
-            Atom a(T_KW);
+            lilvm::Atom a(lilvm::T_KW);
             a.m_d.sym = m_gc->new_symbol(symstr);
             add(a);
         }
 
         virtual void atom_int(int64_t i)
         {
-            Atom a(T_INT);
+            lilvm::Atom a(lilvm::T_INT);
             a.m_d.i = i;
             add(a);
         }
 
         virtual void atom_dbl(double d)
         {
-            Atom a(T_DBL);
+            lilvm::Atom a(lilvm::T_DBL);
             a.m_d.d = d;
             add(a);
         }
 
         virtual void atom_nil()
         {
-            Atom a(T_NIL);
+            lilvm::Atom a(lilvm::T_NIL);
             add(a);
         }
 
         virtual void atom_bool(bool b)
         {
-            Atom a(T_BOOL);
+            lilvm::Atom a(lilvm::T_BOOL);
             a.m_d.b = b;
             add(a);
         }

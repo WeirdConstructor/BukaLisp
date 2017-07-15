@@ -10,19 +10,20 @@ namespace lilvm
 {
 //---------------------------------------------------------------------------
 
-enum Type
+enum Type : int16_t
 {
     T_NIL,
     T_INT,
     T_DBL,
     T_BOOL,
-    T_STR,
-    T_SYM,
-    T_KW,
-    T_VEC,
-    T_MAP,
-    T_PRIM,
-    T_CLOS
+    T_STR,      // m_d.sym
+    T_SYM,      // m_d.sym
+    T_KW,       // m_d.sym
+    T_VEC,      // m_d.vec
+    T_MAP,      // m_d.map
+    T_PRIM,     // m_d.func
+    T_SYNTAX,   // m_d.sym
+    T_CLOS      // m_d.vec
 };
 //---------------------------------------------------------------------------
 
@@ -85,6 +86,7 @@ struct AtomMap
 
     Atom at(Sym *s);
     Atom at(const std::string &str);
+    Atom at(const std::string &str, bool &defined);
 };
 //---------------------------------------------------------------------------
 
@@ -115,6 +117,16 @@ struct Atom
         m_d.i = 0;
     }
 
+    Atom(Type t, AtomVec *av) : m_type(t)
+    {
+        m_d.vec = av;
+    }
+
+    Atom(Type t, AtomMap *am) : m_type(t)
+    {
+        m_d.map = am;
+    }
+
     inline void clear()
     {
         m_type = T_NIL;
@@ -133,6 +145,12 @@ struct Atom
              : m_type == T_SYM ? (double) (int64_t) m_d.sym
              : m_type == T_NIL ? 0.0
              :                   m_d.d; }
+
+    bool inline is_false()
+    {
+        return     m_type == T_NIL
+               || (m_type == T_BOOL && !m_d.b);
+    }
 
     Atom at(size_t i)
     {
@@ -193,6 +211,26 @@ T *gc_list_sweep(T *list, uint8_t current_color, std::function<void(T *)> free_f
 }
 //---------------------------------------------------------------------------
 
+class AtomVecPush
+{
+    private:
+        AtomVec *m_av;
+    public:
+        AtomVecPush(AtomVec *av, const Atom &a) : m_av(av)
+        {
+            m_av->push(a);
+//            std::cout << "PUSH AVP: " << m_av << ":" << m_av->m_len << std::endl;
+        }
+
+        ~AtomVecPush()
+        {
+//            std::cout << "POP AVP: " << m_av << ":" << m_av->m_len << std::endl;
+            m_av->pop();
+        }
+};
+//---------------------------------------------------------------------------
+
+
 typedef std::unordered_map<std::string, Sym *> StrSymMap;
 
 class GC
@@ -248,11 +286,15 @@ class GC
                     mark_map(at.m_d.map);
                     break;
 
+                case T_CLOS:
                 case T_VEC:
                     mark_vector(at.m_d.vec);
                     break;
 
+                case T_SYNTAX:
+                case T_KW:
                 case T_SYM:
+                case T_STR:
                     if (at.m_d.sym)
                         at.m_d.sym->m_gc_color = m_current_color;
                     break;
@@ -307,6 +349,7 @@ class GC
                     m_current_color,
                     [this](Sym *cur)
                     {
+//                        std::cout << "SWPSYM[" << cur->m_str << "]" << std::endl;
                         auto it = m_symtbl.find(cur->m_str);
                         if (it != m_symtbl.end())
                             m_symtbl.erase(it);
@@ -355,14 +398,6 @@ class GC
             return new_sym;
         }
 
-        Sym *allocate_permanent_sym()
-        {
-            Sym *new_sym = allocate_sym();
-            m_root_syms.push_back(new_sym);
-
-            return new_sym;
-        }
-
     public:
         GC()
             : m_vectors(nullptr),
@@ -377,11 +412,22 @@ class GC
         }
 
         void add_root(AtomVec *root) { m_roots.push_back(root); }
+        void add_root(Sym *sym)      { m_root_syms.push_back(sym); }
 
         void collect()
         {
+//            std::cout << "**** gc collect start **** " << AtomVec::s_alloc_count
+//                << ",v:" << count_potentially_alive_vectors()
+//                << ",m:" << count_potentially_alive_maps()
+//                << ",s:" << count_potentially_alive_syms()
+//                << std::endl;
             mark();
             sweep();
+//            std::cout << "**** gc collect end **** " << AtomVec::s_alloc_count
+//                << ",v:" << count_potentially_alive_vectors()
+//                << ",m:" << count_potentially_alive_maps()
+//                << ",s:" << count_potentially_alive_syms()
+//                << std::endl;
         }
 
         Sym *new_symbol(const std::string &str)
@@ -449,6 +495,14 @@ class GC
             return new_vec;
         }
 
+        AtomVec *clone_vector(AtomVec *av)
+        {
+            AtomVec *new_vec = allocate_vector(av->m_len);
+            for (size_t i = 0; i < av->m_len; i++)
+                new_vec->m_data[i] = av->m_data[i];
+            return new_vec;
+        }
+
         size_t count_potentially_alive_vectors()
         {
             size_t i = 0;
@@ -475,7 +529,9 @@ class GC
             gc_list_sweep<Sym>(
                 m_syms,
                 GC_COLOR_DELETE,
-                [](Sym *cur) { delete cur; });
+                [](Sym *cur) {
+//                    std::cout << "DELSYM[" << cur->m_str << "]" << std::endl;
+                    delete cur; });
 
             gc_list_sweep<AtomVec>(
                 m_medium_vectors,
