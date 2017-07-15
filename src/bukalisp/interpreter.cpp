@@ -148,6 +148,88 @@ void Interpreter::init()
         out = Atom(T_BOOL);
         out.m_d.b = A0.is_false();
     END_PRIM(not);
+
+    START_PRIM()
+        REQ_EQ_ARGC(symbol?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_SYM;
+    END_PRIM(symbol?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(keyword?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_KW;
+    END_PRIM(keyword?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(nil?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_NIL;
+    END_PRIM(nil?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(exact?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_INT;
+    END_PRIM(exact?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(inexact?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_DBL;
+    END_PRIM(inexact?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(string?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_STR;
+    END_PRIM(string?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(boolean?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_BOOL;
+    END_PRIM(boolean?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(list?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_VEC;
+    END_PRIM(list?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(map?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_MAP;
+    END_PRIM(map?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(procedure?, 1);
+        out = Atom(T_BOOL);
+        out.m_d.b = A0.m_type == T_PRIM || A0.m_type == T_CLOS;
+    END_PRIM(procedure?);
+
+    START_PRIM()
+        REQ_EQ_ARGC(type, 1);
+        out = Atom(T_SYM);
+        switch (A0.m_type)
+        {
+            // TODO: use X macro!
+            case T_NIL:    out.m_d.sym = m_rt->m_gc.new_symbol("nil");       break;
+            case T_INT:    out.m_d.sym = m_rt->m_gc.new_symbol("exact");     break;
+            case T_DBL:    out.m_d.sym = m_rt->m_gc.new_symbol("inexact");   break;
+            case T_BOOL:   out.m_d.sym = m_rt->m_gc.new_symbol("boolean");   break;
+            case T_STR:    out.m_d.sym = m_rt->m_gc.new_symbol("string");    break;
+            case T_SYM:    out.m_d.sym = m_rt->m_gc.new_symbol("symbol");    break;
+            case T_KW:     out.m_d.sym = m_rt->m_gc.new_symbol("keyword");   break;
+            case T_VEC:    out.m_d.sym = m_rt->m_gc.new_symbol("list");      break;
+            case T_MAP:    out.m_d.sym = m_rt->m_gc.new_symbol("map");       break;
+            case T_PRIM:   out.m_d.sym = m_rt->m_gc.new_symbol("procedure"); break;
+            case T_SYNTAX: out.m_d.sym = m_rt->m_gc.new_symbol("syntax");    break;
+            case T_CLOS:   out.m_d.sym = m_rt->m_gc.new_symbol("procedure"); break;
+            default:       out.m_d.sym = m_rt->m_gc.new_symbol("<unknown>"); break;
+        }
+    END_PRIM(type)
 }
 //---------------------------------------------------------------------------
 

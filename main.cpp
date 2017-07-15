@@ -456,6 +456,69 @@ void test_ieval_proc()
     TEST_EVAL("(not '())",          "#false");
     TEST_EVAL("(not #f))",          "#true");
 
+    TEST_EVAL("(symbol? 'a)",       "#true");
+    TEST_EVAL("(symbol? a:)",       "#false");
+    TEST_EVAL("(symbol? 1)",        "#false");
+
+    TEST_EVAL("(keyword? a:)",      "#true");
+    TEST_EVAL("(keyword? 'a)",      "#false");
+    TEST_EVAL("(keyword? 1)",       "#false");
+
+    TEST_EVAL("(nil? 1)",           "#false");
+    TEST_EVAL("(nil? 0)",           "#false");
+    TEST_EVAL("(nil? [])",          "#false");
+    TEST_EVAL("(nil? nil)",         "#true");
+
+    TEST_EVAL("(exact? nil)",       "#false");
+    TEST_EVAL("(exact? 123)",       "#true");
+    TEST_EVAL("(exact? 1.0)",       "#false");
+
+    TEST_EVAL("(inexact? nil)",     "#false");
+    TEST_EVAL("(inexact? 123)",     "#false");
+    TEST_EVAL("(inexact? 1.0)",     "#true");
+
+    TEST_EVAL("(string? 1)",        "#false");
+    TEST_EVAL("(string? a:)",       "#false");
+    TEST_EVAL("(string? 'a)",       "#false");
+    TEST_EVAL("(string? \"foo\")",  "#true");
+
+    TEST_EVAL("(boolean? \"foo\")", "#false");
+    TEST_EVAL("(boolean? #t)",      "#true");
+    TEST_EVAL("(boolean? #f)",      "#true");
+    TEST_EVAL("(boolean? nil)",     "#false");
+
+    TEST_EVAL("(list? nil)",        "#false");
+    TEST_EVAL("(list? [])",         "#true");
+    TEST_EVAL("(list? '())",        "#true");
+    TEST_EVAL("(list? string?)",    "#false");
+    TEST_EVAL("(list? {})",         "#false");
+
+    TEST_EVAL("(map? {})",          "#true");
+    TEST_EVAL("(map? '())",         "#false");
+    TEST_EVAL("(map? [])",          "#false");
+    TEST_EVAL("(map? nil)",         "#false");
+
+    TEST_EVAL("(procedure? string?)",       "#true");
+    TEST_EVAL("(procedure? (lambda (x) x))","#true");
+    TEST_EVAL("(procedure? if)",            "#false");
+    TEST_EVAL("(procedure? '())",           "#false");
+
+    TEST_EVAL("(type [])",              "list");
+    TEST_EVAL("(type [1 2 3])",         "list");
+    TEST_EVAL("(type '())",             "list");
+    TEST_EVAL("(type '(1 2 3))",        "list");
+    TEST_EVAL("(type {})",              "map");
+    TEST_EVAL("(type map?)",            "procedure");
+    TEST_EVAL("(type (lambda () nil))", "procedure");
+    TEST_EVAL("(type 1)",               "exact");
+    TEST_EVAL("(type 1.0)",             "inexact");
+    TEST_EVAL("(type nil)",             "nil");
+    TEST_EVAL("(type #t)",              "boolean");
+    TEST_EVAL("(type #f)",              "boolean");
+    TEST_EVAL("(type 'f)",              "symbol");
+    TEST_EVAL("(type f:)",              "keyword");
+    TEST_EVAL("(type \"f\")",           "string");
+
 //TEST_EVAL("(eq? \"foo\" (symbol->string 'foo))",               "#true");
 //TEST_EVAL("(let ((p (lambda (x) x))) (eq? p p))",              "#true");
 //TEST_EVAL("(eq? t: (string->symbol \"t\"))",                   "#false");
