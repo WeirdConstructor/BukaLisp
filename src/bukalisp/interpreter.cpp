@@ -21,12 +21,14 @@ void Interpreter::init()
     m_env_stack->push(Atom(T_MAP, root_env));
 
     Atom tmp;
+    Atom key;
 
 #define DEF_SYNTAX(name) \
+    key = Atom(T_SYM, m_rt->m_gc.new_symbol(#name)); \
     tmp = Atom(T_SYNTAX); \
     tmp.m_d.sym = m_rt->m_gc.new_symbol(#name); \
     m_rt->m_gc.add_root(tmp.m_d.sym); \
-    root_env->set(#name, tmp);
+    root_env->set(key, tmp);
 
     DEF_SYNTAX(begin);
     DEF_SYNTAX(define);
@@ -44,7 +46,7 @@ void Interpreter::init()
     m_primitives.push_back(tmp.m_d.func); \
     (*tmp.m_d.func) = [this](AtomVec &args, Atom &out) {
 
-#define END_PRIM(name) }; root_env->set(#name, tmp);
+#define END_PRIM(name) }; root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
 
 
 #define BIN_OP_LOOPS(op) \
@@ -210,6 +212,34 @@ void Interpreter::init()
     END_PRIM(procedure?);
 
     START_PRIM()
+        REQ_EQ_ARGC($, 2);
+        if (A1.m_type != T_MAP)
+            error("Can apply '$' only to maps", A1);
+        if (   A0.m_type != T_SYM
+            && A0.m_type != T_KW
+            && A0.m_type != T_STR)
+        {
+            error("Can only use symbols, keywords or strings as keys in maps",
+                  A0);
+        }
+
+        out = A1.at(A0);
+    END_PRIM($);
+
+    START_PRIM()
+        REQ_EQ_ARGC(@, 2);
+        if (A1.m_type != T_VEC)
+            error("Can apply '@' only to lists", A1);
+        if (   A0.m_type != T_INT
+            && A1.m_type != T_DBL)
+            error("Can only use numbers as index in lists", A0);
+
+        int64_t idx = A0.to_int();
+        if (idx < 0) out = Atom();
+        else         out = A1.at((size_t) idx);
+    END_PRIM(@);
+
+    START_PRIM()
         REQ_EQ_ARGC(type, 1);
         out = Atom(T_SYM);
         switch (A0.m_type)
@@ -254,7 +284,7 @@ Atom Interpreter::eval_define(Atom e, AtomVec *av)
 
     AtomMap *am = m_env_stack->last()->m_d.map;
     e = eval(av->m_data[2]);
-    am->set(sym.m_d.sym->m_str, e);
+    am->set(sym, e);
     return e;
 }
 //---------------------------------------------------------------------------
@@ -275,9 +305,8 @@ Atom Interpreter::eval_setM(Atom e, AtomVec *av)
     if (!env)
         error("'set!' access to undefined variable", sym);
 
-    std::string varname = sym.m_d.sym->m_str;
     e = eval(av->m_data[2]);
-    env->set(varname, e);
+    env->set(sym, e);
     return e;
 }
 //---------------------------------------------------------------------------
@@ -309,7 +338,7 @@ Atom Interpreter::eval_let(Atom e, AtomVec *av)
             error("First element in binding specification is not a symbol", binds->m_data[i]);
 
         env_map->set(
-            bind_spec->m_data[0].m_d.sym->m_str,
+            bind_spec->m_data[0],
             eval(bind_spec->m_data[1]));
     }
 
@@ -384,7 +413,8 @@ Atom Interpreter::eval_unless(Atom e, AtomVec *av)
 Atom Interpreter::eval(Atom e)
 {
     // TODO: Add eval flag
-//    cout << ">> eval: " << write_atom(e) << endl;
+    if (m_trace)
+        cout << ">> eval: " << write_atom(e) << endl;
 
     AtomVecPush avpe(m_root_stack, e);
 
@@ -408,7 +438,11 @@ Atom Interpreter::eval(Atom e)
             AtomVecPush avp(m_root_stack, ret);
 
             for (auto e : e.m_d.map->m_map)
-                nm->set(e.first, eval(e.second));
+            {
+                Atom key = eval(e.first);
+                AtomVecPush(m_root_stack, key);
+                nm->set(key, eval(e.second));
+            }
             break;
         }
 
@@ -430,6 +464,7 @@ Atom Interpreter::eval(Atom e)
                 error("Can't evaluate empty list of args", e);
 
             Atom first = eval(av->m_data[0]);
+            AtomVecPush avpf(m_root_stack, first);
 
             if (first.m_type == T_SYNTAX)
             {
@@ -484,7 +519,22 @@ Atom Interpreter::eval(Atom e)
 
                     AtomVec *binds = lambda_form.m_d.vec->m_data[1].m_d.vec;
 
-                    // TODO: map ev_av to binds in current top env!
+                    // TODO: Refactor for (apply ...)?
+                    for (size_t i = 0; i < binds->m_len; i++)
+                    {
+                        if (binds->m_data[i].m_type != T_SYM)
+                            error("Atom in binding list is not a symbol",
+                                  lambda_form.m_d.vec->m_data[1]);
+
+                        if (i < ev_av->m_len)
+                            am_bind_env->set(
+                                binds->m_data[i].m_d.sym,
+                                ev_av->m_data[i]);
+                        else
+                            am_bind_env->set(
+                                binds->m_data[i].m_d.sym,
+                                Atom(T_NIL));
+                    }
 
                     ret = eval_begin(lambda_form, lambda_form.m_d.vec, 2);
                 }
@@ -505,7 +555,8 @@ Atom Interpreter::eval(Atom e)
     AtomVecPush avr(m_root_stack, ret);
     m_rt->m_gc.collect();
 
-//    cout << "<< eval: " << write_atom(e) << endl;
+    if (m_trace)
+        cout << "<< eval: " << write_atom(e) << endl;
     return ret;
 }
 //---------------------------------------------------------------------------

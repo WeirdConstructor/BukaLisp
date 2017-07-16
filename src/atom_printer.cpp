@@ -25,7 +25,7 @@ void dump_string_to_ostream(std::ostream &out, const std::string &s)
 }
 //---------------------------------------------------------------------------
 
-void write_atom(Atom &a, std::ostream &o)
+void write_atom(const Atom &a, std::ostream &o)
 {
     switch (a.m_type)
     {
@@ -58,7 +58,7 @@ void write_atom(Atom &a, std::ostream &o)
             {
                 if (is_first) is_first = false;
                 else          o << " ";
-                dump_string_to_ostream(o, p.first);
+                write_atom(p.first, o);
                 o << " ";
                 write_atom(p.second, o);
             }
@@ -78,7 +78,7 @@ void write_atom(Atom &a, std::ostream &o)
 }
 //---------------------------------------------------------------------------
 
-std::string write_atom(Atom &a)
+std::string write_atom(const Atom &a)
 {
     std::stringstream ss;
     write_atom(a, ss);

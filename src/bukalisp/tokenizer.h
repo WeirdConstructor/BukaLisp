@@ -173,7 +173,7 @@ class Tokenizer
                     m_u8buf.skip_bytes(1);
                     push(Token("~@"));
                 }
-                else if (charClass(c, "[]{}()'`~^@"))
+                else if (charClass(c, "[]{}()'`~^@$"))
                 {
                     push(Token(c));
                 }

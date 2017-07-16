@@ -144,6 +144,10 @@ class Reader
         size_t pot_alive_maps() { return m_gc.count_potentially_alive_maps(); }
         size_t pot_alive_syms() { return m_gc.count_potentially_alive_syms(); }
 
+        Atom a_sym(const std::string &s) { return Atom(T_SYM, m_gc.new_symbol(s)); }
+        Atom a_kw(const std::string &s) { return Atom(T_KW, m_gc.new_symbol(s)); }
+        Atom a_str(const std::string &s) { return Atom(T_STR, m_gc.new_symbol(s)); }
+
         void make_always_alive(Atom a)
         {
             AtomVec *av = m_gc.allocate_vector(1);
@@ -249,15 +253,14 @@ void test_maps()
 
     Atom m = r.at(2);
 
-
     TEST_EQ(r.at(3).m_d.i, 4, "last atom");
 
-    TEST_EQ(m.at("a").m_type, T_INT, "map a key type");
-    TEST_EQ(m.at("a").m_d.i,  123,   "map a key");
+    TEST_EQ(m.at(tc.a_kw("a")).m_type, T_INT, "map a key type");
+    TEST_EQ(m.at(tc.a_kw("a")).m_d.i,  123,   "map a key");
 
-    TEST_EQ(m.at("b").at(2).m_type, T_MAP, "2nd map at right pos");
+    TEST_EQ(m.at(tc.a_kw("b")).at(2).m_type, T_MAP, "2nd map at right pos");
 
-    tc.make_always_alive(m.at("b"));
+    tc.make_always_alive(m.at(tc.a_kw("b")));
 
     TEST_EQ(tc.pot_alive_maps(), 2, "alive map count");
     TEST_EQ(tc.pot_alive_vecs(), 3, "alive vec count");
@@ -309,7 +312,7 @@ void test_maps2()
 
     TEST_EQSTR(
         write_atom(r),
-        "({\"123\" 5} {\"#true\" 34} {\"#false\" 5})",
+        "({123 5} {#true 34} {#false 5})",
         "atom print 1");
 }
 //---------------------------------------------------------------------------
@@ -324,7 +327,7 @@ void test_atom_printer()
 
     TEST_EQSTR(
         write_atom(r),
-        "(1 2.3 foo foo: \"foo\" {\"axx\" #true} {\"bxx\" #false} {\"test\" 123})",
+        "(1 2.3 foo foo: \"foo\" {axx: #true} {bxx #false} {\"test\" 123})",
         "atom print 1");
 }
 //---------------------------------------------------------------------------
@@ -391,7 +394,7 @@ void test_ieval_basic_stuff()
 
     // maps
     TEST_EVAL("{}", "{}");
-    TEST_EVAL("{a: (* 2 4)}",       "{\"a\" 8}");
+    TEST_EVAL("{a: (* 2 4)}",       "{a: 8}");
 
     // quote
     TEST_EVAL("'a",                 "a");
@@ -568,6 +571,43 @@ void test_ieval_cond()
 }
 //---------------------------------------------------------------------------
 
+void test_ieval_lambda()
+{
+    bukalisp::Runtime rt;
+    bukalisp::Interpreter i(&rt);
+    Atom r;
+
+    TEST_EVAL("((lambda () 10))",                               "10");
+    TEST_EVAL("((lambda (x) (+ x 10)) 20)",                     "30");
+    TEST_EVAL("((let ((a 1.2)) (lambda (x) (+ a x 10))) 20)",   "31.2");
+    TEST_EVAL("(begin "
+              "  (define x (let ((a 1.2)) "
+              "              (lambda (x) (+ a x 10)))) "
+              "  (x 20))",   "31.2");
+}
+//---------------------------------------------------------------------------
+
+void test_ieval_index_procs()
+{
+    bukalisp::Runtime rt;
+    bukalisp::Interpreter i(&rt);
+    Atom r;
+
+    TEST_EVAL("(@0 [1 2 3])",       "1");
+    TEST_EVAL("(@1 [1 2 3])",       "2");
+    TEST_EVAL("(@2 [1 2 3])",       "3");
+    TEST_EVAL("(@3 [1 2 3])",       "nil");
+
+    TEST_EVAL("($xxx:     {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
+    TEST_EVAL("($\"xxx\"  {a: 123 'b 444 \"xxx\" 3.4})",               "3.4");
+    TEST_EVAL("($'a       {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
+    TEST_EVAL("($a:       {a: 123 'b 444 \"xxx\" 3.4})",               "123");
+    TEST_EVAL("($\"b\"    {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
+    TEST_EVAL("($'b       {a: 123 'b 444 \"xxx\" 3.4})",               "444");
+    TEST_EVAL("(let ((key xxx:)) ($key {a: 123 'b 444 xxx: 3.4}))", "3.4");
+}
+//---------------------------------------------------------------------------
+
 int main(int argc, char *argv[])
 {
     using namespace std::chrono;
@@ -601,6 +641,8 @@ int main(int argc, char *argv[])
                 RUN_TEST(ieval_proc);
                 RUN_TEST(ieval_let);
                 RUN_TEST(ieval_cond);
+                RUN_TEST(ieval_lambda);
+                RUN_TEST(ieval_index_procs);
 
                 cout << "TESTS OK" << endl;
             }

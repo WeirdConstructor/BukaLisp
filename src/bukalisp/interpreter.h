@@ -28,9 +28,11 @@ class Interpreter
         std::string     m_debug_pos;
         std::vector<lilvm::Atom::PrimFunc *> m_primitives;
 
+        bool            m_trace;
+
     public:
         Interpreter(Runtime *rt)
-            : m_rt(rt), m_env_stack(nullptr)
+            : m_rt(rt), m_env_stack(nullptr), m_trace(false)
         { init(); }
 
         ~Interpreter()
@@ -40,6 +42,8 @@ class Interpreter
         }
 
         void init();
+
+        void set_trace(bool e) { m_trace = e; }
 
         lilvm::Atom lookup(lilvm::Sym *var, lilvm::AtomMap *&env)
         {
@@ -59,7 +63,7 @@ class Interpreter
                     return lilvm::Atom();
 
                 bool defined = false;
-                lilvm::Atom ret = at_env->m_d.map->at(var->m_str, defined);
+                lilvm::Atom ret = at_env->m_d.map->at(lilvm::Atom(lilvm::T_SYM, var), defined);
                 if (defined)
                 {
                     env = at_env->m_d.map;

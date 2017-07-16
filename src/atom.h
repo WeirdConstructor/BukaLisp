@@ -73,20 +73,29 @@ struct AtomVec
 };
 //---------------------------------------------------------------------------
 
+class AtomHash
+{
+    public:
+        size_t operator()(const Atom &a) const;
+};
+//---------------------------------------------------------------------------
+
+typedef std::unordered_map<Atom, Atom, AtomHash>    UnordAtomMap;
+//---------------------------------------------------------------------------
+
 struct AtomMap
 {
     uint8_t  m_gc_color;
     AtomMap *m_gc_next;
-    std::unordered_map<std::string, Atom> m_map;
+    UnordAtomMap m_map;
 
     AtomMap() : m_gc_next(nullptr), m_gc_color(0) { }
 
     void set(Sym *s, Atom &a);
-    void set(const std::string &str, Atom &a);
+    void set(const Atom &str, Atom &a);
 
-    Atom at(Sym *s);
-    Atom at(const std::string &str);
-    Atom at(const std::string &str, bool &defined);
+    Atom at(const Atom &a);
+    Atom at(const Atom &k, bool &defined);
 };
 //---------------------------------------------------------------------------
 
@@ -127,6 +136,11 @@ struct Atom
         m_d.map = am;
     }
 
+    Atom(Type t, Sym *s) : m_type(t)
+    {
+        m_d.sym = s;
+    }
+
     inline void clear()
     {
         m_type = T_NIL;
@@ -158,10 +172,36 @@ struct Atom
         return m_d.vec->at(i);
     }
 
-    Atom at(const std::string &s)
+    Atom at(const Atom &a)
     {
         if (m_type != T_MAP) return Atom();
-        return m_d.map->at(s);
+        return m_d.map->at(a);
+    }
+
+    bool operator==(const Atom &other) const
+    {
+        if (m_type != other.m_type) return false;
+        // TODO use X macro
+        switch (m_type)
+        {
+            case T_INT:  return m_d.i == other.m_d.i;
+            case T_DBL:  return m_d.d == other.m_d.d;
+            case T_BOOL: return m_d.b == other.m_d.b;
+
+            case T_STR:
+            case T_KW:
+            case T_SYNTAX:
+            case T_SYM:
+                return m_d.sym == other.m_d.sym;
+
+            case T_PRIM:
+                return m_d.func == other.m_d.func;
+
+            case T_VEC:
+            case T_MAP:
+            case T_CLOS:
+                return m_d.vec == other.m_d.vec;
+        }
     }
 };
 //---------------------------------------------------------------------------
@@ -278,17 +318,19 @@ class GC
             num += new_num;
         }
 
-        void mark_atom(Atom &at)
+        void mark_atom(const Atom &at)
         {
             switch (at.m_type)
             {
                 case T_MAP:
-                    mark_map(at.m_d.map);
+                    mark_map((AtomMap *) at.m_d.map);
                     break;
 
                 case T_CLOS:
+//                    std::cout << "MARK CLOSURE " << at.m_d.vec->m_data[0].m_d.vec << std::endl;
+//                    std::cout << "MARK CLOSURE " << at.m_d.vec->m_data[0].m_d.vec->m_len << std::endl;
                 case T_VEC:
-                    mark_vector(at.m_d.vec);
+                    mark_vector((AtomVec *) at.m_d.vec);
                     break;
 
                 case T_SYNTAX:
@@ -296,7 +338,7 @@ class GC
                 case T_SYM:
                 case T_STR:
                     if (at.m_d.sym)
-                        at.m_d.sym->m_gc_color = m_current_color;
+                        ((Sym *) at.m_d.sym)->m_gc_color = m_current_color;
                     break;
             }
         }
@@ -311,7 +353,9 @@ class GC
             vec->m_gc_color = m_current_color;
 
             for (size_t i = 0; i < vec->m_len; i++)
+            {
                 mark_atom(vec->m_data[i]);
+            }
         }
 
         void mark_map(AtomMap *&map)
@@ -323,8 +367,13 @@ class GC
 
             map->m_gc_color = m_current_color;
 
-            for (auto p : map->m_map)
-                mark_atom(p.second);
+            for (UnordAtomMap::iterator i = map->m_map.begin();
+                 i != map->m_map.end();
+                 i++)
+            {
+                mark_atom(i->first);
+                mark_atom(i->second);
+            }
         }
 
         void mark()
@@ -333,6 +382,8 @@ class GC
                 m_current_color == GC_COLOR_WHITE
                 ? GC_COLOR_BLACK
                 : GC_COLOR_WHITE;
+
+//            std::cout << "* GC MARK CLR = " << ((int) m_current_color) << std::endl;
 
             for (auto &sym : m_root_syms)
                 sym->m_gc_color = m_current_color;
@@ -368,6 +419,8 @@ class GC
                     m_current_color,
                     [this](AtomVec *cur)
                     {
+//                        std::cout << "SWEEP VEC " << cur << std::endl;
+
                         if (cur->m_alloc > GC_MEDIUM_VEC_LEN)
                         {
                             delete cur;

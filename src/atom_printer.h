@@ -3,6 +3,6 @@
 namespace lilvm
 {
 
-std::string write_atom(Atom &a);
+std::string write_atom(const Atom &a);
 
 }

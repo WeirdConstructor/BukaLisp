@@ -8,6 +8,40 @@ size_t AtomVec::s_alloc_count = 0;
 
 //---------------------------------------------------------------------------
 
+size_t AtomHash::operator()(const Atom &a) const
+{
+    // TODO: use X macro
+    switch (a.m_type)
+    {
+        case T_NIL:
+        case T_INT:
+            return std::hash<int64_t>()(a.m_d.i);
+
+        case T_BOOL:
+            return std::hash<bool>()(a.m_d.b);
+
+        case T_DBL:  return std::hash<double>()(a.m_d.d);
+
+        case T_PRIM: return std::hash<void *>()((void *) a.m_d.func);
+
+        case T_VEC:
+        case T_CLOS:
+            return std::hash<void *>()((void *) a.m_d.vec);
+
+        case T_MAP:
+            return std::hash<void *>()((void *) a.m_d.map);
+
+        case T_SYNTAX:
+        case T_SYM:
+        case T_KW:
+        case T_STR:
+            return std::hash<std::string>()(a.m_d.sym->m_str);
+    }
+
+    return std::hash<void *>()((void *) a.m_d.vec);
+}
+//---------------------------------------------------------------------------
+
 void AtomVec::alloc(size_t len)
 {
     m_alloc = len;
@@ -68,9 +102,7 @@ void AtomVec::check_size(size_t idx)
     {
         Atom *old_data = m_data;
         m_alloc = idx * 2;
-        std::cout << "FOO1 " << m_alloc << std::endl;
         m_data = new Atom[m_alloc];
-        std::cout << "FOO2 " << m_alloc << std::endl;
         for (size_t i = 0; i < m_len; i++)
             m_data[i] = old_data[i];
         delete[] old_data;
@@ -89,25 +121,31 @@ AtomVec::~AtomVec()
 }
 //---------------------------------------------------------------------------
 
-void AtomMap::set(Sym *s, Atom &a) { m_map[s->m_str] = a; }
-
-void AtomMap::set(const std::string &str, Atom &a) { m_map[str] = a; }
-
+void AtomMap::set(Sym *s, Atom &a)
+{
+    Atom sym(T_SYM, s);
+    m_map[sym] = a;
+}
 //---------------------------------------------------------------------------
 
-Atom AtomMap::at(Sym *s) { return at(s->m_str); }
-
-Atom AtomMap::at(const std::string &str)
+void AtomMap::set(const Atom &k, Atom &a)
 {
-    auto it = m_map.find(str);
+    m_map[k] = a;
+}
+//---------------------------------------------------------------------------
+
+Atom AtomMap::at(const Atom &k)
+{
+    auto it = m_map.find(k);
     if (it == m_map.end()) return Atom();
     return it->second;
 }
+//---------------------------------------------------------------------------
 
-Atom AtomMap::at(const std::string &str, bool &defined)
+Atom AtomMap::at(const Atom &k, bool &defined)
 {
     defined = false;
-    auto it = m_map.find(str);
+    auto it = m_map.find(k);
     if (it == m_map.end()) return Atom();
     defined = true;
     return it->second;

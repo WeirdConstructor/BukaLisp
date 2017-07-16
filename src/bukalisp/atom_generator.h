@@ -91,8 +91,8 @@ class AtomGenerator : public bukalisp::SEX_Builder
             lilvm::Atom a(lilvm::T_MAP);
             a.m_d.map = new_map;
 
-            std::shared_ptr<std::pair<bool, std::string>> key_data
-                = std::make_shared<std::pair<bool, std::string>>(true, "");
+            std::shared_ptr<std::pair<bool, lilvm::Atom>> key_data
+                = std::make_shared<std::pair<bool, lilvm::Atom>>(true, lilvm::Atom());
 
             m_add_stack.push_back(
                 std::pair<lilvm::Atom, AddFunc>(
@@ -101,13 +101,7 @@ class AtomGenerator : public bukalisp::SEX_Builder
                     {
                         if (key_data->first)
                         {
-                            if (   a.m_type != lilvm::T_SYM
-                                && a.m_type != lilvm::T_KW
-                                && a.m_type != lilvm::T_STR)
-                                key_data->second = write_atom(a);
-                            else
-                                key_data->second = a.m_d.sym->m_str;
-
+                            key_data->second = a;
                             key_data->first = false;
                         }
                         else
