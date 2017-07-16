@@ -68,6 +68,7 @@ struct AtomVec
     void check_size(size_t idx);
 
     Atom at(size_t idx);
+    void set(size_t idx, Atom &a);
 
     ~AtomVec();
 };
@@ -200,6 +201,10 @@ struct Atom
             case T_VEC:
             case T_MAP:
             case T_CLOS:
+                return m_d.vec == other.m_d.vec;
+
+            default:
+                // pointer comparsion
                 return m_d.vec == other.m_d.vec;
         }
     }

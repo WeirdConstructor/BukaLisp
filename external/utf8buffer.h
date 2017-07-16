@@ -487,6 +487,16 @@ class UTF8Buffer
             }
         }
 
+        bool match_prefix(const char *prefix)
+        {
+            size_t len = strlen(prefix);
+            if (len >= this->length()) return false;
+            for (size_t i = 0; i < len; i++)
+                if (this->buffer()[i] != prefix[i])
+                    return false;
+            return true;
+        }
+
         char first_byte (bool skip = false)
         {
             if (this->length () <= 0)

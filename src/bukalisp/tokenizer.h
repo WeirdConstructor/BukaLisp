@@ -168,6 +168,26 @@ class Tokenizer
                 {
                     if (c == '\n') m_cur_line++;
                 }
+                else if (c == '$' && m_u8buf.match_prefix("^!"))
+                {
+                    m_u8buf.skip_bytes(2);
+                    push(Token("$^!"));
+                }
+                else if (c == '@' && m_u8buf.match_prefix("^!"))
+                {
+                    m_u8buf.skip_bytes(2);
+                    push(Token("@^!"));
+                }
+                else if (c == '$' && m_u8buf.first_byte() == '!')
+                {
+                    m_u8buf.skip_bytes(1);
+                    push(Token("$!"));
+                }
+                else if (c == '@' && m_u8buf.first_byte() == '!')
+                {
+                    m_u8buf.skip_bytes(1);
+                    push(Token("@!"));
+                }
                 else if (c == '~' && m_u8buf.first_byte() == '@')
                 {
                     m_u8buf.skip_bytes(1);

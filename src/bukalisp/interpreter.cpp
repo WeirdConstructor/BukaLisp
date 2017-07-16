@@ -111,6 +111,15 @@ void Interpreter::init()
 
 #define A0  (args.m_data[0])
 #define A1  (args.m_data[1])
+#define A2  (args.m_data[2])
+
+    START_PRIM()
+        out = Atom(T_VEC);
+        AtomVec *l = m_rt->m_gc.allocate_vector(args.m_len);
+        out.m_d.vec = l;
+        for (size_t i = 0; i < args.m_len; i++)
+            l->m_data[i] = args.m_data[i];
+    END_PRIM(list);
 
     START_PRIM()
         REQ_EQ_ARGC(eq?, 2);
@@ -215,29 +224,35 @@ void Interpreter::init()
         REQ_EQ_ARGC($, 2);
         if (A1.m_type != T_MAP)
             error("Can apply '$' only to maps", A1);
-        if (   A0.m_type != T_SYM
-            && A0.m_type != T_KW
-            && A0.m_type != T_STR)
-        {
-            error("Can only use symbols, keywords or strings as keys in maps",
-                  A0);
-        }
-
         out = A1.at(A0);
     END_PRIM($);
+
+    START_PRIM()
+        REQ_EQ_ARGC($!, 3);
+        if (A1.m_type != T_MAP)
+            error("Can apply '$!' only to maps", A1);
+        A1.m_d.map->set(A0, A2);
+        out = A2;
+    END_PRIM($!);
 
     START_PRIM()
         REQ_EQ_ARGC(@, 2);
         if (A1.m_type != T_VEC)
             error("Can apply '@' only to lists", A1);
-        if (   A0.m_type != T_INT
-            && A1.m_type != T_DBL)
-            error("Can only use numbers as index in lists", A0);
-
         int64_t idx = A0.to_int();
         if (idx < 0) out = Atom();
         else         out = A1.at((size_t) idx);
     END_PRIM(@);
+
+    START_PRIM()
+        REQ_EQ_ARGC(@!, 3);
+        if (A1.m_type != T_VEC)
+            error("Can apply '@!' only to lists", A1);
+        int64_t i = A0.to_int();
+        if (i >= 0)
+            A1.m_d.vec->set((size_t) A0.to_int(), A2);
+        out = A2;
+    END_PRIM(@!);
 
     START_PRIM()
         REQ_EQ_ARGC(type, 1);

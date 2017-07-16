@@ -62,7 +62,7 @@ void AtomVec::init(uint8_t current_gc_color, size_t len)
 
 Atom AtomVec::at(size_t idx)
 {
-    if (idx > m_len)
+    if (idx >= m_len)
         return Atom();
     return m_data[idx];
 }
@@ -93,6 +93,14 @@ void AtomVec::push(const Atom &a)
     size_t new_idx = m_len;
     check_size(new_idx);
     m_data[new_idx] = a;
+}
+//---------------------------------------------------------------------------
+
+void AtomVec::set(size_t idx, Atom &a)
+{
+    if (idx >= m_len)
+        check_size(idx);
+    m_data[idx] = a;
 }
 //---------------------------------------------------------------------------
 

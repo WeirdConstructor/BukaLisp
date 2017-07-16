@@ -402,7 +402,7 @@ void test_ieval_basic_stuff()
     TEST_EVAL("'1",                 "1");
     TEST_EVAL("'(1 2 3)",           "(1 2 3)");
     TEST_EVAL("'((1 2 3) 2 3)",     "((1 2 3) 2 3)");
-    TEST_EVAL("'[1 2 3]",           "(quote (1 2 3))");
+    TEST_EVAL("'[1 2 3]",           "(list 1 2 3)");
     TEST_EVAL("'(eq? 1 2)",         "(eq? 1 2)");
 
 }
@@ -605,6 +605,12 @@ void test_ieval_index_procs()
     TEST_EVAL("($\"b\"    {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
     TEST_EVAL("($'b       {a: 123 'b 444 \"xxx\" 3.4})",               "444");
     TEST_EVAL("(let ((key xxx:)) ($key {a: 123 'b 444 xxx: 3.4}))", "3.4");
+
+    TEST_EVAL("(let ((m {})) ($!'x m 123) m)",                              "{x 123}");
+    TEST_EVAL("(let ((m {})) ($!x: m 123) ($!'x m 344) [($x: m) ($'x m)])", "(123 344)");
+
+    TEST_EVAL("(let ((v (list))) (@!0 v 2) (@!10 v 99) v)",
+              "(2 nil nil nil nil nil nil nil nil nil 99)");
 }
 //---------------------------------------------------------------------------
 

@@ -107,13 +107,9 @@ class Parser
 
             debug_token(t);
 
-            if (quoted)
-            {
-                m_builder->start_list();
-                m_builder->atom_symbol("quote");
-            }
-
             m_builder->start_list();
+            if (quoted)
+                m_builder->atom_symbol("list");
 
             while (t.m_token_id != TOK_EOF)
             {
@@ -128,9 +124,6 @@ class Parser
 
             debug_token(t);
             m_builder->end_list();
-
-            if (quoted)
-                m_builder->end_list();
 
             m_tok.next();
 
