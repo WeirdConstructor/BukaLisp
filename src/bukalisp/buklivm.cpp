@@ -97,7 +97,7 @@ lilvm::Atom make_prog(lilvm::Atom prog_info)
 }
 //---------------------------------------------------------------------------
 
-lilvm::Atom VM::eval(PROG &p)
+lilvm::Atom VM::eval(PROG &p, AtomVec *args)
 {
     Atom ret;
 

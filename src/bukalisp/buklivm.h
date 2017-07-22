@@ -138,7 +138,7 @@ class VM
     public:
         VM(Runtime *rt) : m_rt(rt), m_pc(nullptr) { }
 
-        lilvm::Atom eval(PROG &p);
+        lilvm::Atom eval(PROG &p, lilvm::AtomVec *args = nullptr);
 };
 //---------------------------------------------------------------------------
 

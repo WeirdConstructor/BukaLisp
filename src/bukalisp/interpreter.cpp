@@ -326,8 +326,10 @@ void Interpreter::init()
         if (A0.m_type != T_UD || A0.m_d.ud->type() != "VM-PROG")
             error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
 
-        bukalisp::VM vm(m_rt);
-        out = vm.eval(*(dynamic_cast<PROG*>(A0.m_d.ud)));
+        if (!m_vm)
+            error("Can't execute VM progs, no VM instance loaded into interpreter", A0);
+
+        out = m_vm->eval(*(dynamic_cast<PROG*>(A0.m_d.ud)), &args);
     END_PRIM(run-vm-prog)
 
     START_PRIM()
@@ -722,6 +724,82 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
 }
 //---------------------------------------------------------------------------
 
+Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args)
+{
+    Atom ret;
+
+    if (eval_args)
+    {
+        AtomVec *ev_av = m_rt->m_gc.allocate_vector(av->m_len - 1);
+        AtomVecPush avp(m_root_stack, Atom(T_VEC, ev_av));
+
+        for (size_t i = 1; i < av->m_len; i++)
+            ev_av->m_data[i - 1] = eval(av->m_data[i]);
+
+        av = ev_av;
+    }
+
+    AtomVecPush avp(m_root_stack, Atom(T_VEC, av));
+
+    if (func.m_type == T_PRIM)
+    {
+        (*func.m_d.func)(*av, ret);
+    }
+    else if (func.m_type == T_CLOS)
+    {
+        // Call of closure:
+        // store current m_env_stack, continuation is stored on the C stack.
+        // restore m_env_stack by letting it point to the vector in the closure
+        // push environment
+        // evaluate the stored code and later return the returned value
+        // upon exit: pop-environment for cleanup!
+        // restore old m_env_stack
+        Atom env         = func.m_d.vec->m_data[0];
+        Atom lambda_form = func.m_d.vec->m_data[1];
+
+        AtomVec *old_env = m_env_stack;
+        AtomVecPush avp_old_env(m_root_stack, Atom(T_VEC, old_env));
+
+        m_env_stack = env.m_d.vec;
+
+        {
+            AtomMap *am_bind_env = m_rt->m_gc.allocate_map();
+            AtomVecPush avp_env(m_env_stack, Atom(T_MAP, am_bind_env));
+
+            AtomVec *binds = lambda_form.m_d.vec->m_data[1].m_d.vec;
+
+            // TODO: Refactor for (apply ...)?
+            for (size_t i = 0; i < binds->m_len; i++)
+            {
+                if (binds->m_data[i].m_type != T_SYM)
+                    error("Atom in binding list is not a symbol",
+                          lambda_form.m_d.vec->m_data[1]);
+
+                if (i < av->m_len)
+                    am_bind_env->set(
+                        binds->m_data[i].m_d.sym,
+                        av->m_data[i]);
+                else
+                    am_bind_env->set(
+                        binds->m_data[i].m_d.sym,
+                        Atom(T_NIL));
+            }
+
+            ret = eval_begin(lambda_form, lambda_form.m_d.vec, 2);
+        }
+        m_env_stack = old_env;
+    }
+    else if (m_vm && func == T_UD && func.m_d.ud->type() == "VM-PROG")
+    {
+        ret = m_vm->eval(*(dynamic_cast<PROG*>(func.m_d.ud)), av);
+    }
+    else
+        error("Non callable function element in list", func);
+
+    return ret;
+}
+//---------------------------------------------------------------------------
+
 Atom Interpreter::eval(Atom e)
 {
     // TODO: Add eval flag
@@ -800,64 +878,12 @@ Atom Interpreter::eval(Atom e)
             }
             else if (first.m_type == T_PRIM)
             {
-                AtomVec *ev_av = m_rt->m_gc.allocate_vector(av->m_len - 1);
-                AtomVecPush avp(m_root_stack, Atom(T_VEC, ev_av));
-
-                for (size_t i = 1; i < av->m_len; i++)
-                    ev_av->m_data[i - 1] = eval(av->m_data[i]);
-
-                (*first.m_d.func)(*ev_av, ret);
+                ret = call(first, av, true);
                 break;
             }
             else if (first.m_type == T_CLOS)
             {
-                AtomVec *ev_av = m_rt->m_gc.allocate_vector(av->m_len - 1);
-                AtomVecPush avp(m_root_stack, Atom(T_VEC, ev_av));
-
-                for (size_t i = 1; i < av->m_len; i++)
-                    ev_av->m_data[i - 1] = eval(av->m_data[i]);
-
-                // Call of closure:
-                // store current m_env_stack, continuation is stored on the C stack.
-                // restore m_env_stack by letting it point to the vector in the closure
-                // push environment
-                // evaluate the stored code and later return the returned value
-                // upon exit: pop-environment for cleanup!
-                // restore old m_env_stack
-                Atom env         = first.m_d.vec->m_data[0];
-                Atom lambda_form = first.m_d.vec->m_data[1];
-
-                AtomVec *old_env = m_env_stack;
-                AtomVecPush avp_old_env(m_root_stack, Atom(T_VEC, old_env));
-
-                m_env_stack = env.m_d.vec;
-
-                {
-                    AtomMap *am_bind_env = m_rt->m_gc.allocate_map();
-                    AtomVecPush avp_env(m_env_stack, Atom(T_MAP, am_bind_env));
-
-                    AtomVec *binds = lambda_form.m_d.vec->m_data[1].m_d.vec;
-
-                    // TODO: Refactor for (apply ...)?
-                    for (size_t i = 0; i < binds->m_len; i++)
-                    {
-                        if (binds->m_data[i].m_type != T_SYM)
-                            error("Atom in binding list is not a symbol",
-                                  lambda_form.m_d.vec->m_data[1]);
-
-                        if (i < ev_av->m_len)
-                            am_bind_env->set(
-                                binds->m_data[i].m_d.sym,
-                                ev_av->m_data[i]);
-                        else
-                            am_bind_env->set(
-                                binds->m_data[i].m_d.sym,
-                                Atom(T_NIL));
-                    }
-
-                    ret = eval_begin(lambda_form, lambda_form.m_d.vec, 2);
-                }
-                m_env_stack = old_env;
+                ret = call(first, av, true);
                 break;
             }
             else

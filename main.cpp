@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <map>
 #include <memory>
+#include <cstdlib>
 #include "utf8buffer.h"
 #include "bukalisp/parser.h"
 #include "bukalisp/atom_generator.h"
@@ -824,7 +825,8 @@ int main(int argc, char *argv[])
             try
             {
                 bukalisp::Runtime rt;
-                bukalisp::Interpreter i(&rt);
+                bukalisp::VM vm(&rt);
+                bukalisp::Interpreter i(&rt, &vm);
                 UTF8Buffer *u8b = slurp(input_file_path);
                 Atom r = i.eval(input_file_path, u8b->as_string());
                 std::string rs = write_atom(r);

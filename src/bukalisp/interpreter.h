@@ -3,6 +3,7 @@
 #include "atom.h"
 #include "runtime.h"
 #include "atom_printer.h"
+#include "buklivm.h"
 
 namespace bukalisp
 {
@@ -23,6 +24,7 @@ class Interpreter : public lilvm::ExternalGCRoot
 {
     private:
         Runtime        *m_rt;
+        VM             *m_vm;
         lilvm::AtomVec *m_env_stack;
         lilvm::AtomVec *m_root_stack;
         std::string     m_debug_pos;
@@ -31,9 +33,9 @@ class Interpreter : public lilvm::ExternalGCRoot
         bool            m_trace;
 
     public:
-        Interpreter(Runtime *rt)
+        Interpreter(Runtime *rt, VM *vm = nullptr)
             : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_env_stack(nullptr),
-              m_trace(false)
+              m_trace(false), m_vm(vm)
         {
             init();
         }
@@ -105,6 +107,7 @@ class Interpreter : public lilvm::ExternalGCRoot
             error(msg + ", atom: " + write_atom(err_atom));
         }
 
+        lilvm::Atom call(lilvm::Atom func, lilvm::AtomVec *av, bool eval_args = false);
         lilvm::Atom eval(lilvm::Atom e);
         lilvm::Atom eval_begin(lilvm::Atom e, lilvm::AtomVec *av, size_t offs);
         lilvm::Atom eval_define(lilvm::Atom e, lilvm::AtomVec *av);
