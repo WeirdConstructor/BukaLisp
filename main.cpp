@@ -781,15 +781,30 @@ int main(int argc, char *argv[])
     {
         using namespace std;
 
-        std::string input_file_path = "input.json";
+        std::string input_file_path;
         std::string last_debug_sym;
 
-        if (argc > 1)
-            input_file_path = string(argv[1]);
+        bool tests     = false;
+        bool interpret = false;
 
-        cout << "SIL: " << sizeof(bukalisp::INST) << endl;
+        for (int i = 1; i < argc; i++)
+        {
+            std::string arg(argv[i]);
+            std::cout << "'" << argv[i] << "'" << std::endl;
+            if (arg == "tests")
+                tests = true;
+            else if (arg == "-i")
+                interpret = true;
+            else if (arg[0] == '-')
+            {
+                std::cerr << "unknown option: " << argv[i] << std::endl;
+                return -1;
+            }
+            else
+                input_file_path = argv[i];
+        }
 
-        if (input_file_path == "tests")
+        if (tests)
         {
             try
             {
@@ -820,7 +835,7 @@ int main(int argc, char *argv[])
                 cerr << "TESTS FAIL, EXCEPTION: " << e.what() << endl;
             }
         }
-        else if (!input_file_path.empty())
+        else if (interpret && !input_file_path.empty())
         {
             try
             {
@@ -836,6 +851,31 @@ int main(int argc, char *argv[])
             catch (std::exception &e)
             {
                 cerr << "[" << input_file_path << "] Exception: " << e.what() << endl;
+            }
+        }
+        else if (!input_file_path.empty())
+        {
+            // getenv, call <libenv>/compiler.lal
+            // use compiler procedure on contents of input_file_path
+        }
+        else
+        {
+            bukalisp::Runtime rt;
+            bukalisp::VM vm(&rt);
+            bukalisp::Interpreter i(&rt, &vm);
+
+            std::string line;
+            while (std::getline(std::cin, line))
+            {
+                try
+                {
+                    Atom r = i.eval(input_file_path, line);
+                    cout << "> " << write_atom(r) << endl;
+                }
+                catch (std::exception &e)
+                {
+                    cerr << "Exception: " << e.what() << endl;
+                }
             }
         }
 
