@@ -46,13 +46,6 @@ struct Runtime
     size_t pot_alive_maps() { return m_gc.count_potentially_alive_maps(); }
     size_t pot_alive_syms() { return m_gc.count_potentially_alive_syms(); }
 
-    void make_always_alive(lilvm::Atom a)
-    {
-        lilvm::AtomVec *av = m_gc.allocate_vector(1);
-        av->m_data[0] = a;
-        m_gc.add_root(av);
-    }
-
     void collect() { m_gc.collect(); }
 };
 

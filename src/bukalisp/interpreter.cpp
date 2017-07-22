@@ -1,4 +1,5 @@
 #include "interpreter.h"
+#include "buklivm.h"
 
 using namespace std;
 using namespace lilvm;
@@ -9,11 +10,10 @@ namespace bukalisp
 
 void Interpreter::init()
 {
-    m_root_stack = m_rt->m_gc.allocate_vector(0);
-    m_rt->m_gc.add_root(m_root_stack);
+    ExternalGCRoot::init();
 
-    m_env_stack = m_rt->m_gc.allocate_vector(0);
-    m_rt->m_gc.add_root(m_env_stack);
+    m_root_stack = m_rt->m_gc.allocate_vector(0);
+    m_env_stack  = m_rt->m_gc.allocate_vector(0);
 
 //    std::cout << "ENVSTKROOT=" << m_env_stack << ", ROOTSTKROOT=" << m_root_stack << std::endl;
 
@@ -27,7 +27,7 @@ void Interpreter::init()
     key = Atom(T_SYM, m_rt->m_gc.new_symbol(#name)); \
     tmp = Atom(T_SYNTAX); \
     tmp.m_d.sym = m_rt->m_gc.new_symbol(#name); \
-    m_rt->m_gc.add_root(tmp.m_d.sym); \
+    m_rt->m_gc.add_permanent(tmp.m_d.sym); \
     root_env->set(key, tmp);
 
     DEF_SYNTAX(begin);
@@ -39,6 +39,11 @@ void Interpreter::init()
     DEF_SYNTAX(if);
     DEF_SYNTAX(when);
     DEF_SYNTAX(unless);
+    DEF_SYNTAX(while);
+    DEF_SYNTAX(and);
+    DEF_SYNTAX(or);
+    DEF_SYNTAX(for);
+    DEF_SYNTAX(do-each);
 
 #define START_PRIM() \
     tmp = Atom(T_PRIM); \
@@ -145,6 +150,8 @@ void Interpreter::init()
                                      && A0.m_d.vec == A1.m_d.vec; break;
             case T_MAP:  out.m_d.b =    A1.m_type == T_MAP
                                      && A0.m_d.map == A1.m_d.map; break;
+            case T_UD:   out.m_d.b =    A1.m_type == T_UD 
+                                     && A0.m_d.ud == A1.m_d.ud; break;
             case T_PRIM: out.m_d.b =    A1.m_type == T_PRIM
                                      && A0.m_d.func == A1.m_d.func; break;
             case T_NIL:  out.m_d.b = A1.m_type == T_NIL; break;
@@ -272,17 +279,65 @@ void Interpreter::init()
             case T_PRIM:   out.m_d.sym = m_rt->m_gc.new_symbol("procedure"); break;
             case T_SYNTAX: out.m_d.sym = m_rt->m_gc.new_symbol("syntax");    break;
             case T_CLOS:   out.m_d.sym = m_rt->m_gc.new_symbol("procedure"); break;
+            case T_UD:     out.m_d.sym = m_rt->m_gc.new_symbol("userdata");  break;
             default:       out.m_d.sym = m_rt->m_gc.new_symbol("<unknown>"); break;
         }
     END_PRIM(type)
+
+    START_PRIM()
+        REQ_EQ_ARGC(length, 1);
+        out = Atom(T_INT);
+        if (A0.m_type == T_VEC)         out.m_d.i = A0.m_d.vec->m_len;
+        else if (A1.m_type == T_MAP)    out.m_d.i = A0.m_d.map->m_map.size();
+        else                            out.m_d.i = 0;
+    END_PRIM(length)
+
+    START_PRIM()
+        REQ_EQ_ARGC(push, 2);
+
+        if (A0.m_type != T_VEC)
+            error("Can't push onto something that is not a list", A0);
+
+        A0.m_d.vec->push(A1);
+        out = A1;
+    END_PRIM(push)
+
+    START_PRIM()
+        REQ_EQ_ARGC(pop, 1);
+
+        if (A0.m_type != T_VEC)
+            error("Can't pop from something that is not a list", A0);
+
+        Atom *a = A0.m_d.vec->last();
+        if (a) out = *a;
+        A0.m_d.vec->pop();
+    END_PRIM(pop)
+
+    START_PRIM()
+        REQ_EQ_ARGC(make-vm-prog, 1);
+        out = bukalisp::make_prog(A0);
+        if (out.m_type == T_UD)
+            m_rt->m_gc.reg_userdata(out.m_d.ud);
+    END_PRIM(make-vm-prog)
+
+    START_PRIM()
+        REQ_EQ_ARGC(run-vm-prog, 1);
+
+        if (A0.m_type != T_UD || A0.m_d.ud->type() != "VM-PROG")
+            error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
+
+        bukalisp::VM vm(m_rt);
+        out = vm.eval(*(dynamic_cast<PROG*>(A0.m_d.ud)));
+    END_PRIM(run-vm-prog)
 }
 //---------------------------------------------------------------------------
 
 Atom Interpreter::eval_begin(Atom e, AtomVec *av, size_t offs)
 {
+    Atom l;
     for (size_t i = offs; i < av->m_len; i++)
-        e = eval(av->m_data[i]);
-    return e;
+        l = eval(av->m_data[i]);
+    return l;
 }
 //---------------------------------------------------------------------------
 
@@ -425,6 +480,206 @@ Atom Interpreter::eval_unless(Atom e, AtomVec *av)
 }
 //---------------------------------------------------------------------------
 
+Atom Interpreter::eval_while(Atom e, AtomVec *av)
+{
+    if (av->m_len < 2)
+        error("'while' does not contain enough parameters", e);
+
+    Atom last;
+    Atom while_cond = eval(av->m_data[1]);
+    bool run = !while_cond.is_false();
+    while (run)
+    {
+        last = eval_begin(e, av, 2);
+        AtomVecPush(m_root_stack, last);
+        while_cond = eval(av->m_data[1]);
+        run = !while_cond.is_false();
+    }
+
+    return last;
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_and(Atom e, AtomVec *av)
+{
+    if (av->m_len <= 0)
+        return Atom();
+
+    Atom last;
+    for (size_t i = 0; i < av->m_len; i++)
+    {
+        last = eval(av->m_data[i]);
+        if (last.is_false())
+            return last;
+    }
+    return last;
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_or(Atom e, AtomVec *av)
+{
+    if (av->m_len <= 1)
+        return Atom();
+
+    Atom last;
+    for (size_t i = 1; i < av->m_len; i++)
+    {
+        last = eval(av->m_data[i]);
+        if (!last.is_false())
+            return last;
+    }
+    return last;
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_for(Atom e, AtomVec *av)
+{
+    if (av->m_len < 2)
+        error("'for' does not contain enough parameters", e);
+
+    if (av->m_data[1].m_type != T_VEC)
+        error("'for' first parameter needs to be a list", e);
+
+    AtomVec *cnt_spec = av->m_data[1].m_d.vec;
+    if (cnt_spec->m_len < 3)
+        error("'for' count specification needs to contain at least a symbol, start and end value", e);
+    else if (cnt_spec->m_len > 4)
+        error("'for' count specification contains too many elements", e);
+    if (cnt_spec->m_data[0].m_type != T_SYM)
+        error("'for' first element of count specification needs to be a symbol", e);
+
+
+    AtomMap *env_map = m_rt->m_gc.allocate_map();
+    AtomVecPush avpe(m_env_stack, Atom(T_MAP, env_map));
+
+    Atom at_i = eval(cnt_spec->m_data[1]);
+
+    Atom at_end = eval(cnt_spec->m_data[2]);
+    int64_t step = cnt_spec->m_len > 3 ? eval(cnt_spec->m_data[3]).to_int() : 1;
+    int64_t end  = at_end.to_int();
+    int64_t i    = at_i.to_int();
+
+    at_i.m_type = T_INT;
+    at_i.m_d.i  = i;
+    env_map->set(cnt_spec->m_data[0], at_i);
+
+    Atom last;
+    if (end > i)
+    {
+        while (i <= end)
+        {
+            last = eval_begin(e, av, 2);
+
+            i += step;
+            at_i.m_d.i = i;
+            env_map->set(cnt_spec->m_data[0], at_i);
+        }
+    }
+    else
+    {
+        while (i >= end)
+        {
+            last = eval_begin(e, av, 2);
+
+            i += step;
+            at_i.m_d.i = i;
+            env_map->set(cnt_spec->m_data[0], at_i);
+        }
+    }
+
+    return last;
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
+{
+    if (av->m_len < 2)
+        error("'do-each' does not contain enough parameters", e);
+
+    if (av->m_data[1].m_type != T_VEC)
+        error("'do-each' first parameter needs to be a list", e);
+
+    AtomVec *bnd_spec = av->m_data[1].m_d.vec;
+    if (bnd_spec->m_len < 2)
+        error("'do-each' bind specification needs to contain at least a key symbol and an expression", e);
+    else if (bnd_spec->m_len > 3)
+        error("'do-each' bind specification contains too many elements", e);
+    if (bnd_spec->m_data[0].m_type != T_SYM)
+        error("'do-each' first element of bind specification needs to be a symbol", e);
+
+    AtomMap *env_map = m_rt->m_gc.allocate_map();
+    AtomVecPush avpe(m_env_stack, Atom(T_MAP, env_map));
+
+
+    Atom last;
+    if (bnd_spec->m_len == 3)
+    {
+        if (bnd_spec->m_data[1].m_type != T_SYM)
+            error("'do-each' second element of bind specification needs to be a symbol", e);
+
+        Atom ds = eval(bnd_spec->m_data[2]);
+        AtomVecPush avpr(m_root_stack, ds);
+
+        if (ds.m_type == T_VEC)
+        {
+            for (size_t i = 0; i < ds.m_d.vec->m_len; i++)
+            {
+                Atom iat(T_INT);
+                iat.m_d.i = i;
+                env_map->set(bnd_spec->m_data[0], iat);
+                env_map->set(bnd_spec->m_data[1], ds.m_d.vec->m_data[i]);
+                last = eval_begin(e, av, 2);
+            }
+        }
+        else if (ds.m_type == T_MAP)
+        {
+            for (auto &p : ds.m_d.map->m_map)
+            {
+                Atom key_val = p.first;
+                env_map->set(bnd_spec->m_data[0], key_val);
+                env_map->set(bnd_spec->m_data[1], p.second);
+                last = eval_begin(e, av, 2);
+            }
+        }
+        else
+        {
+            env_map->set(bnd_spec->m_data[0], Atom());
+            env_map->set(bnd_spec->m_data[1], ds);
+            last = eval_begin(e, av, 2);
+        }
+    }
+    else
+    {
+        Atom ds = eval(bnd_spec->m_data[1]);
+        AtomVecPush avpr(m_root_stack, ds);
+
+        if (ds.m_type == T_VEC)
+        {
+            for (size_t i = 0; i < ds.m_d.vec->m_len; i++)
+            {
+                env_map->set(bnd_spec->m_data[0], ds.m_d.vec->m_data[i]);
+                last = eval_begin(e, av, 2);
+            }
+        }
+        else if (ds.m_type == T_MAP)
+        {
+            for (auto &p : ds.m_d.map->m_map)
+            {
+                env_map->set(bnd_spec->m_data[0], p.second);
+                last = eval_begin(e, av, 2);
+            }
+        }
+        else
+        {
+            env_map->set(bnd_spec->m_data[0], ds);
+            last = eval_begin(e, av, 2);
+        }
+    }
+
+    return last;
+}
+//---------------------------------------------------------------------------
+
 Atom Interpreter::eval(Atom e)
 {
     // TODO: Add eval flag
@@ -485,15 +740,20 @@ Atom Interpreter::eval(Atom e)
             {
                 // TODO: optimize by caching symbol pointers:
                 std::string s = first.m_d.sym->m_str;
-                if      (s == "begin")  ret = eval_begin(e, av, 1);
-                else if (s == "define") ret = eval_define(e, av);
-                else if (s == "set!")   ret = eval_setM(e, av);
-                else if (s == "let")    ret = eval_let(e, av);
-                else if (s == "quote")  ret = av->m_data[1];
-                else if (s == "lambda") ret = eval_lambda(e, av);
-                else if (s == "if")     ret = eval_if(e, av);
-                else if (s == "when")   ret = eval_when(e, av);
-                else if (s == "unless") ret = eval_unless(e, av);
+                if      (s == "begin")   ret = eval_begin(e, av, 1);
+                else if (s == "define")  ret = eval_define(e, av);
+                else if (s == "set!")    ret = eval_setM(e, av);
+                else if (s == "let")     ret = eval_let(e, av);
+                else if (s == "quote")   ret = av->m_data[1];
+                else if (s == "lambda")  ret = eval_lambda(e, av);
+                else if (s == "if")      ret = eval_if(e, av);
+                else if (s == "when")    ret = eval_when(e, av);
+                else if (s == "unless")  ret = eval_unless(e, av);
+                else if (s == "while")   ret = eval_while(e, av);
+                else if (s == "and")     ret = eval_and(e, av);
+                else if (s == "or")      ret = eval_or(e, av);
+                else if (s == "for")     ret = eval_for(e, av);
+                else if (s == "do-each") ret = eval_do_each(e, av);
                 break;
             }
             else if (first.m_type == T_PRIM)
@@ -526,6 +786,8 @@ Atom Interpreter::eval(Atom e)
                 Atom lambda_form = first.m_d.vec->m_data[1];
 
                 AtomVec *old_env = m_env_stack;
+                AtomVecPush avp_old_env(m_root_stack, Atom(T_VEC, old_env));
+
                 m_env_stack = env.m_d.vec;
 
                 {

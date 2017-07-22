@@ -71,6 +71,13 @@ void write_atom(const Atom &a, std::ostream &o)
         case T_PRIM:
             o << "#<primitive:" << ((void *) a.m_d.func) << ">";
             break;
+        case T_UD:
+            {
+                std::string s = a.m_d.ud->as_string();
+                if (a.m_d.ud) o << s;
+                else          o << "#<userdata:null>";
+                break;
+            }
         default:
             o << "#<unprintable unknown?>";
             break;

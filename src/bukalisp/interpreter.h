@@ -19,7 +19,7 @@ class InterpreterException : public std::exception
 };
 //---------------------------------------------------------------------------
 
-class Interpreter
+class Interpreter : public lilvm::ExternalGCRoot
 {
     private:
         Runtime        *m_rt;
@@ -32,13 +32,24 @@ class Interpreter
 
     public:
         Interpreter(Runtime *rt)
-            : m_rt(rt), m_env_stack(nullptr), m_trace(false)
-        { init(); }
+            : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_env_stack(nullptr),
+              m_trace(false)
+        {
+            init();
+        }
 
-        ~Interpreter()
+        virtual ~Interpreter()
         {
             for (auto p : m_primitives)
                 delete p;
+        }
+
+        virtual size_t gc_root_count() { return 2; }
+        virtual lilvm::AtomVec *gc_root_get(size_t i)
+        {
+            if (i == 0)      return m_root_stack;
+            else if (i == 1) return m_env_stack;
+            else             return nullptr;
         }
 
         void init();
@@ -98,6 +109,11 @@ class Interpreter
         lilvm::Atom eval_if(lilvm::Atom e, lilvm::AtomVec *av);
         lilvm::Atom eval_when(lilvm::Atom e, lilvm::AtomVec *av);
         lilvm::Atom eval_unless(lilvm::Atom e, lilvm::AtomVec *av);
+        lilvm::Atom eval_while(lilvm::Atom e, lilvm::AtomVec *av);
+        lilvm::Atom eval_and(lilvm::Atom e, lilvm::AtomVec *av);
+        lilvm::Atom eval_or(lilvm::Atom e, lilvm::AtomVec *av);
+        lilvm::Atom eval_for(lilvm::Atom e, lilvm::AtomVec *av);
+        lilvm::Atom eval_do_each(lilvm::Atom e, lilvm::AtomVec *av);
 };
 //---------------------------------------------------------------------------
 

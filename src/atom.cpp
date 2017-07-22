@@ -36,6 +36,9 @@ size_t AtomHash::operator()(const Atom &a) const
         case T_KW:
         case T_STR:
             return std::hash<std::string>()(a.m_d.sym->m_str);
+
+        case T_UD:
+            return std::hash<void *>()((void *) a.m_d.ud);
     }
 
     return std::hash<void *>()((void *) a.m_d.vec);
@@ -115,6 +118,11 @@ void AtomVec::check_size(size_t idx)
             m_data[i] = old_data[i];
         delete[] old_data;
     }
+    else
+    {
+        for (size_t i = m_len; i < (idx + 1); i++)
+            m_data[i] = Atom();
+    }
 
     m_len = idx + 1;
 }
@@ -157,6 +165,24 @@ Atom AtomMap::at(const Atom &k, bool &defined)
     if (it == m_map.end()) return Atom();
     defined = true;
     return it->second;
+}
+//---------------------------------------------------------------------------
+
+ExternalGCRoot::ExternalGCRoot(GC *gc)
+    : m_gc(gc)
+{
+}
+//---------------------------------------------------------------------------
+
+void ExternalGCRoot::init()
+{
+    m_gc->add_external_root(this);
+}
+//---------------------------------------------------------------------------
+
+ExternalGCRoot::~ExternalGCRoot()
+{
+    m_gc->remove_external_root(this);
 }
 //---------------------------------------------------------------------------
 

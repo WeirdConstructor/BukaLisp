@@ -5,6 +5,7 @@
 #include <string>
 #include <functional>
 #include <unordered_map>
+#include "atom_userdata.h"
 
 namespace lilvm
 {
@@ -23,7 +24,8 @@ enum Type : int16_t
     T_MAP,      // m_d.map
     T_PRIM,     // m_d.func
     T_SYNTAX,   // m_d.sym
-    T_CLOS      // m_d.vec
+    T_CLOS,     // m_d.vec
+    T_UD        // m_d.ud
 };
 //---------------------------------------------------------------------------
 
@@ -115,6 +117,7 @@ struct Atom
         Sym         *sym;
         AtomVec     *vec;
         AtomMap     *map;
+        UserData    *ud;
     } m_d;
 
     Atom() : m_type(T_NIL)
@@ -203,6 +206,9 @@ struct Atom
             case T_CLOS:
                 return m_d.vec == other.m_d.vec;
 
+            case T_UD:
+                return m_d.ud == other.m_d.ud;
+
             default:
                 // pointer comparsion
                 return m_d.vec == other.m_d.vec;
@@ -275,21 +281,36 @@ class AtomVecPush
 };
 //---------------------------------------------------------------------------
 
+class GC;
+
+class ExternalGCRoot
+{
+    private:
+        GC      *m_gc;
+    public:
+        ExternalGCRoot(GC *gc);
+        void init();
+        virtual ~ExternalGCRoot();
+        virtual size_t gc_root_count() = 0;
+        virtual AtomVec *gc_root_get(size_t idx) = 0;
+};
+//---------------------------------------------------------------------------
 
 typedef std::unordered_map<std::string, Sym *> StrSymMap;
 
 class GC
 {
     private:
-        AtomVec *m_vectors;
-        AtomMap *m_maps;
-        Sym     *m_syms;
+        AtomVec  *m_vectors;
+        AtomMap  *m_maps;
+        UserData *m_userdata;
+        Sym      *m_syms;
 
         uint8_t  m_current_color;
 
-        std::vector<AtomVec *>  m_roots;
-        std::vector<Sym *>      m_root_syms;
-        StrSymMap               m_symtbl;
+        std::vector<Sym *>              m_perm_syms;
+        std::vector<ExternalGCRoot *>   m_ext_roots;
+        StrSymMap                       m_symtbl;
 
 #define GC_SMALL_VEC_LEN     10
 #define GC_MEDIUM_VEC_LEN    100
@@ -321,31 +342,6 @@ class GC
             }
 
             num += new_num;
-        }
-
-        void mark_atom(const Atom &at)
-        {
-            switch (at.m_type)
-            {
-                case T_MAP:
-                    mark_map((AtomMap *) at.m_d.map);
-                    break;
-
-                case T_CLOS:
-//                    std::cout << "MARK CLOSURE " << at.m_d.vec->m_data[0].m_d.vec << std::endl;
-//                    std::cout << "MARK CLOSURE " << at.m_d.vec->m_data[0].m_d.vec->m_len << std::endl;
-                case T_VEC:
-                    mark_vector((AtomVec *) at.m_d.vec);
-                    break;
-
-                case T_SYNTAX:
-                case T_KW:
-                case T_SYM:
-                case T_STR:
-                    if (at.m_d.sym)
-                        ((Sym *) at.m_d.sym)->m_gc_color = m_current_color;
-                    break;
-            }
         }
 
         void mark_vector(AtomVec *&vec)
@@ -390,11 +386,19 @@ class GC
 
 //            std::cout << "* GC MARK CLR = " << ((int) m_current_color) << std::endl;
 
-            for (auto &sym : m_root_syms)
+            for (auto &sym : m_perm_syms)
                 sym->m_gc_color = m_current_color;
 
-            for (auto &root : m_roots)
-                mark_vector(root);
+            for (auto &ext_root : m_ext_roots)
+            {
+//                std::cout << "EXT ROOT: " << ext_root << std::endl;
+                for (size_t i = 0; i < ext_root->gc_root_count(); i++)
+                {
+                    AtomVec *av = ext_root->gc_root_get(i);
+//                    std::cout << "EXT ROOT AV: " << av << ">" << write_atom(Atom(T_VEC, av)) << std::endl;
+                    mark_vector(av);
+                }
+            }
         }
 
         void sweep()
@@ -417,6 +421,16 @@ class GC
                     m_maps,
                     m_current_color,
                     [this](AtomMap *cur) { delete cur; });
+
+            m_userdata =
+                gc_list_sweep<UserData>(
+                    m_userdata,
+                    m_current_color,
+                    [this](UserData *cur)
+                    {
+//                        std::cout << "SWEEP USERDATA: " << cur << std::endl;
+                        delete cur;
+                    });
 
             m_vectors =
                 gc_list_sweep<AtomVec>(
@@ -461,6 +475,7 @@ class GC
             : m_vectors(nullptr),
               m_maps(nullptr),
               m_syms(nullptr),
+              m_userdata(nullptr),
               m_current_color(GC_COLOR_WHITE),
               m_small_vectors(nullptr),
               m_medium_vectors(nullptr),
@@ -469,8 +484,55 @@ class GC
         {
         }
 
-        void add_root(AtomVec *root) { m_roots.push_back(root); }
-        void add_root(Sym *sym)      { m_root_syms.push_back(sym); }
+        void add_external_root(ExternalGCRoot *gcr) { m_ext_roots.push_back(gcr); }
+        void remove_external_root(ExternalGCRoot *gcr)
+        {
+            std::vector<ExternalGCRoot *> new_ext_roots;
+            for (auto &e : m_ext_roots)
+            {
+                if (e != gcr)
+                    new_ext_roots.push_back(e);
+            }
+
+            m_ext_roots = new_ext_roots;
+        }
+
+        void add_permanent(Sym *sym) { m_perm_syms.push_back(sym); }
+
+        void reg_userdata(UserData *ud)
+        {
+            ud->m_gc_next = m_userdata;
+            m_userdata = ud;
+            ud->mark(this, m_current_color);
+        }
+
+        void mark_atom(const Atom &at)
+        {
+            switch (at.m_type)
+            {
+                case T_MAP:
+                    mark_map((AtomMap *) at.m_d.map);
+                    break;
+
+                case T_CLOS:
+                case T_VEC:
+                    mark_vector((AtomVec *) at.m_d.vec);
+                    break;
+
+                case T_UD:
+                    if (at.m_d.ud)
+                        at.m_d.ud->mark(this, m_current_color);
+                    break;
+
+                case T_SYNTAX:
+                case T_KW:
+                case T_SYM:
+                case T_STR:
+                    if (at.m_d.sym)
+                        at.m_d.sym->m_gc_color = m_current_color;
+                    break;
+            }
+        }
 
         void collect()
         {
@@ -610,6 +672,15 @@ class GC
                 m_maps,
                 GC_COLOR_DELETE,
                 [this](AtomMap *cur) { delete cur; });
+
+            gc_list_sweep<UserData>(
+                m_userdata,
+                GC_COLOR_DELETE,
+                [this](UserData *cur)
+                {
+//                    std::cout << "SWEEP USERDATA: " << cur << std::endl;
+                    delete cur;
+                });
         }
 };
 //---------------------------------------------------------------------------

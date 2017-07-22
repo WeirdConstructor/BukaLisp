@@ -47,7 +47,7 @@ class AtomGenerator : public bukalisp::SEX_Builder
         lilvm::GC                       *m_gc;
         AtomDebugInfo                   *m_deb_info;
 
-        lilvm::Atom                             m_root;
+        lilvm::Atom                      m_root;
 
         typedef std::function<void(lilvm::Atom &a)>  AddFunc;
         std::vector<std::pair<lilvm::Atom, AddFunc>> m_add_stack;

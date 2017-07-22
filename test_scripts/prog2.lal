@@ -1,0 +1,7 @@
+(run-vm-prog
+ (make-vm-prog
+  [
+   ['X [1 2 3]]
+   [[NOP: 1 2]
+    [NOP: 1 2 4]]
+   {}]))

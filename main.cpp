@@ -8,6 +8,7 @@
 #include "bukalisp/parser.h"
 #include "bukalisp/atom_generator.h"
 #include "bukalisp/interpreter.h"
+#include "bukalisp/buklivm.h"
 #include "atom.h"
 #include "atom_printer.h"
 
@@ -112,7 +113,7 @@ void test_gc1()
 }
 //---------------------------------------------------------------------------
 
-class Reader
+class Reader : public lilvm::ExternalGCRoot
 {
     private:
         GC                          m_gc;
@@ -121,12 +122,21 @@ class Reader
         bukalisp::Parser            m_par;
         bukalisp::AtomDebugInfo     m_deb_info;
 
+        AtomVec                    *m_root_set;
+
     public:
         Reader()
-            : m_ag(&m_gc, &m_deb_info),
+            : lilvm::ExternalGCRoot(&m_gc),
+              m_ag(&m_gc, &m_deb_info),
               m_par(m_tok, &m_ag)
         {
+            m_root_set = m_gc.allocate_vector(0);
+
+            lilvm::ExternalGCRoot::init();
         }
+
+        virtual size_t gc_root_count() { return 1; }
+        virtual AtomVec *gc_root_get(size_t i) { return m_root_set; }
 
         std::string debug_info(AtomVec *v) { return m_deb_info.pos((void *) v); }
         std::string debug_info(AtomMap *m) { return m_deb_info.pos((void *) m); }
@@ -148,12 +158,7 @@ class Reader
         Atom a_kw(const std::string &s) { return Atom(T_KW, m_gc.new_symbol(s)); }
         Atom a_str(const std::string &s) { return Atom(T_STR, m_gc.new_symbol(s)); }
 
-        void make_always_alive(Atom a)
-        {
-            AtomVec *av = m_gc.allocate_vector(1);
-            av->m_data[0] = a;
-            m_gc.add_root(av);
-        }
+        void make_always_alive(Atom a) { m_root_set->push(a); }
 
         void collect() { m_gc.collect(); }
 
@@ -172,9 +177,11 @@ void test_gc2()
 {
     Reader tc;
 
+    TEST_EQ(tc.pot_alive_vecs(), 1, "potentially alive before");
+
     tc.parse("test_gc2", "(1 2 3 (4 5 6) (943 203))");
 
-    TEST_EQ(tc.pot_alive_vecs(), 3, "potentially alive before");
+    TEST_EQ(tc.pot_alive_vecs(), 4, "potentially alive before");
 
     Atom r = tc.root();
     tc.make_always_alive(r);
@@ -522,6 +529,14 @@ void test_ieval_proc()
     TEST_EVAL("(type f:)",              "keyword");
     TEST_EVAL("(type \"f\")",           "string");
 
+    TEST_EVAL("(length [1 2 3])",                   "3");
+    TEST_EVAL("(length [])",                        "0");
+    TEST_EVAL("(length '())",                       "0");
+    TEST_EVAL("(length {})",                        "0");
+    TEST_EVAL("(length {x: 12})",                   "1");
+    TEST_EVAL("(length {y: 324 x: 12})",            "2");
+    TEST_EVAL("(length (let ((l [])) (@!9 l l)))",  "10");
+
 //TEST_EVAL("(eq? \"foo\" (symbol->string 'foo))",               "#true");
 //TEST_EVAL("(let ((p (lambda (x) x))) (eq? p p))",              "#true");
 //TEST_EVAL("(eq? t: (string->symbol \"t\"))",                   "#false");
@@ -537,10 +552,17 @@ void test_ieval_let()
     bukalisp::Interpreter i(&rt);
     Atom r;
 
-    TEST_EVAL("(begin (define x 20) (+ (let ((x 10)) x) x))", "30");
-    TEST_EVAL("(begin (define x 20) (+ (let () (define x 10) x) x))", "30");
+    TEST_EVAL("(begin (define x 20) (+ (let ((x 10)) x) x))",               "30");
+    TEST_EVAL("(begin (define x 20) (+ (let () (define x 10) x) x))",       "30");
     TEST_EVAL("(begin (define y 20) (+ (let ((x 10)) (define y 10) x) y))", "30");
-    TEST_EVAL("(begin (define y 20) (+ (let ((x 10)) (set! y 11) x) y))", "21");
+    TEST_EVAL("(begin (define y 20) (+ (let ((x 10)) (set! y 11) x) y))",   "21");
+
+    TEST_EVAL("(let ((a 5) (b 20)) (set! a (* 2 a)) (+ a b))",                               "30")
+    TEST_EVAL("(begin (define x 10) (define y 20) (+ x y 2))",                               "32")
+    TEST_EVAL("(begin (begin (define x 10)) (define y 20) (+ x y 2))",                       "32")
+    TEST_EVAL("(begin (begin (define x 10) (define y 20) 44) (begin (+ x y 2) (+ x y 2)))",  "32")
+    TEST_EVAL("(begin (begin (define x 10) (define y (begin 44 20)) 44) (begin (+ x y 2)))", "32")
+    TEST_EVAL("(begin (begin (define x 10) (define y 20) 44) (begin (+ x y 2)))",            "32")
 }
 //---------------------------------------------------------------------------
 
@@ -568,6 +590,67 @@ void test_ieval_cond()
         "30");
     TEST_EVAL("(if nil       #t #f)", "#false");
     TEST_EVAL("(if (not nil) #t #f)", "#true");
+
+    TEST_EVAL("(let ((a 10) (l []) (i 0)) "
+              "  (or "
+              "      (begin (set! a #f) (@!(set! i (+ i 1)) l x:) a) "
+              "      (begin (set! a #f) (@!(set! i (+ i 1)) l y:) a) "
+              "      (begin (set! a #f) (@!(set! i (+ i 1)) l z:) a) "
+              "      (set! a l)))",
+              "(nil x: y: z:)");
+
+    TEST_EVAL("(let ((a 10) (l []) (i 0)) "
+              "  (and "
+              "      (begin (set! a #t) (@!(set! i (+ i 1)) l x:) a) "
+              "      (begin (set! a #t) (@!(set! i (+ i 1)) l y:) a) "
+              "      (begin (set! a #t) (@!(set! i (+ i 1)) l z:) a) "
+              "      (not (set! a l))) "
+              "  l)",
+              "(nil x: y: z:)");
+
+    TEST_EVAL("(and 1 3 #f 99)", "#false");
+    TEST_EVAL("(and 1 3 #t 99)", "99");
+    TEST_EVAL("(and 1 3 3432 #t)", "#true");
+    TEST_EVAL("(or #f 1 3 3432 #t)", "1");
+    TEST_EVAL("(or #f #f ((lambda () #f)) #f)", "#false");
+
+    TEST_EVAL("                         \
+        (let ((x 10))                   \
+            (or #f                      \
+                (begin (set! x 22) #f)  \
+                (+ x 71)                \
+                (set! x 32)))           \
+    ", "93")
+    TEST_EVAL("                           \
+        (let ((x 12)                      \
+              (f (lambda () 10)))         \
+            [(or #f                       \
+                (begin (set! x 22) #f)    \
+                (f)) x])                  \
+    ", "(10 22)")
+    TEST_EVAL("                        \
+        (let ((x 44)                   \
+              (f (lambda () 30)))      \
+            (and #f                    \
+                (begin (set! x 33) #f) \
+                (f))                   \
+            x)                         \
+    ", "44")
+//    assert_lal('33', [[
+//        (let ((x 44)
+//              (f (lambda () x)))
+//            (and #t
+//                (begin (set! x 33) #f)
+//                (f))
+//            x)
+//    ]])
+//    assert_lal('32', [[
+//        (let ((x 44)
+//              (f (lambda () x)))
+//            (and #t
+//                (begin (set! x 32) #t)
+//                (f)))
+//    ]])
 }
 //---------------------------------------------------------------------------
 
@@ -614,6 +697,81 @@ void test_ieval_index_procs()
 }
 //---------------------------------------------------------------------------
 
+void test_ieval_loops()
+{
+    bukalisp::Runtime rt;
+    bukalisp::Interpreter i(&rt);
+    Atom r;
+
+    TEST_EVAL(
+        "(let ((i 9) (o [])) "
+        "  (while (>= i 0) "
+        "    (@!i o i) "
+        "    (set! i (- i 1)) "
+        "    o))",
+        "(0 1 2 3 4 5 6 7 8 9)");
+
+    TEST_EVAL(
+        "(let ((i 10) (o [])) "
+        "  (while (>= (set! i (- i 1)) 0) "
+        "    (@!i o i) "
+        "    o))",
+        "(0 1 2 3 4 5 6 7 8 9)");
+
+    TEST_EVAL("(while #f 10)", "nil");
+
+    TEST_EVAL("(let ((ol [])) (for (i 0 9) (@! i ol (* i 2))) ol)",
+              "(0 2 4 6 8 10 12 14 16 18)");
+    TEST_EVAL("(let ((ol [])) (for (i 9 0 -1) (@! (- 9 i) ol (* i 2))) ol)",
+              "(18 16 14 12 10 8 6 4 2 0)");
+    TEST_EVAL("(let ((ol []) (idx 0))             "
+              "  (for (i 0 9 2)                   "
+              "    (@! (- (set! idx (+ idx 1)) 1) "
+              "        ol                         "
+              "        (* i 2)))                  "
+              "  ol)                              ",
+              "(0 4 8 12 16)");
+
+    TEST_EVAL("(let ((l [])) "
+              "  (do-each (v [1 2 3]) "
+              "    (push l (* v 2))) "
+              "  l)",
+              "(2 4 6)");
+
+    TEST_EVAL("(let ((l [])) "
+              "  (do-each (k v [1 2 3]) "
+              "    (push l [k (* v 2)])) "
+              "  l)",
+              "((0 2) (1 4) (2 6))");
+
+    TEST_EVAL("(let ((l [])) "
+              "  (do-each (k v 123) "
+              "    (push l [k (* v 2)])) "
+              "  l)",
+              "((nil 246))");
+
+    TEST_EVAL("(let ((sum 0)) "
+              "  (do-each (k v { a: 123 x: 999 'z 323 }) "
+              "    (set! sum (+ sum v))) "
+              "  sum)",
+              "1445");
+
+    TEST_EVAL("(let ((sum 0)) "
+              "  (do-each (v { a: 123 x: 999 'z 323 }) "
+              "    (set! sum (+ sum v))) "
+              "  sum)",
+              "1445");
+
+    TEST_EVAL("(let ((a 0) (x 0) (z 0)) "
+              "  (do-each (k v { a: 123 x: 999 'z 323 }) "
+              "    (if (eqv? k a:) (set! a v) "
+              "    (if (eqv? k x:) (set! x v) "
+              "    (if (eqv? k 'z) (set! z v))))) "
+              "  [a x z])",
+              "(123 999 323)");
+}
+//---------------------------------------------------------------------------
+
 int main(int argc, char *argv[])
 {
     using namespace std::chrono;
@@ -626,6 +784,8 @@ int main(int argc, char *argv[])
 
         if (argc > 1)
             input_file_path = string(argv[1]);
+
+        cout << "SIL: " << sizeof(bukalisp::INST) << endl;
 
         if (input_file_path == "tests")
         {
@@ -649,12 +809,30 @@ int main(int argc, char *argv[])
                 RUN_TEST(ieval_cond);
                 RUN_TEST(ieval_lambda);
                 RUN_TEST(ieval_index_procs);
+                RUN_TEST(ieval_loops);
 
                 cout << "TESTS OK" << endl;
             }
             catch (std::exception &e)
             {
                 cerr << "TESTS FAIL, EXCEPTION: " << e.what() << endl;
+            }
+        }
+        else if (!input_file_path.empty())
+        {
+            try
+            {
+                bukalisp::Runtime rt;
+                bukalisp::Interpreter i(&rt);
+                UTF8Buffer *u8b = slurp(input_file_path);
+                Atom r = i.eval(input_file_path, u8b->as_string());
+                std::string rs = write_atom(r);
+                delete u8b;
+                cout << rs << endl;
+            }
+            catch (std::exception &e)
+            {
+                cerr << "[" << input_file_path << "] Exception: " << e.what() << endl;
             }
         }
 
