@@ -88,7 +88,12 @@ class Interpreter : public lilvm::ExternalGCRoot
         lilvm::Atom eval(const std::string &input_name, const std::string &input)
         {
             lilvm::Atom prog = m_rt->read(input_name, input);
-            return eval(prog);
+            lilvm::AtomVecPush avp(m_root_stack, prog);
+//            std::cerr << "EVAL(" << write_atom(prog) << std::endl;
+            if (prog.m_type == lilvm::T_VEC)
+                return eval_begin(prog, prog.m_d.vec, 0);
+            else
+                return eval(prog);
         }
 
         void error(const std::string &msg)

@@ -1,4 +1,5 @@
 #include "atom.h"
+#include "atom_printer.h"
 
 namespace lilvm
 {
@@ -6,6 +7,21 @@ namespace lilvm
 
 size_t AtomVec::s_alloc_count = 0;
 
+//---------------------------------------------------------------------------
+
+std::string Atom::to_write_str()
+{
+     return write_atom(*this);
+}
+
+//---------------------------------------------------------------------------
+std::string Atom::to_display_str()
+{
+    return m_type == T_SYM ? m_d.sym->m_str
+         : m_type == T_KW  ? m_d.sym->m_str
+         : m_type == T_STR ? m_d.sym->m_str
+         : write_atom(*this);
+}
 //---------------------------------------------------------------------------
 
 size_t AtomHash::operator()(const Atom &a) const

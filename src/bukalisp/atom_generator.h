@@ -56,11 +56,15 @@ class AtomGenerator : public bukalisp::SEX_Builder
         AtomGenerator(lilvm::GC *gc, AtomDebugInfo *atd)
             : m_gc(gc), m_deb_info(atd)
         {
+        }
+        virtual ~AtomGenerator() { }
+
+        void start()
+        {
             m_add_stack.push_back(
                 std::pair<lilvm::Atom, AddFunc>(
                     m_root, [this](lilvm::Atom &a) { m_root = a; }));
         }
-        virtual ~AtomGenerator() { }
 
         lilvm::Atom &root() { return m_root; }
 

@@ -24,11 +24,23 @@ struct Runtime
 
     lilvm::Atom read(const std::string &input_name, const std::string &input)
     {
+        m_par.reset();
+        m_tok.reset();
         m_tok.tokenize(input_name, input);
-        m_par.parse();
-        return m_ag.root();
+        lilvm::AtomVec *elems = m_gc.allocate_vector(0);
+        while (!m_par.is_eof())
+        {
+            m_ag.start();
+            if (!m_par.parse())
+            {
+                std::cerr << "ERROR while parsing " << input_name << std::endl;
+                return lilvm::Atom();
+            }
+            if (!m_par.is_eof())
+                elems->push(m_ag.root());
+        }
+        return lilvm::Atom(lilvm::T_VEC, elems);
     }
-
 
     std::string debug_info(lilvm::AtomVec *v) { return m_deb_info.pos((void *) v); }
     std::string debug_info(lilvm::AtomMap *m) { return m_deb_info.pos((void *) m); }

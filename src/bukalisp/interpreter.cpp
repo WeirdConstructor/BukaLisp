@@ -329,6 +329,48 @@ void Interpreter::init()
         bukalisp::VM vm(m_rt);
         out = vm.eval(*(dynamic_cast<PROG*>(A0.m_d.ud)));
     END_PRIM(run-vm-prog)
+
+    START_PRIM()
+        REQ_GT_ARGC(error, 1);
+
+        Atom a(T_VEC);
+        a.m_d.vec = m_rt->m_gc.allocate_vector(args.m_len - 1);
+        for (size_t i = 1; i < args.m_len; i++)
+            a.m_d.vec->m_data[i - 1] = args.m_data[i];
+        error(A0.to_display_str(), a);
+    END_PRIM(error)
+
+    START_PRIM()
+        REQ_GT_ARGC(display, 1);
+
+        for (size_t i = 0; i < args.m_len; i++)
+        {
+            std::cout << args.m_data[i].to_display_str();
+            if (i < (args.m_len - 1))
+                std::cout << " ";
+        }
+
+        out = args.m_data[args.m_len - 1];
+    END_PRIM(display)
+
+    START_PRIM()
+        REQ_EQ_ARGC(newline, 0);
+        std::cout << std::endl;
+    END_PRIM(newline)
+
+    START_PRIM()
+        REQ_GT_ARGC(displayln, 1);
+
+        for (size_t i = 0; i < args.m_len; i++)
+        {
+            std::cout << args.m_data[i].to_display_str();
+            if (i < (args.m_len - 1))
+                std::cout << " ";
+        }
+        std::cout << std::endl;
+
+        out = args.m_data[args.m_len - 1];
+    END_PRIM(displayln)
 }
 //---------------------------------------------------------------------------
 

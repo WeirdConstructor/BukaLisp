@@ -164,6 +164,9 @@ struct Atom
              : m_type == T_NIL ? 0.0
              :                   m_d.d; }
 
+    std::string to_display_str();
+    std::string to_write_str();
+
     bool inline is_false()
     {
         return     m_type == T_NIL

@@ -165,6 +165,7 @@ class Reader : public lilvm::ExternalGCRoot
         bool parse(const std::string &codename, const std::string &in)
         {
             m_tok.tokenize(codename, in);
+            m_ag.start();
             // m_tok.dump_tokens();
             return m_par.parse();
         }
@@ -464,7 +465,7 @@ void test_ieval_proc()
     TEST_EVAL("(not #t)",           "#false");
     TEST_EVAL("(not 1)",            "#false");
     TEST_EVAL("(not '())",          "#false");
-    TEST_EVAL("(not #f))",          "#true");
+    TEST_EVAL("(not #f)",           "#true");
 
     TEST_EVAL("(symbol? 'a)",       "#true");
     TEST_EVAL("(symbol? a:)",       "#false");

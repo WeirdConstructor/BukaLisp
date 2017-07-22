@@ -53,6 +53,10 @@ class Parser
         {
         }
 
+        void reset() { m_eof = false; }
+
+        bool is_eof() { return m_eof; }
+
         void log_error(const std::string &what, Token &t)
         {
             std::cout << "ERROR [" << t.m_line << "] :" << what << std::endl;

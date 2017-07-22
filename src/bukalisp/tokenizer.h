@@ -131,6 +131,11 @@ class Tokenizer
         {
         }
 
+        void reset()
+        {
+            m_tokens.clear();
+        }
+
         bool checkEOF()
         {
             if (m_u8buf.length() <= 0)

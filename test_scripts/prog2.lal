@@ -1,3 +1,6 @@
+
+(displayln '("foo" "baf") "fff" fefe:)
+
 (run-vm-prog
  (make-vm-prog
   [
@@ -5,3 +8,5 @@
    [[NOP: 1 2]
     [NOP: 1 2 4]]
    {}]))
+
+(error "FOOBAR" a: g:)
