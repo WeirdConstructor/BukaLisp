@@ -47,6 +47,33 @@ UTF8Buffer *slurp(const std::string &filepath)
 }
 //---------------------------------------------------------------------------
 
+std::string slurp_str(const std::string &filepath)
+{
+    ifstream input_file(filepath.c_str(),
+                        ios::in | ios::binary | ios::ate);
+
+    if (!input_file.is_open())
+        throw bukalisp::BukLiVMException("Couldn't open '" + filepath + "'");
+
+    size_t size = (size_t) input_file.tellg();
+
+    // FIXME (maybe, but not yet)
+    char *unneccesary_buffer_just_to_copy
+        = new char[size];
+
+    input_file.seekg(0, ios::beg);
+    input_file.read(unneccesary_buffer_just_to_copy, size);
+    input_file.close();
+
+//        cout << "read(" << size << ")["
+//             << unneccesary_buffer_just_to_copy << "]" << endl;
+
+    std::string data(unneccesary_buffer_just_to_copy, size);
+    delete[] unneccesary_buffer_just_to_copy;
+    return data;
+}
+//---------------------------------------------------------------------------
+
 #define TEST_TRUE(b, msg) \
     if (!(b)) throw bukalisp::BukLiVMException( \
         std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
@@ -669,6 +696,10 @@ void test_ieval_lambda()
               "  (define x (let ((a 1.2)) "
               "              (lambda (x) (+ a x 10)))) "
               "  (x 20))",   "31.2");
+    TEST_EVAL("(begin "
+              "  (define x "
+              "   (lambda (x) (set! x 20) (+ x 10))) "
+              "  (x 50))",   "30");
 }
 //---------------------------------------------------------------------------
 
@@ -790,7 +821,6 @@ int main(int argc, char *argv[])
         for (int i = 1; i < argc; i++)
         {
             std::string arg(argv[i]);
-            std::cout << "'" << argv[i] << "'" << std::endl;
             if (arg == "tests")
                 tests = true;
             else if (arg == "-i")
@@ -842,10 +872,8 @@ int main(int argc, char *argv[])
                 bukalisp::Runtime rt;
                 bukalisp::VM vm(&rt);
                 bukalisp::Interpreter i(&rt, &vm);
-                UTF8Buffer *u8b = slurp(input_file_path);
-                Atom r = i.eval(input_file_path, u8b->as_string());
+                Atom r = i.eval(input_file_path, slurp_str(input_file_path));
                 std::string rs = write_atom(r);
-                delete u8b;
                 cout << rs << endl;
             }
             catch (std::exception &e)
@@ -855,8 +883,55 @@ int main(int argc, char *argv[])
         }
         else if (!input_file_path.empty())
         {
-            // getenv, call <libenv>/compiler.lal
-            // use compiler procedure on contents of input_file_path
+            const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
+            if (bukalisp_lib_path == NULL)
+                bukalisp_lib_path = ".\\bukalisplib";
+
+            std::string compiler_path =
+                std::string(bukalisp_lib_path) + "\\" + "compiler.lal";
+
+            bukalisp::Runtime rt;
+            bukalisp::VM vm(&rt);
+            bukalisp::Interpreter i(&rt, &vm);
+            Atom compiler_func;
+            try
+            {
+                compiler_func = i.eval(compiler_path, slurp_str(compiler_path));
+            }
+            catch (std::exception &e)
+            {
+                cerr << "ERROR while compiling the compiler ["
+                     << compiler_path << "] Exception: "
+                     << e.what() << endl;
+            }
+
+            AtomVecPush ave(i.root_stack(), compiler_func);
+
+            if (compiler_func.m_type != T_NIL)
+            {
+                try
+                {
+                    Atom input_name(T_STR, rt.m_gc.new_symbol(input_file_path));
+                    Atom input_data =
+                        rt.read(input_file_path, slurp_str(input_file_path));
+
+                    AtomVec *args = rt.m_gc.allocate_vector(2);
+                    args->m_data[0] = input_name;
+                    args->m_data[1] = input_data;
+
+                    cout << "indata: " << input_data.to_write_str() << endl;
+
+                    Atom r = i.call(compiler_func, args, false);
+                    std::string rs = write_atom(r);
+                    cout << rs << endl;
+                }
+                catch (std::exception &e)
+                {
+                    cerr << "ERROR ["
+                         << input_file_path << "] Exception: "
+                         << e.what() << endl;
+                }
+            }
         }
         else
         {

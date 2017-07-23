@@ -1,0 +1,4 @@
+(lambda (name data)
+  (displayln XXX: name)
+  (displayln YYY: data)
+  (@0 (@0 data)))

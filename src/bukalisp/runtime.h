@@ -33,6 +33,7 @@ struct Runtime
             m_ag.start();
             if (!m_par.parse())
             {
+                // TODO: Throw an exception!
                 std::cerr << "ERROR while parsing " << input_name << std::endl;
                 return lilvm::Atom();
             }

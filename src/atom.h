@@ -49,13 +49,12 @@ struct AtomVec
     size_t  m_alloc;
     size_t  m_len;
     Atom   *m_data;
-    Sym    *m_debug_info;
 
     static size_t   s_alloc_count;
 
     AtomVec()
         : m_gc_next(nullptr), m_gc_color(0), m_alloc(0),
-          m_len(0), m_data(nullptr), m_debug_info(nullptr)
+          m_len(0), m_data(nullptr)
     {
         s_alloc_count++;
     }
