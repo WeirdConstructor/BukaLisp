@@ -3,7 +3,7 @@
 (define make-output-pad
  (lambda ()
    (let ((self { code: []
-                pad:  [] }))
+                 pad:  [] }))
 
      ($define! self (op-load static)
        (let ((idx (.add-static-data self static)))
@@ -27,28 +27,31 @@
      (error "unhandled dispatch, for type " (type atom) m))
    ((@(type atom) m) atom arg)))
 
+(define compile-atom-dispatch-map
+  { 'nil      (lambda (atom self) (displayln "GOT NIL!"))
+    'exact    (lambda (atom self) (displayln "GOT NUM " atom))
+    'keyword  (lambda (atom self) (displayln "GOT KW " atom))
+    'list     (lambda (atom self)
+                (displayln "GOT LIST")
+                (do-each (a atom)
+                  (.compile-atom self a)))
+    'map      (lambda (atom self)
+                (displayln "GOT MAP")
+                (do-each (k v atom)
+                  (.compile-atom self k)
+                  (.compile-atom self v)))})
+
 (define hook-compiler-methods
  (lambda (self)
    ($define! self (compile-atom atom)
-     (type-dispatch atom
-      { 'nil      (lambda () (displayln "GOT NIL!"))
-        'exact    (lambda () (displayln "GOT NUM " atom))
-        'keyword  (lambda () (displayln "GOT KW " atom))
-        'list     (lambda ()
-                    (displayln "GOT LIST")
-                    (do-each (a atom)
-                      (.compile-atom self a)))
-        'map      (lambda ()
-                    (displayln "GOT MAP")
-                    (do-each (k v atom)
-                      (.compile-atom self k)
-                      (.compile-atom self v)))}))))
+     (type-dispatch atom compile-atom-dispatch-map self))))
 
 (lambda (name data debug_info)
   (let ((compiler (make-output-pad)))
     (hook-compiler-methods compiler)
     (do-each (top-level-atom data)
       (.compile-atom compiler top-level-atom))))
+
 ;  (let ((x (make-output-pad)))
 ;    (displayln X: (.add-static-data x "xxx"))
 ;    (displayln X: (.add-static-data x "xxx"))
