@@ -21,31 +21,11 @@ class BukLiVMException : public std::exception
 };
 //---------------------------------------------------------------------------
 
-class AtomDebugInfo
-{
-    private:
-        std::unordered_map<void *, std::pair<std::string, size_t>> m_debug_map;
-    public:
-        void add(void *v, const std::string &name, size_t line)
-        {
-            m_debug_map[v] = std::pair<std::string, size_t>(name, line);
-        }
-
-        std::string pos(void *v)
-        {
-            auto it = m_debug_map.find(v);
-            if (it == m_debug_map.end())
-                return "?:?";
-            return it->second.first + ":" + std::to_string(it->second.second);
-        }
-};
-//---------------------------------------------------------------------------
-
 class AtomGenerator : public bukalisp::SEX_Builder
 {
     private:
         lilvm::GC                       *m_gc;
-        AtomDebugInfo                   *m_deb_info;
+        lilvm::AtomMap                  *m_debug_map;
 
         lilvm::Atom                      m_root;
 
@@ -53,8 +33,8 @@ class AtomGenerator : public bukalisp::SEX_Builder
         std::vector<std::pair<lilvm::Atom, AddFunc>> m_add_stack;
 
     public:
-        AtomGenerator(lilvm::GC *gc, AtomDebugInfo *atd)
-            : m_gc(gc), m_deb_info(atd)
+        AtomGenerator(lilvm::GC *gc)
+            : m_gc(gc)
         {
         }
         virtual ~AtomGenerator() { }
@@ -68,12 +48,25 @@ class AtomGenerator : public bukalisp::SEX_Builder
 
         lilvm::Atom &root() { return m_root; }
 
+        void clear_debug_info() { m_debug_map = nullptr; }
+        lilvm::AtomMap *debug_info() { return m_debug_map; }
+
+        void add_debug_info(int64_t id, const std::string &input_name, size_t line)
+        {
+            if (!m_debug_map)
+                m_debug_map = m_gc->allocate_map();
+            std::string info = input_name + ":" + std::to_string(line);
+            m_debug_map->set(
+                lilvm::Atom(lilvm::T_INT, id),
+                lilvm::Atom(lilvm::T_STR, m_gc->new_symbol(info)));
+        }
+
         virtual void start_list()
         {
             lilvm::AtomVec *new_vec = m_gc->allocate_vector(0);
-            m_deb_info->add((void *) new_vec, m_dbg_input_name, m_dbg_line);
             lilvm::Atom a(lilvm::T_VEC);
             a.m_d.vec = new_vec;
+            add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
 
             m_add_stack.push_back(
                 std::pair<lilvm::Atom, AddFunc>(
@@ -91,9 +84,9 @@ class AtomGenerator : public bukalisp::SEX_Builder
         virtual void start_map()
         {
             lilvm::AtomMap *new_map = m_gc->allocate_map();
-            m_deb_info->add((void *) new_map, m_dbg_input_name, m_dbg_line);
             lilvm::Atom a(lilvm::T_MAP);
             a.m_d.map = new_map;
+            add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
 
             std::shared_ptr<std::pair<bool, lilvm::Atom>> key_data
                 = std::make_shared<std::pair<bool, lilvm::Atom>>(true, lilvm::Atom());

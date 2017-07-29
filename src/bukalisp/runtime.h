@@ -14,16 +14,16 @@ struct Runtime
     bukalisp::AtomGenerator  m_ag;
     bukalisp::Tokenizer      m_tok;
     bukalisp::Parser         m_par;
-    bukalisp::AtomDebugInfo  m_deb_info;
 
     Runtime()
-        : m_ag(&m_gc, &m_deb_info),
+        : m_ag(&m_gc),
           m_par(m_tok, &m_ag)
     {
     }
 
-    lilvm::Atom read(const std::string &input_name, const std::string &input)
+    lilvm::Atom read(const std::string &input_name, const std::string &input, lilvm::AtomMap *&debug_map_output)
     {
+        m_ag.clear_debug_info();
         m_par.reset();
         m_tok.reset();
         m_tok.tokenize(input_name, input);
@@ -40,19 +40,9 @@ struct Runtime
             if (!m_par.is_eof())
                 elems->push(m_ag.root());
         }
+        debug_map_output = m_ag.debug_info();
+        m_ag.clear_debug_info();
         return lilvm::Atom(lilvm::T_VEC, elems);
-    }
-
-    std::string debug_info(lilvm::AtomVec *v) { return m_deb_info.pos((void *) v); }
-    std::string debug_info(lilvm::AtomMap *m) { return m_deb_info.pos((void *) m); }
-    std::string debug_info(lilvm::Atom &a)
-    {
-        switch (a.m_type)
-        {
-            case lilvm::T_VEC: return m_deb_info.pos((void *) a.m_d.vec); break;
-            case lilvm::T_MAP: return m_deb_info.pos((void *) a.m_d.map); break;
-            default: return "?:?";
-        }
     }
 
     size_t pot_alive_vecs() { return m_gc.count_potentially_alive_vectors(); }

@@ -148,14 +148,14 @@ class Reader : public lilvm::ExternalGCRoot
         bukalisp::AtomGenerator     m_ag;
         bukalisp::Tokenizer         m_tok;
         bukalisp::Parser            m_par;
-        bukalisp::AtomDebugInfo     m_deb_info;
+        AtomMap                    *m_debug_info;
 
         AtomVec                    *m_root_set;
 
     public:
         Reader()
             : lilvm::ExternalGCRoot(&m_gc),
-              m_ag(&m_gc, &m_deb_info),
+              m_ag(&m_gc),
               m_par(m_tok, &m_ag)
         {
             m_root_set = m_gc.allocate_vector(0);
@@ -166,16 +166,10 @@ class Reader : public lilvm::ExternalGCRoot
         virtual size_t gc_root_count() { return 1; }
         virtual AtomVec *gc_root_get(size_t i) { return m_root_set; }
 
-        std::string debug_info(AtomVec *v) { return m_deb_info.pos((void *) v); }
-        std::string debug_info(AtomMap *m) { return m_deb_info.pos((void *) m); }
         std::string debug_info(Atom &a)
         {
-            switch (a.m_type)
-            {
-                case T_VEC: return m_deb_info.pos((void *) a.m_d.vec); break;
-                case T_MAP: return m_deb_info.pos((void *) a.m_d.map); break;
-                default: return "?:?";
-            }
+            Atom info = m_debug_info->at(Atom(T_INT, a.id()));
+            return info.to_display_str();
         }
 
         size_t pot_alive_vecs() { return m_gc.count_potentially_alive_vectors(); }
@@ -193,9 +187,13 @@ class Reader : public lilvm::ExternalGCRoot
         bool parse(const std::string &codename, const std::string &in)
         {
             m_tok.tokenize(codename, in);
+            m_ag.clear_debug_info();
             m_ag.start();
+            bool r = m_par.parse();
+            m_debug_info = m_ag.debug_info();
+            m_root_set->push(Atom(T_MAP, m_debug_info));
             // m_tok.dump_tokens();
-            return m_par.parse();
+            return r;
         }
 
         Atom &root() { return m_ag.root(); }
@@ -298,10 +296,10 @@ void test_maps()
 
     tc.make_always_alive(m.at(tc.a_kw("b")));
 
-    TEST_EQ(tc.pot_alive_maps(), 2, "alive map count");
+    TEST_EQ(tc.pot_alive_maps(), 3, "alive map count");
     TEST_EQ(tc.pot_alive_vecs(), 3, "alive vec count");
     tc.collect();
-    TEST_EQ(tc.pot_alive_maps(), 1, "alive map count after gc");
+    TEST_EQ(tc.pot_alive_maps(), 2, "alive map count after gc");
     TEST_EQ(tc.pot_alive_vecs(), 2, "alive vec count after gc");
 }
 //---------------------------------------------------------------------------
@@ -317,7 +315,7 @@ void test_symbols_and_keywords()
 
     Atom r = tc.root();
 
-    TEST_EQ(tc.pot_alive_syms(), 3, "some syms alive after parse");
+    TEST_EQ(tc.pot_alive_syms(), 4, "some syms alive after parse");
 
     TEST_EQ(r.at(0).m_type, T_SYM, "sym 1");
     TEST_EQ(r.at(1).m_type, T_SYM, "sym 2");
@@ -334,7 +332,7 @@ void test_symbols_and_keywords()
 
     tc.collect();
 
-    TEST_EQ(tc.pot_alive_syms(), 0, "no syms alive after collect");
+    TEST_EQ(tc.pot_alive_syms(), 1, "no syms except debug sym alive after collect");
 }
 //---------------------------------------------------------------------------
 
@@ -720,10 +718,11 @@ void test_ieval_index_procs()
     TEST_EVAL("($a:       {a: 123 'b 444 \"xxx\" 3.4})",               "123");
     TEST_EVAL("($\"b\"    {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
     TEST_EVAL("($'b       {a: 123 'b 444 \"xxx\" 3.4})",               "444");
-    TEST_EVAL("(let ((key xxx:)) ($key {a: 123 'b 444 xxx: 3.4}))", "3.4");
+    TEST_EVAL("(let ((key xxx:)) ($((lambda () key)) {a: 123 'b 444 xxx: 3.4}))", "3.4");
+    TEST_EVAL("(let ((key xxx:)) (@key               {a: 123 'b 444 xxx: 3.4}))", "3.4");
 
-    TEST_EVAL("(let ((m {})) ($!'x m 123) m)",                              "{x 123}");
-    TEST_EVAL("(let ((m {})) ($!x: m 123) ($!'x m 344) [($x: m) ($'x m)])", "(123 344)");
+    TEST_EVAL("(let ((m {})) ($!x m 123) m)",                               "{x 123}");
+    TEST_EVAL("(let ((m {})) ($!x: m 123) ($!'x m 344) [($x: m) ($'x m) ($x m)])", "(123 344 344)");
 
     TEST_EVAL("(let ((v (list))) (@!0 v 2) (@!10 v 99) v)",
               "(2 nil nil nil nil nil nil nil nil nil 99)");
@@ -767,19 +766,19 @@ void test_ieval_loops()
 
     TEST_EVAL("(let ((l [])) "
               "  (do-each (v [1 2 3]) "
-              "    (push l (* v 2))) "
+              "    (push! l (* v 2))) "
               "  l)",
               "(2 4 6)");
 
     TEST_EVAL("(let ((l [])) "
               "  (do-each (k v [1 2 3]) "
-              "    (push l [k (* v 2)])) "
+              "    (push! l [k (* v 2)])) "
               "  l)",
               "((0 2) (1 4) (2 6))");
 
     TEST_EVAL("(let ((l [])) "
               "  (do-each (k v 123) "
-              "    (push l [k (* v 2)])) "
+              "    (push! l [k (* v 2)])) "
               "  l)",
               "((nil 246))");
 
@@ -802,6 +801,41 @@ void test_ieval_loops()
               "    (if (eqv? k 'z) (set! z v))))) "
               "  [a x z])",
               "(123 999 323)");
+}
+//---------------------------------------------------------------------------
+
+void test_ieval_objs()
+{
+    bukalisp::Runtime rt;
+    bukalisp::Interpreter i(&rt);
+    Atom r;
+
+    TEST_EVAL("(let ((obj { x: (lambda (a) (+ a 10)) }))"
+              "  (.x: obj 20))",
+              "30");
+
+    TEST_EVAL("(let ((obj { x: (lambda (a x) (set! x (* x 2)) (+ a 10 x)) }))"
+              "  (.x: obj 20 12.5))",
+              "55");
+
+    TEST_EVAL("(let ((obj { 'x (lambda (a x) (set! x (* x 2)) (+ a 10 x)) }))"
+              "  (.x obj 20 12.5))",
+              "55");
+
+
+    TEST_EVAL("(let ((obj {}))"
+              "  ($define! obj (x: a x)"
+              "    (set! x (* x 2))"
+              "    (+ a 10 x))"
+              "  (.x: obj 2.5 20))",
+              "52.5");
+
+    TEST_EVAL("(let ((obj {}))"
+              "  ($define! obj (x a x)"
+              "    (set! x (* x 2))"
+              "    (+ a 10 x))"
+              "  (.x obj 2.5 20))",
+              "52.5");
 }
 //---------------------------------------------------------------------------
 
@@ -857,6 +891,7 @@ int main(int argc, char *argv[])
                 RUN_TEST(ieval_lambda);
                 RUN_TEST(ieval_index_procs);
                 RUN_TEST(ieval_loops);
+                RUN_TEST(ieval_objs);
 
                 cout << "TESTS OK" << endl;
             }
@@ -911,13 +946,15 @@ int main(int argc, char *argv[])
             {
                 try
                 {
+                    AtomMap *debug_info = nullptr;
                     Atom input_name(T_STR, rt.m_gc.new_symbol(input_file_path));
                     Atom input_data =
-                        rt.read(input_file_path, slurp_str(input_file_path));
+                        rt.read(input_file_path, slurp_str(input_file_path), debug_info);
 
-                    AtomVec *args = rt.m_gc.allocate_vector(2);
+                    AtomVec *args = rt.m_gc.allocate_vector(3);
                     args->m_data[0] = input_name;
                     args->m_data[1] = input_data;
+                    args->m_data[2] = debug_info ? Atom(T_MAP, debug_info) : Atom();
 
                     cout << "indata: " << input_data.to_write_str() << endl;
 

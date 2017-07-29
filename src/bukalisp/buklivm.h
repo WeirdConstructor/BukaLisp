@@ -21,9 +21,10 @@ class VMException : public std::exception
 //---------------------------------------------------------------------------
 
 #define OP_CODE_DEF(X) \
-    X(NOP,   0)        \
-    X(LOAD,  1)        \
-    X(END,   254)
+    X(NOP,            0) \
+    X(LOAD,           1) \
+    X(LOAD_STATIC,    2) \
+    X(END,          254)
 
 enum OPCODE : uint8_t
 {

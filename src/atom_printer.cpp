@@ -71,6 +71,9 @@ void write_atom(const Atom &a, std::ostream &o)
         case T_PRIM:
             o << "#<primitive:" << ((void *) a.m_d.func) << ">";
             break;
+        case T_CLOS:
+            o << "#<closure:" << ((void *) a.m_d.vec) << ">";
+            break;
         case T_UD:
             {
                 std::string s = a.m_d.ud->as_string();

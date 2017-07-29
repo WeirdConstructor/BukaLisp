@@ -129,6 +129,11 @@ struct Atom
         m_d.i = 0;
     }
 
+    Atom(Type t, int64_t i) : m_type(t)
+    {
+        m_d.i = i;
+    }
+
     Atom(Type t, AtomVec *av) : m_type(t)
     {
         m_d.vec = av;
@@ -182,6 +187,38 @@ struct Atom
     {
         if (m_type != T_MAP) return Atom();
         return m_d.map->at(a);
+    }
+
+    int64_t id()
+    {
+        // TODO use X macro
+        switch (m_type)
+        {
+            case T_INT:
+            case T_DBL:
+            case T_BOOL:
+                return m_d.i;
+
+            case T_STR:
+            case T_KW:
+            case T_SYNTAX:
+            case T_SYM:
+                return (int64_t) m_d.sym;
+
+            case T_PRIM:
+                return (int64_t) m_d.func;
+
+            case T_MAP:
+                return (int64_t) m_d.map;
+
+            case T_UD:
+                return (int64_t) m_d.ud;
+
+            case T_VEC:
+            case T_CLOS:
+            default:
+                return (int64_t) m_d.vec;
+        }
     }
 
     bool operator==(const Atom &other) const

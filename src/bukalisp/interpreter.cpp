@@ -44,6 +44,10 @@ void Interpreter::init()
     DEF_SYNTAX(or);
     DEF_SYNTAX(for);
     DEF_SYNTAX(do-each);
+    DEF_SYNTAX(.);
+    DEF_SYNTAX($define!);
+    DEF_SYNTAX($!);
+    DEF_SYNTAX($);
 
 #define START_PRIM() \
     tmp = Atom(T_PRIM); \
@@ -228,37 +232,37 @@ void Interpreter::init()
     END_PRIM(procedure?);
 
     START_PRIM()
-        REQ_EQ_ARGC($, 2);
-        if (A1.m_type != T_MAP)
-            error("Can apply '$' only to maps", A1);
-        out = A1.at(A0);
-    END_PRIM($);
-
-    START_PRIM()
-        REQ_EQ_ARGC($!, 3);
-        if (A1.m_type != T_MAP)
-            error("Can apply '$!' only to maps", A1);
-        A1.m_d.map->set(A0, A2);
-        out = A2;
-    END_PRIM($!);
-
-    START_PRIM()
         REQ_EQ_ARGC(@, 2);
-        if (A1.m_type != T_VEC)
-            error("Can apply '@' only to lists", A1);
-        int64_t idx = A0.to_int();
-        if (idx < 0) out = Atom();
-        else         out = A1.at((size_t) idx);
+        if (A1.m_type == T_VEC)
+        {
+            int64_t idx = A0.to_int();
+            if (idx < 0) out = Atom();
+            else         out = A1.at((size_t) idx);
+        }
+        else if (A1.m_type == T_MAP)
+        {
+            out = A1.at(A0);
+        }
+        else
+            error("Can apply '@' only to lists or maps", A1);
     END_PRIM(@);
 
     START_PRIM()
         REQ_EQ_ARGC(@!, 3);
-        if (A1.m_type != T_VEC)
-            error("Can apply '@!' only to lists", A1);
-        int64_t i = A0.to_int();
-        if (i >= 0)
-            A1.m_d.vec->set((size_t) A0.to_int(), A2);
-        out = A2;
+        if (A1.m_type == T_VEC)
+        {
+            int64_t i = A0.to_int();
+            if (i >= 0)
+                A1.m_d.vec->set((size_t) A0.to_int(), A2);
+            out = A2;
+        }
+        else if (A1.m_type == T_MAP)
+        {
+            A1.m_d.map->set(A0, A2);
+            out = A2;
+        }
+        else
+            error("Can apply '@!' only to lists or maps", A1);
     END_PRIM(@!);
 
     START_PRIM()
@@ -293,17 +297,17 @@ void Interpreter::init()
     END_PRIM(length)
 
     START_PRIM()
-        REQ_EQ_ARGC(push, 2);
+        REQ_EQ_ARGC(push!, 2);
 
         if (A0.m_type != T_VEC)
             error("Can't push onto something that is not a list", A0);
 
         A0.m_d.vec->push(A1);
         out = A1;
-    END_PRIM(push)
+    END_PRIM(push!)
 
     START_PRIM()
-        REQ_EQ_ARGC(pop, 1);
+        REQ_EQ_ARGC(pop!, 1);
 
         if (A0.m_type != T_VEC)
             error("Can't pop from something that is not a list", A0);
@@ -311,7 +315,7 @@ void Interpreter::init()
         Atom *a = A0.m_d.vec->last();
         if (a) out = *a;
         A0.m_d.vec->pop();
-    END_PRIM(pop)
+    END_PRIM(pop!)
 
     START_PRIM()
         REQ_EQ_ARGC(make-vm-prog, 1);
@@ -373,6 +377,11 @@ void Interpreter::init()
 
         out = args.m_data[args.m_len - 1];
     END_PRIM(displayln)
+
+    START_PRIM()
+        REQ_EQ_ARGC(atom-id, 1);
+        out = Atom(T_INT, A0.id());
+    END_PRIM(atom-id)
 }
 //---------------------------------------------------------------------------
 
@@ -388,12 +397,12 @@ Atom Interpreter::eval_begin(Atom e, AtomVec *av, size_t offs)
 Atom Interpreter::eval_define(Atom e, AtomVec *av)
 {
     if (av->m_len < 3)
-        error("'define' does not contain enough parameters", e);
+        error("'define' does not contain enough arguments", e);
 
     Atom sym = av->m_data[1];
     if (sym.m_type != T_SYM)
         error(
-            "first parameter of 'define' needs to be a symbol",
+            "first argument of 'define' needs to be a symbol",
             sym);
 
     AtomMap *am = m_env_stack->last()->m_d.map;
@@ -406,12 +415,12 @@ Atom Interpreter::eval_define(Atom e, AtomVec *av)
 Atom Interpreter::eval_setM(Atom e, AtomVec *av)
 {
     if (av->m_len < 3)
-        error("'set!' does not contain enough parameters", e);
+        error("'set!' does not contain enough arguments", e);
 
     Atom sym = av->m_data[1];
     if (sym.m_type != T_SYM)
         error(
-            "first parameter of 'set!' needs to be a symbol",
+            "first argument of 'set!' needs to be a symbol",
             sym);
 
     AtomMap *env = nullptr;
@@ -428,10 +437,10 @@ Atom Interpreter::eval_setM(Atom e, AtomVec *av)
 Atom Interpreter::eval_let(Atom e, AtomVec *av)
 {
     if (av->m_len < 2)
-        error("'let' does not contain enough parameters", e);
+        error("'let' does not contain enough arguments", e);
 
     if (av->m_data[1].m_type != T_VEC)
-        error("First parameter for 'let' needs to be a list", e);
+        error("First argument for 'let' needs to be a list", e);
 
     AtomVec *binds = av->m_data[1].m_d.vec;
 
@@ -475,9 +484,11 @@ Atom Interpreter::eval_lambda(Atom e, AtomVec *av)
         error("Argument binding is not a list in 'lambda'", e);
 
     AtomVec *clos_env = m_rt->m_gc.clone_vector(m_env_stack);
-    AtomVec *closure  = m_rt->m_gc.allocate_vector(2);
+    AtomVec *closure  = m_rt->m_gc.allocate_vector(3);
     closure->m_data[0] = Atom(T_VEC, clos_env);
     closure->m_data[1] = Atom(T_VEC, av);
+    closure->m_data[2] =
+        m_debug_pos_map ? Atom(T_MAP, m_debug_pos_map) : Atom();
     return Atom(T_CLOS, closure);
 }
 //---------------------------------------------------------------------------
@@ -485,9 +496,9 @@ Atom Interpreter::eval_lambda(Atom e, AtomVec *av)
 Atom Interpreter::eval_if(Atom e, AtomVec *av)
 {
     if (av->m_len < 3)
-        error("'if' does not contain enough parameters", e);
+        error("'if' does not contain enough arguments", e);
     else if (av->m_len > 4)
-        error("'if' does contain too many parameters", e);
+        error("'if' does contain too many arguments", e);
 
     Atom cond_res = eval(av->m_data[1]);
     if (cond_res.is_false())
@@ -503,7 +514,7 @@ Atom Interpreter::eval_if(Atom e, AtomVec *av)
 Atom Interpreter::eval_when(Atom e, AtomVec *av)
 {
     if (av->m_len < 2)
-        error("'when' does not contain enough parameters", e);
+        error("'when' does not contain enough arguments", e);
 
     Atom cond_res = eval(av->m_data[1]);
     if (cond_res.is_false())
@@ -515,7 +526,7 @@ Atom Interpreter::eval_when(Atom e, AtomVec *av)
 Atom Interpreter::eval_unless(Atom e, AtomVec *av)
 {
     if (av->m_len < 2)
-        error("'unless' does not contain enough parameters", e);
+        error("'unless' does not contain enough arguments", e);
 
     Atom cond_res = eval(av->m_data[1]);
     if (!cond_res.is_false())
@@ -527,7 +538,7 @@ Atom Interpreter::eval_unless(Atom e, AtomVec *av)
 Atom Interpreter::eval_while(Atom e, AtomVec *av)
 {
     if (av->m_len < 2)
-        error("'while' does not contain enough parameters", e);
+        error("'while' does not contain enough arguments", e);
 
     Atom last;
     Atom while_cond = eval(av->m_data[1]);
@@ -579,10 +590,10 @@ Atom Interpreter::eval_or(Atom e, AtomVec *av)
 Atom Interpreter::eval_for(Atom e, AtomVec *av)
 {
     if (av->m_len < 2)
-        error("'for' does not contain enough parameters", e);
+        error("'for' does not contain enough arguments", e);
 
     if (av->m_data[1].m_type != T_VEC)
-        error("'for' first parameter needs to be a list", e);
+        error("'for' first argument needs to be a list", e);
 
     AtomVec *cnt_spec = av->m_data[1].m_d.vec;
     if (cnt_spec->m_len < 3)
@@ -638,10 +649,10 @@ Atom Interpreter::eval_for(Atom e, AtomVec *av)
 Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
 {
     if (av->m_len < 2)
-        error("'do-each' does not contain enough parameters", e);
+        error("'do-each' does not contain enough arguments", e);
 
     if (av->m_data[1].m_type != T_VEC)
-        error("'do-each' first parameter needs to be a list", e);
+        error("'do-each' first argument needs to be a list", e);
 
     AtomVec *bnd_spec = av->m_data[1].m_d.vec;
     if (bnd_spec->m_len < 2)
@@ -724,7 +735,141 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
 }
 //---------------------------------------------------------------------------
 
-Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args)
+Atom Interpreter::eval_field_get(Atom e, AtomVec *av)
+{
+    if (av->m_len < 3)
+    {
+        error("'$' map field needs at least 2 arguments: "
+              "the key and the map", e);
+    }
+
+    Atom key = av->m_data[1];
+    if (   key.m_type != T_SYM
+        && key.m_type != T_STR
+        && key.m_type != T_KW)
+        key = eval(key);
+    AtomVecPush avpk(m_root_stack, key);
+    Atom obj = eval(av->m_data[2]);
+    AtomVecPush avpo(m_root_stack, obj);
+
+    if (obj.m_type != T_MAP)
+        error("Can't set key on non map", obj);
+
+    return obj.at(key);
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_field_set(Atom e, AtomVec *av)
+{
+    if (av->m_len < 4)
+    {
+        error("'$!' map field set needs at least 3 arguments: "
+              "the key, the map and the value", e);
+    }
+
+    Atom key = av->m_data[1];
+    if (   key.m_type != T_SYM
+        && key.m_type != T_STR
+        && key.m_type != T_KW)
+        key = eval(key);
+    AtomVecPush avpk(m_root_stack, key);
+    Atom obj = eval(av->m_data[2]);
+    AtomVecPush avpo(m_root_stack, obj);
+
+    if (obj.m_type != T_MAP)
+        error("Can't set key on non map", obj);
+
+    Atom val = eval(av->m_data[3]);
+    obj.m_d.map->set(key, val);
+
+    return val;
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
+{
+    if (av->m_len < 3)
+    {
+        error("'$define!' method definition needs at least 2 arguments: "
+              "the object and the argument binding definition with the "
+              "method name as first argument", e);
+    }
+
+    Atom obj = eval(av->m_data[1]);
+    AtomVecPush avpo(m_root_stack, obj);
+
+    if (obj.m_type != T_MAP)
+        error("Can't define method on non map atom", obj);
+
+    if (av->m_data[2].m_type != T_VEC)
+        error("Argument binding definition is not a list", av->m_data[2]);
+
+    AtomVec *arg_bind_def = av->m_data[2].m_d.vec;
+
+    Atom key = arg_bind_def->m_data[0];
+    if (   key.m_type != T_SYM
+        && key.m_type != T_STR
+        && key.m_type != T_KW)
+        key = eval(key);
+    AtomVecPush avpk(m_root_stack, key);
+
+    AtomVec *arg_def_av = m_rt->m_gc.allocate_vector(arg_bind_def->m_len - 1);
+    for (size_t i = 1; i < arg_bind_def->m_len; i++)
+    {
+        Atom bind_param = arg_bind_def->m_data[i];
+        if (bind_param.m_type != T_SYM)
+            error("Argument binding parameter name must be a symbol", bind_param);
+        arg_def_av->m_data[i - 1] = bind_param;
+    }
+
+    AtomVec *lambda_av = m_rt->m_gc.allocate_vector(2 + (av->m_len - 3));
+    lambda_av->m_data[1] = Atom(T_VEC, arg_def_av);
+    for (size_t i = 3; i < av->m_len; i++)
+        lambda_av->m_data[i - 1] = av->m_data[i];
+
+    Atom lambda(T_VEC, lambda_av);
+    AtomVecPush(m_root_stack, lambda);
+
+    lambda = eval_lambda(lambda, lambda_av);
+
+    obj.m_d.map->set(key, lambda);
+    return obj;
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_dot_call(Atom e, AtomVec *av)
+{
+    if (av->m_len < 3)
+    {
+        error("'.' call operator requires at least 2 arguments: "
+              "the method name and the object", e);
+    }
+
+    Atom key = av->m_data[1];
+    if (   key.m_type != T_SYM
+        && key.m_type != T_STR
+        && key.m_type != T_KW)
+        key = eval(key);
+    AtomVecPush avpk(m_root_stack, key);
+    Atom obj = eval(av->m_data[2]);
+    AtomVecPush avpo(m_root_stack, obj);
+
+    Atom method = obj.at(key);
+    AtomVecPush avpm(m_root_stack, method);
+    if (   method.m_type != T_PRIM
+        && method.m_type != T_CLOS
+        && method.m_type != T_UD)
+    {
+        error("'.' method call of '"
+              + key.to_write_str()
+              + "' resolves to non callable value", method);
+    }
+
+    return call(method, av, true, 2);
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
 {
     Atom ret;
 
@@ -733,8 +878,8 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args)
         AtomVec *ev_av = m_rt->m_gc.allocate_vector(av->m_len - 1);
         AtomVecPush avp(m_root_stack, Atom(T_VEC, ev_av));
 
-        for (size_t i = 1; i < av->m_len; i++)
-            ev_av->m_data[i - 1] = eval(av->m_data[i]);
+        for (size_t i = 1 + arg_offs; i < av->m_len; i++)
+            ev_av->m_data[i - (1 + arg_offs)] = eval(av->m_data[i]);
 
         av = ev_av;
     }
@@ -756,6 +901,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args)
         // restore old m_env_stack
         Atom env         = func.m_d.vec->m_data[0];
         Atom lambda_form = func.m_d.vec->m_data[1];
+        Atom debug_pos   = func.m_d.vec->m_data[2];
 
         AtomVec *old_env = m_env_stack;
         AtomVecPush avp_old_env(m_root_stack, Atom(T_VEC, old_env));
@@ -785,7 +931,21 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args)
                         Atom(T_NIL));
             }
 
-            ret = eval_begin(lambda_form, lambda_form.m_d.vec, 2);
+            // XXX: Old m_debug_pos_map and the closure keep alive
+            //      the AtomMaps.
+            AtomMap *old_debug_pos_map = m_debug_pos_map;
+            m_debug_pos_map =
+                debug_pos.m_type == T_MAP ? debug_pos.m_d.map : nullptr;
+            try
+            {
+                ret = eval_begin(lambda_form, lambda_form.m_d.vec, 2);
+            }
+            catch (...)
+            {
+                m_debug_pos_map = old_debug_pos_map;
+                throw;
+            }
+            m_debug_pos_map = old_debug_pos_map;
         }
         m_env_stack = old_env;
     }
@@ -797,6 +957,15 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args)
         error("Non callable function element in list", func);
 
     return ret;
+}
+//---------------------------------------------------------------------------
+
+void Interpreter::set_debug_pos(Atom &a)
+{
+    if (!m_debug_pos_map)
+        m_debug_pos = "";
+    Atom deb_info = m_debug_pos_map->at(Atom(T_INT, a.id()));
+    m_debug_pos = deb_info.to_display_str();
 }
 //---------------------------------------------------------------------------
 
@@ -823,6 +992,8 @@ Atom Interpreter::eval(Atom e)
 
         case T_MAP:
         {
+            set_debug_pos(e);
+
             AtomMap *nm = m_rt->m_gc.allocate_map();
             ret = Atom(T_MAP, nm);
             AtomVecPush avp(m_root_stack, ret);
@@ -847,8 +1018,9 @@ Atom Interpreter::eval(Atom e)
 
         case T_VEC:
         {
+            set_debug_pos(e);
+
             AtomVec *av = e.m_d.vec;
-            m_debug_pos = m_rt->debug_info(av);
 
             if (av->m_len <= 0)
                 error("Can't evaluate empty list of args", e);
@@ -860,20 +1032,24 @@ Atom Interpreter::eval(Atom e)
             {
                 // TODO: optimize by caching symbol pointers:
                 std::string s = first.m_d.sym->m_str;
-                if      (s == "begin")   ret = eval_begin(e, av, 1);
-                else if (s == "define")  ret = eval_define(e, av);
-                else if (s == "set!")    ret = eval_setM(e, av);
-                else if (s == "let")     ret = eval_let(e, av);
-                else if (s == "quote")   ret = av->m_data[1];
-                else if (s == "lambda")  ret = eval_lambda(e, av);
-                else if (s == "if")      ret = eval_if(e, av);
-                else if (s == "when")    ret = eval_when(e, av);
-                else if (s == "unless")  ret = eval_unless(e, av);
-                else if (s == "while")   ret = eval_while(e, av);
-                else if (s == "and")     ret = eval_and(e, av);
-                else if (s == "or")      ret = eval_or(e, av);
-                else if (s == "for")     ret = eval_for(e, av);
-                else if (s == "do-each") ret = eval_do_each(e, av);
+                if      (s == "begin")    ret = eval_begin(e, av, 1);
+                else if (s == "define")   ret = eval_define(e, av);
+                else if (s == "set!")     ret = eval_setM(e, av);
+                else if (s == "let")      ret = eval_let(e, av);
+                else if (s == "quote")    ret = av->m_data[1];
+                else if (s == "lambda")   ret = eval_lambda(e, av);
+                else if (s == "if")       ret = eval_if(e, av);
+                else if (s == "when")     ret = eval_when(e, av);
+                else if (s == "unless")   ret = eval_unless(e, av);
+                else if (s == "while")    ret = eval_while(e, av);
+                else if (s == "and")      ret = eval_and(e, av);
+                else if (s == "or")       ret = eval_or(e, av);
+                else if (s == "for")      ret = eval_for(e, av);
+                else if (s == "do-each")  ret = eval_do_each(e, av);
+                else if (s == ".")        ret = eval_dot_call(e, av);
+                else if (s == "$")        ret = eval_field_get(e, av);
+                else if (s == "$!")       ret = eval_field_set(e, av);
+                else if (s == "$define!") ret = eval_meth_def(e, av);
                 break;
             }
             else if (first.m_type == T_PRIM)
@@ -901,7 +1077,7 @@ Atom Interpreter::eval(Atom e)
     m_rt->m_gc.collect();
 
     if (m_trace)
-        cout << "<< eval: " << write_atom(e) << endl;
+        cout << "<< eval: " << write_atom(e) << " => " << ret.to_write_str() << endl;
     return ret;
 }
 //---------------------------------------------------------------------------
