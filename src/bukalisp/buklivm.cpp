@@ -32,9 +32,14 @@ void parse_op_desc(INST &instr, Atom &desc)
 {
     if (desc.m_type != T_VEC)
         return;
+
     AtomVec *av = desc.m_d.vec;
     if (av->m_len < 3)
+    {
+        cout << "Too few elements in op desc (3 needed): "
+             << desc.to_write_str() << endl;
         return;
+    }
 
     std::string op_name;
     Atom op_name_s = av->m_data[0];
@@ -49,8 +54,13 @@ void parse_op_desc(INST &instr, Atom &desc)
 #define X(name, code) else if (op_name == #name) op_code = code;
     if (op_name == "***") op_code = 0;
     OP_CODE_DEF(X)
+    else
+    {
+        cout << "unknown op name: " << op_name << endl;
+    }
 #undef X
 
+    cout << "op code: " << op_code << endl;
     instr.op = op_code;
     instr.o  = (uint16_t) av->m_data[1].to_int();
     if (av->m_len == 4)

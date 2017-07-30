@@ -1,56 +1,103 @@
 (define x 10)
+;----------------------------------------------------------------------------
+
+(define make-code-pad-object
+  (lambda (out-pad)
+    (let ((self { code: [] }))
+
+     ($define! self (to-vm-prog-code)
+       ($code: self))
+
+     ($define! self (op-load static out-idx)
+       (let ((idx (.add-static-data out-pad static)))
+         (push! ($code: self) [LOAD_STATIC: out-idx idx])))
+     )))
+;----------------------------------------------------------------------------
 
 (define make-output-pad
  (lambda ()
-   (let ((self { code: []
-                 pad:  [] }))
-
-     ($define! self (op-load static)
-       (let ((idx (.add-static-data self static)))
-         (push! ($code: self) [LOAD_STATIC: idx])))
+   (let ((self { pad: [] }))
 
      ($define! self (add-static-data data)
        (push! ($pad: self) data)
        (- (length ($pad: self)) 1))
 
+     ($define! self (make-code-pad)
+        (make-code-pad-object self))
+
+     ($define! self (make-vm-program code-pad)
+        (make-vm-prog [($pad:  self)
+                       (.to-vm-prog-code code-pad)
+                       {}]))
+
      self)))
+;----------------------------------------------------------------------------
 
 (define dispatch
  (lambda (key m arg)
    (if (eqv? (@key m) nil)
      (error "unhandled dispatch, for key" key m))
+
    ((@key m) arg)))
+;----------------------------------------------------------------------------
 
 (define type-dispatch
- (lambda (atom m arg)
+ (lambda (atom m arg arg2)
    (if (eqv? (@(type atom) m) nil)
      (error "unhandled dispatch, for type " (type atom) m))
-   ((@(type atom) m) atom arg)))
+
+   ((@(type atom) m) atom arg arg2)))
+;----------------------------------------------------------------------------
 
 (define compile-atom-dispatch-map
-  { 'nil      (lambda (atom self) (displayln "GOT NIL!"))
-    'exact    (lambda (atom self) (displayln "GOT NUM " atom))
-    'keyword  (lambda (atom self) (displayln "GOT KW " atom))
-    'list     (lambda (atom self)
-                (displayln "GOT LIST")
-                (do-each (a atom)
-                  (.compile-atom self a)))
-    'map      (lambda (atom self)
-                (displayln "GOT MAP")
-                (do-each (k v atom)
-                  (.compile-atom self k)
-                  (.compile-atom self v)))})
+ { 'nil      (lambda (atom self code-pad) (displayln "GOT NIL!"))
+   'exact    (lambda (atom self code-pad)
+               (.op-load code-pad atom 0))
+   'inexact  (lambda (atom self code-pad) (displayln "GOT DNUM "   atom))
+   'keyword  (lambda (atom self code-pad) (displayln "GOT KW "     atom))
+   'symbol   (lambda (atom self code-pad) (displayln "GOT SYM "    atom))
+   'boolean  (lambda (atom self code-pad) (displayln "GOT BOOL "   atom))
+   'string   (lambda (atom self code-pad) (displayln "GOT STRING " atom))
+   'list     (lambda (atom self code-pad)
+               (displayln "GOT LIST")
+               (do-each (a atom)
+                 (.compile-atom self a code-pad)))
+   'map      (lambda (atom self code-pad)
+               (displayln "GOT MAP")
+               (do-each (k v atom)
+                 (.compile-atom self k code-pad)
+                 (.compile-atom self v code-pad)))})
+;----------------------------------------------------------------------------
 
 (define hook-compiler-methods
  (lambda (self)
-   ($define! self (compile-atom atom)
-     (type-dispatch atom compile-atom-dispatch-map self))))
+   ($!env-stack: self [])
+
+   ($define! self (push-env)
+     (push! ($env-stack: self) {}))
+
+   ($define! self (pop-env)
+     (pop! ($env-stack: self)))
+
+   ($define! self (compile-atom atom code-pad)
+     (type-dispatch atom compile-atom-dispatch-map self code-pad))))
+;----------------------------------------------------------------------------
 
 (lambda (name data debug_info)
   (let ((compiler (make-output-pad)))
     (hook-compiler-methods compiler)
-    (do-each (top-level-atom data)
-      (.compile-atom compiler top-level-atom))))
+
+    (let ((code-pad (.make-code-pad compiler)))
+      (do-each (top-level-atom data)
+        (.compile-atom compiler top-level-atom code-pad))
+
+      (displayln CODE: code-pad)
+      (displayln PAD: ($pad: compiler))
+
+      (let ((prog (.make-vm-program compiler code-pad)))
+        (displayln prog)
+        (run-vm-prog prog)))))
+;----------------------------------------------------------------------------
 
 ;  (let ((x (make-output-pad)))
 ;    (displayln X: (.add-static-data x "xxx"))
