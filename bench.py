@@ -2,7 +2,7 @@ from timeit import default_timer as timer
 
 start = timer()
 # ...
-x = 100000000
+x = 1000000
 cnt = 0
 while (x > 0):
     x -= 1

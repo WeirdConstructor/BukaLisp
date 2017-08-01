@@ -1,5 +1,6 @@
 #include "interpreter.h"
 #include "buklivm.h"
+#include <chrono>
 
 using namespace std;
 using namespace lilvm;
@@ -48,6 +49,7 @@ void Interpreter::init()
     DEF_SYNTAX($define!);
     DEF_SYNTAX($!);
     DEF_SYNTAX($);
+    DEF_SYNTAX(displayln-time);
 
 #define START_PRIM() \
     tmp = Atom(T_PRIM); \
@@ -1050,6 +1052,23 @@ Atom Interpreter::eval(Atom e)
                 else if (s == "$")        ret = eval_field_get(e, av);
                 else if (s == "$!")       ret = eval_field_set(e, av);
                 else if (s == "$define!") ret = eval_meth_def(e, av);
+                else if (s == "displayln-time")
+                {
+                    if (av->m_len != 2)
+                        error("'displayln-time' needs exactly 1 parameter", e);
+
+                    using namespace std::chrono;
+
+                    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+                    ret = eval(av->m_data[1]);
+                    high_resolution_clock::time_point t2 = high_resolution_clock::now();
+                    duration<double> time_span
+                        = duration_cast<duration<double>>(t2 - t1);
+                    std::cout << "eval run time: "
+                              << (time_span.count() * 1000)
+                              << " ms" << std::endl;
+                              //, gc runs=" << gc_run_cnt << std::endl;
+                }
                 break;
             }
             else if (first.m_type == T_PRIM)
