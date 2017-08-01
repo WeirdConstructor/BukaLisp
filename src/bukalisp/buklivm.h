@@ -24,6 +24,9 @@ class VMException : public std::exception
     X(NOP,            0) \
     X(LOAD,           1) \
     X(LOAD_STATIC,    2) \
+    X(PUSH_ENV,       3) \
+    X(POP_ENV,        4) \
+    X(DUMP_ENV_STACK, 5) \
     X(END,          254)
 
 enum OPCODE : uint8_t
@@ -90,6 +93,13 @@ class PROG : public lilvm::UserData
             m_instructions[instr_len].op = OP_END;
         }
 
+        lilvm::Atom data_at(size_t idx)
+        {
+            if (idx >= m_atom_data_len)
+                return lilvm::Atom();
+            return m_atom_data[idx];
+        }
+
         void set_data_from(lilvm::AtomVec *av)
         {
             for (size_t i = 0; i < av->m_len && i < m_atom_data_len; i++)
@@ -130,16 +140,44 @@ class PROG : public lilvm::UserData
 lilvm::Atom make_prog(lilvm::Atom prog_info);
 //---------------------------------------------------------------------------
 
-class VM
+class VM : public lilvm::ExternalGCRoot
 {
     private:
-        Runtime     *m_rt;
-        INST        *m_pc;
+        Runtime          *m_rt;
+        INST             *m_pc;
+        lilvm::AtomVec   *m_root_stack;
+        lilvm::AtomVec   *m_env_stack;
+        lilvm::AtomVec   *m_cont_stack;
 
     public:
-        VM(Runtime *rt) : m_rt(rt), m_pc(nullptr) { }
+        VM(Runtime *rt)
+            : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_pc(nullptr)
+        {
+            m_rt->m_gc.add_external_root(this);
+            m_root_stack = rt->m_gc.allocate_vector(0);
+            m_env_stack  = rt->m_gc.allocate_vector(0);
+            m_cont_stack = rt->m_gc.allocate_vector(0);
+        }
 
-        lilvm::Atom eval(PROG &p, lilvm::AtomVec *args = nullptr);
+        virtual size_t gc_root_count() { return 3; }
+
+        virtual lilvm::AtomVec *gc_root_get(size_t idx)
+        {
+            switch (idx)
+            {
+                case 0:  return m_root_stack;
+                case 1:  return m_env_stack;
+                case 2:  return m_cont_stack;
+                default: return m_cont_stack;
+            }
+        }
+
+        virtual ~VM()
+        {
+            m_rt->m_gc.remove_external_root(this);
+        }
+
+        lilvm::Atom eval(lilvm::Atom at_ud, lilvm::AtomVec *args = nullptr);
 };
 //---------------------------------------------------------------------------
 

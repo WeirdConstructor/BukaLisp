@@ -8,6 +8,15 @@
      ($define! self (to-vm-prog-code)
        ($code: self))
 
+     ($define! self (op-push-env size)
+       (push! ($code: self) [PUSH_ENV: 0 size]))
+
+     ($define! self (op-pop-env)
+       (push! ($code: self) [POP_ENV: 0 0]))
+
+     ($define! self (op-dump-env-stack)
+       (push! ($code: self) [DUMP_ENV_STACK: 0 0]))
+
      ($define! self (op-load static out-idx)
        (let ((idx (.add-static-data out-pad static)))
          (push! ($code: self) [LOAD_STATIC: out-idx idx])))
@@ -88,8 +97,11 @@
     (hook-compiler-methods compiler)
 
     (let ((code-pad (.make-code-pad compiler)))
+      (.op-push-env code-pad 0)
       (do-each (top-level-atom data)
         (.compile-atom compiler top-level-atom code-pad))
+      (.op-dump-env-stack code-pad)
+      (.op-pop-env code-pad)
 
       (displayln CODE: code-pad)
       (displayln PAD: ($pad: compiler))

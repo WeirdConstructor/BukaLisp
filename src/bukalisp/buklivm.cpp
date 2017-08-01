@@ -107,16 +107,66 @@ lilvm::Atom make_prog(lilvm::Atom prog_info)
 }
 //---------------------------------------------------------------------------
 
-lilvm::Atom VM::eval(PROG &p, AtomVec *args)
+lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 {
     Atom ret;
 
+    if (at_ud.m_type != T_UD || at_ud.m_d.ud->type() != "VM-PROG")
+    {
+//        error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
+        cout << "VM-ERROR: Bad input type to run-vm-prog, expected VM-PROG."
+             << at_ud.to_write_str() << endl;
+        return Atom();
+    }
+
+    AtomVecPush avpvmprog(m_root_stack, at_ud);
+    AtomVecPush avpvmargs(m_root_stack, Atom(T_VEC, args));
+
+    PROG &p = *(dynamic_cast<PROG*>(at_ud.m_d.ud));
+
     m_pc = &(p.m_instructions[0]);
+
+    AtomVec *cur_env = args;
 
     while (m_pc->op != OP_END)
     {
         switch (m_pc->op)
         {
+            case OP_DUMP_ENV_STACK:
+            {
+                for (size_t i = m_env_stack->m_len; i > 0; i--)
+                {
+                    cout << "ENV@" << (i - 1) << ": ";
+                    AtomVec *env = m_env_stack->at(i - 1).m_d.vec;
+                    for (size_t j = 0; j < env->m_len; j++)
+                        cout << "[" << j << "=" << env->at(j).to_write_str() << "] ";
+                    cout << endl;
+                }
+                break;
+            }
+
+            case OP_LOAD_STATIC:
+            {
+                cur_env->set(m_pc->o, p.data_at(m_pc->_.x.a));
+                break;
+            }
+
+            case OP_PUSH_ENV:
+            {
+                m_env_stack->push(
+                    Atom(T_VEC, cur_env = m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
+                break;
+            }
+
+            case OP_POP_ENV:
+            {
+                m_env_stack->pop();
+                Atom *l = m_env_stack->last();
+                if (l) cur_env = l->m_d.vec;
+                else   cur_env = args;
+                break;
+            }
+
             default:
                 throw VMException("Unknown VM opcode: " + to_string(m_pc->op));
         }

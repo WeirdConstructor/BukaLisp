@@ -333,7 +333,7 @@ void Interpreter::init()
         if (!m_vm)
             error("Can't execute VM progs, no VM instance loaded into interpreter", A0);
 
-        out = m_vm->eval(*(dynamic_cast<PROG*>(A0.m_d.ud)), &args);
+        out = m_vm->eval(A0, &args);
     END_PRIM(run-vm-prog)
 
     START_PRIM()
@@ -951,7 +951,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
     }
     else if (m_vm && func == T_UD && func.m_d.ud->type() == "VM-PROG")
     {
-        ret = m_vm->eval(*(dynamic_cast<PROG*>(func.m_d.ud)), av);
+        ret = m_vm->eval(func, av);
     }
     else
         error("Non callable function element in list", func);
