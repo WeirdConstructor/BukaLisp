@@ -278,9 +278,10 @@ class AtomException : public std::exception
 //---------------------------------------------------------------------------
 
 template<typename T>
-T *gc_list_sweep(T *list, uint8_t current_color, std::function<void(T *)> free_func)
+T *gc_list_sweep(T *list, size_t &num_alive, uint8_t current_color, std::function<void(T *)> free_func)
 {
     T *alive_list = nullptr;
+    num_alive = 0;
 
     while (list)
     {
@@ -295,6 +296,7 @@ T *gc_list_sweep(T *list, uint8_t current_color, std::function<void(T *)> free_f
 
         cur->m_gc_next = alive_list;
         alive_list = cur;
+        num_alive++;
     }
 
     return alive_list;
@@ -358,6 +360,15 @@ class GC
         AtomVec     *m_medium_vectors;
         size_t       m_num_small_vectors;
         size_t       m_num_medium_vectors;
+
+        size_t       m_num_alive_syms;
+        size_t       m_num_alive_vectors;
+        size_t       m_num_alive_maps;
+        size_t       m_num_alive_userdata;
+        size_t       m_num_new_syms;
+        size_t       m_num_new_vectors;
+        size_t       m_num_new_maps;
+        size_t       m_num_new_userdata;
 
         void allocate_new_vectors(AtomVec *&list, size_t &num, size_t len)
         {
@@ -445,6 +456,7 @@ class GC
             m_syms =
                 gc_list_sweep<Sym>(
                     m_syms,
+                    m_num_alive_syms,
                     m_current_color,
                     [this](Sym *cur)
                     {
@@ -458,12 +470,14 @@ class GC
             m_maps =
                 gc_list_sweep<AtomMap>(
                     m_maps,
+                    m_num_alive_maps,
                     m_current_color,
                     [this](AtomMap *cur) { delete cur; });
 
             m_userdata =
                 gc_list_sweep<UserData>(
                     m_userdata,
+                    m_num_alive_userdata,
                     m_current_color,
                     [this](UserData *cur)
                     {
@@ -474,6 +488,7 @@ class GC
             m_vectors =
                 gc_list_sweep<AtomVec>(
                     m_vectors,
+                    m_num_alive_vectors,
                     m_current_color,
                     [this](AtomVec *cur)
                     {
@@ -506,6 +521,7 @@ class GC
             new_sym->m_gc_color = m_current_color;
             new_sym->m_gc_next  = m_syms;
             m_syms              = new_sym;
+            m_num_new_syms++;
             return new_sym;
         }
 
@@ -519,7 +535,15 @@ class GC
               m_small_vectors(nullptr),
               m_medium_vectors(nullptr),
               m_num_small_vectors(0),
-              m_num_medium_vectors(0)
+              m_num_medium_vectors(0),
+              m_num_alive_syms(0),
+              m_num_alive_userdata(0),
+              m_num_alive_maps(0),
+              m_num_alive_vectors(0),
+              m_num_new_syms(0),
+              m_num_new_userdata(0),
+              m_num_new_vectors(0),
+              m_num_new_maps(0)
         {
         }
 
@@ -543,6 +567,7 @@ class GC
             ud->m_gc_next = m_userdata;
             m_userdata = ud;
             ud->mark(this, m_current_color);
+            m_num_new_userdata++;
         }
 
         void mark_atom(const Atom &at)
@@ -573,6 +598,18 @@ class GC
             }
         }
 
+        void collect_maybe()
+        {
+            if (   (m_num_new_maps    > (m_num_alive_maps    / 2))
+                || (m_num_new_vectors > (m_num_alive_vectors / 2))
+                || (m_num_new_syms    > (m_num_alive_syms    / 2)))
+            {
+//                std::cout << "GC collect at " << m_num_new_vectors
+//                          << " <=> " << m_num_alive_vectors << std::endl;
+                collect();
+            }
+        }
+
         void collect()
         {
 //            std::cout << "**** gc collect start **** " << AtomVec::s_alloc_count
@@ -582,6 +619,11 @@ class GC
 //                << std::endl;
             mark();
             sweep();
+
+            m_num_new_userdata = 0;
+            m_num_new_maps     = 0;
+            m_num_new_syms     = 0;
+            m_num_new_vectors  = 0;
 //            std::cout << "**** gc collect end **** " << AtomVec::s_alloc_count
 //                << ",v:" << count_potentially_alive_vectors()
 //                << ",m:" << count_potentially_alive_maps()
@@ -610,6 +652,7 @@ class GC
             new_map->m_gc_color = m_current_color;
             new_map->m_gc_next  = m_maps;
             m_maps              = new_map;
+            m_num_new_maps++;
 
             return new_map;
         }
@@ -650,6 +693,7 @@ class GC
 
             new_vec->m_gc_next = m_vectors;
             m_vectors          = new_vec;
+            m_num_new_vectors++;
 
             return new_vec;
         }
@@ -685,8 +729,11 @@ class GC
 
         ~GC()
         {
+            size_t dummy;
+
             gc_list_sweep<Sym>(
                 m_syms,
+                dummy,
                 GC_COLOR_DELETE,
                 [](Sym *cur) {
 //                    std::cout << "DELSYM[" << cur->m_str << "]" << std::endl;
@@ -694,26 +741,31 @@ class GC
 
             gc_list_sweep<AtomVec>(
                 m_medium_vectors,
+                dummy,
                 GC_COLOR_DELETE,
                 [this](AtomVec *cur) { delete cur; });
 
             gc_list_sweep<AtomVec>(
                 m_small_vectors,
+                dummy,
                 GC_COLOR_DELETE,
                 [this](AtomVec *cur) { delete cur; });
 
             gc_list_sweep<AtomVec>(
                 m_vectors,
+                dummy,
                 GC_COLOR_DELETE,
                 [this](AtomVec *cur) { delete cur; });
 
             gc_list_sweep<AtomMap>(
                 m_maps,
+                dummy,
                 GC_COLOR_DELETE,
                 [this](AtomMap *cur) { delete cur; });
 
             gc_list_sweep<UserData>(
                 m_userdata,
+                dummy,
                 GC_COLOR_DELETE,
                 [this](UserData *cur)
                 {

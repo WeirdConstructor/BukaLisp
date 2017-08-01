@@ -1093,7 +1093,10 @@ Atom Interpreter::eval(Atom e)
     }
 
     AtomVecPush avr(m_root_stack, ret);
-    m_rt->m_gc.collect();
+    if (m_force_always_gc)
+        m_rt->m_gc.collect();
+    else
+        m_rt->m_gc.collect_maybe();
 
     if (m_trace)
         cout << "<< eval: " << write_atom(e) << " => " << ret.to_write_str() << endl;

@@ -32,13 +32,15 @@ class Interpreter : public lilvm::ExternalGCRoot
         std::vector<lilvm::Atom::PrimFunc *> m_primitives;
 
         bool            m_trace;
+        bool            m_force_always_gc;
 
         void set_debug_pos(lilvm::Atom &a);
 
     public:
         Interpreter(Runtime *rt, VM *vm = nullptr)
             : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_env_stack(nullptr),
-              m_trace(false), m_vm(vm), m_debug_pos_map(nullptr)
+              m_trace(false), m_vm(vm), m_debug_pos_map(nullptr),
+              m_force_always_gc(true)
         {
             init();
         }
@@ -62,6 +64,7 @@ class Interpreter : public lilvm::ExternalGCRoot
         void init();
 
         void set_trace(bool e) { m_trace = e; }
+        void set_force_always_gc(bool e) { m_force_always_gc = e; }
 
         lilvm::Atom lookup(lilvm::Sym *var, lilvm::AtomMap *&env)
         {

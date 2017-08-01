@@ -849,8 +849,10 @@ int main(int argc, char *argv[])
         std::string input_file_path;
         std::string last_debug_sym;
 
-        bool tests     = false;
-        bool interpret = false;
+        bool tests      = false;
+        bool interpret  = false;
+        bool i_trace    = false;
+        bool i_force_gc = false;
 
         for (int i = 1; i < argc; i++)
         {
@@ -859,6 +861,10 @@ int main(int argc, char *argv[])
                 tests = true;
             else if (arg == "-i")
                 interpret = true;
+            else if (arg == "-g")
+                i_force_gc = true;
+            else if (arg == "-t")
+                i_trace = true;
             else if (arg[0] == '-')
             {
                 std::cerr << "unknown option: " << argv[i] << std::endl;
@@ -907,6 +913,8 @@ int main(int argc, char *argv[])
                 bukalisp::Runtime rt;
                 bukalisp::VM vm(&rt);
                 bukalisp::Interpreter i(&rt, &vm);
+                i.set_trace(i_trace);
+                i.set_force_always_gc(i_force_gc);
                 Atom r = i.eval(input_file_path, slurp_str(input_file_path));
                 std::string rs = write_atom(r);
                 cout << rs << endl;
