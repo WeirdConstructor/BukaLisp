@@ -27,6 +27,17 @@ class VMException : public std::exception
     X(PUSH_ENV,       3) \
     X(POP_ENV,        4) \
     X(DUMP_ENV_STACK, 5) \
+    X(SET_RETURN,     6) \
+    X(ADD,          100) \
+    X(SUB,          101) \
+    X(MUL,          102) \
+    X(DIV,          103) \
+    X(LT,           104) \
+    X(GT,           105) \
+    X(LE,           106) \
+    X(GE,           107) \
+    X(EQ,           108) \
+    X(NOT,          109) \
     X(END,          254)
 
 enum OPCODE : uint8_t
@@ -93,12 +104,8 @@ class PROG : public lilvm::UserData
             m_instructions[instr_len].op = OP_END;
         }
 
-        lilvm::Atom data_at(size_t idx)
-        {
-            if (idx >= m_atom_data_len)
-                return lilvm::Atom();
-            return m_atom_data[idx];
-        }
+        size_t data_array_len() { return m_atom_data_len; }
+        lilvm::Atom *data_array() { return m_atom_data; }
 
         void set_data_from(lilvm::AtomVec *av)
         {

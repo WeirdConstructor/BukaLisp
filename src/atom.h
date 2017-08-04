@@ -500,6 +500,10 @@ class GC
                         }
                         else if (cur->m_alloc > GC_SMALL_VEC_LEN)
                         {
+                            // FIXME: We need to limit the number of medium sized
+                            //        vectors. or else small vectors will just
+                            //        end up here. the problem is, that then
+                            //        new small vectors will be allocated.
                             cur->m_gc_next   = m_medium_vectors;
                             cur->m_gc_color  = GC_COLOR_FREE;
                             cur->m_len       = 0;

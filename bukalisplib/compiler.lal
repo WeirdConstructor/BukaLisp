@@ -17,6 +17,9 @@
      ($define! self (op-dump-env-stack)
        (push! ($code: self) [DUMP_ENV_STACK: 0 0]))
 
+     ($define! self (op-set-return idx)
+       (push! ($code: self) [SET_RETURN: 0 idx]))
+
      ($define! self (op-load static out-idx)
        (let ((idx (.add-static-data out-pad static)))
          (push! ($code: self) [LOAD_STATIC: out-idx idx])))
@@ -34,7 +37,7 @@
      ($define! self (make-code-pad)
         (make-code-pad-object self))
 
-     ($define! self (make-vm-program code-pad)
+     ($define! self (to-vm-prog code-pad)
         (make-vm-prog [($pad:  self)
                        (.to-vm-prog-code code-pad)
                        {}]))
@@ -51,31 +54,31 @@
 ;----------------------------------------------------------------------------
 
 (define type-dispatch
- (lambda (atom m arg arg2)
+ (lambda (atom m arg arg2 arg3)
    (if (eqv? (@(type atom) m) nil)
      (error "unhandled dispatch, for type " (type atom) m))
 
-   ((@(type atom) m) atom arg arg2)))
+   ((@(type atom) m) atom arg arg2 arg3)))
 ;----------------------------------------------------------------------------
 
 (define compile-atom-dispatch-map
- { 'nil      (lambda (atom self code-pad) (displayln "GOT NIL!"))
-   'exact    (lambda (atom self code-pad)
-               (.op-load code-pad atom 0))
-   'inexact  (lambda (atom self code-pad) (displayln "GOT DNUM "   atom))
-   'keyword  (lambda (atom self code-pad) (displayln "GOT KW "     atom))
-   'symbol   (lambda (atom self code-pad) (displayln "GOT SYM "    atom))
-   'boolean  (lambda (atom self code-pad) (displayln "GOT BOOL "   atom))
-   'string   (lambda (atom self code-pad) (displayln "GOT STRING " atom))
-   'list     (lambda (atom self code-pad)
+ { 'nil      (lambda (atom self code-pad out-idx) (displayln "GOT NIL!"))
+   'exact    (lambda (atom self code-pad out-idx)
+               (.op-load code-pad atom out-idx))
+   'inexact  (lambda (atom self code-pad out-idx) (displayln "GOT DNUM "   atom))
+   'keyword  (lambda (atom self code-pad out-idx) (displayln "GOT KW "     atom))
+   'symbol   (lambda (atom self code-pad out-idx) (displayln "GOT SYM "    atom))
+   'boolean  (lambda (atom self code-pad out-idx) (displayln "GOT BOOL "   atom))
+   'string   (lambda (atom self code-pad out-idx) (displayln "GOT STRING " atom))
+   'list     (lambda (atom self code-pad out-idx)
                (displayln "GOT LIST")
                (do-each (a atom)
-                 (.compile-atom self a code-pad)))
-   'map      (lambda (atom self code-pad)
+                 (.compile-atom self a code-pad out-idx)))
+   'map      (lambda (atom self code-pad out-idx)
                (displayln "GOT MAP")
                (do-each (k v atom)
-                 (.compile-atom self k code-pad)
-                 (.compile-atom self v code-pad)))})
+                 (.compile-atom self k code-pad out-idx)
+                 (.compile-atom self v code-pad out-idx)))})
 ;----------------------------------------------------------------------------
 
 (define hook-compiler-methods
@@ -88,8 +91,8 @@
    ($define! self (pop-env)
      (pop! ($env-stack: self)))
 
-   ($define! self (compile-atom atom code-pad)
-     (type-dispatch atom compile-atom-dispatch-map self code-pad))))
+   ($define! self (compile-atom atom code-pad out-idx)
+     (type-dispatch atom compile-atom-dispatch-map self code-pad out-idx))))
 ;----------------------------------------------------------------------------
 
 (lambda (name data debug_info)
@@ -97,18 +100,20 @@
     (hook-compiler-methods compiler)
 
     (let ((code-pad (.make-code-pad compiler)))
-      (.op-push-env code-pad 0)
+      ; TODO: we need to calculate the actual sized pad we need in future!
+      (.op-push-env code-pad 1)
       (do-each (top-level-atom data)
-        (.compile-atom compiler top-level-atom code-pad))
+        (.compile-atom compiler top-level-atom code-pad 0))
       (.op-dump-env-stack code-pad)
+      (.op-set-return code-pad 0)
       (.op-pop-env code-pad)
 
       (displayln CODE: code-pad)
       (displayln PAD: ($pad: compiler))
 
-      (let ((prog (.make-vm-program compiler code-pad)))
+      (let ((prog (.to-vm-prog compiler code-pad)))
         (displayln prog)
-        (run-vm-prog prog)))))
+        (displayln-time (run-vm-prog prog))))))
 ;----------------------------------------------------------------------------
 
 ;  (let ((x (make-output-pad)))

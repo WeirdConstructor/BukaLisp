@@ -122,9 +122,11 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
     AtomVecPush avpvmprog(m_root_stack, at_ud);
     AtomVecPush avpvmargs(m_root_stack, Atom(T_VEC, args));
 
-    PROG &p = *(dynamic_cast<PROG*>(at_ud.m_d.ud));
+    PROG *p         = dynamic_cast<PROG*>(at_ud.m_d.ud);
+    Atom *data      = p->data_array();
+    size_t data_len = p->data_array_len();
 
-    m_pc = &(p.m_instructions[0]);
+    m_pc = &(p->m_instructions[0]);
 
     AtomVec *cur_env = args;
 
@@ -147,7 +149,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_LOAD_STATIC:
             {
-                cur_env->set(m_pc->o, p.data_at(m_pc->_.x.a));
+                size_t idx = m_pc->_.x.a;
+                cur_env->set(m_pc->o, idx < data_len ? data[idx] : Atom());
                 break;
             }
 
@@ -164,6 +167,12 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 Atom *l = m_env_stack->last();
                 if (l) cur_env = l->m_d.vec;
                 else   cur_env = args;
+                break;
+            }
+
+            case OP_SET_RETURN:
+            {
+                ret = cur_env->at(m_pc->_.x.a);
                 break;
             }
 
