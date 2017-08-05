@@ -405,6 +405,23 @@ void Interpreter::init()
         }
         out = Atom(T_STR, m_rt->m_gc.new_symbol(out_str));
     END_PRIM(str-join)
+
+    START_PRIM()
+        REQ_EQ_ARGC(last, 1);
+        if (A0.m_type != T_VEC)
+            error("Can't 'last' on a non-list", A0);
+        AtomVec *avl = A0.m_d.vec;
+        if (avl->m_len <= 0)
+            return;
+        out = avl->m_data[avl->m_len - 1];
+    END_PRIM(last)
+
+    START_PRIM()
+        REQ_EQ_ARGC(last, 1);
+        if (A0.m_type != T_VEC)
+            error("Can't 'first' on a non-list", A0);
+        out = A0.at(0);
+    END_PRIM(first)
 }
 //---------------------------------------------------------------------------
 

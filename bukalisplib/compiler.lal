@@ -6,6 +6,7 @@
     (let ((self { code: [] }))
 
      ($define! self (to-vm-prog-code)
+       (displayln COOOOOODE: ($code: self))
        ($code: self))
 
      ($define! self (op-push-env size)
@@ -21,6 +22,8 @@
        (push! ($code: self) [SET_RETURN: 0 idx]))
 
      ($define! self (op-load static out-idx)
+       ; TODO: optimize static data loading by storing their
+       ;       positions in a map
        (let ((idx (.add-static-data out-pad static)))
          (push! ($code: self) [LOAD_STATIC: out-idx idx])))
      )))
@@ -82,23 +85,30 @@
                 ; eval key to k-idx
                 ; eval value to v-idx
                 ; set-map out-idx key-idx value-idx
-                (do-each (k v atom)
-                  (.compile-atom self k code-pad out-idx)
-                  (.compile-atom self v code-pad out-idx)))
+                (let ((k-idx (.new-tmp-pos self))
+                      (v-idx (.new-tmp-pos self)))
+                  (do-each (k v atom)
+                   (.compile-atom self k code-pad k-idx)
+                   (.compile-atom self v code-pad v-idx))
+                  (.recycle-tmp-pos self k-idx)
+                  (.recycle-tmp-pos self v-idx)))
    'symbol    (lambda (atom self code-pad out-idx)
                 ; lookup symbol, if not found: error
-                (displayln "GOT SYM "    atom))
+                (displayln "GOT SYM "    atom)
+                (.op-load code-pad atom out-idx))
    'list      (lambda (atom self code-pad out-idx)
                 (.set-debug-pos self atom)
                 (displayln "GOT LIST")
                 (do-each (a atom)
+                  (displayln DO-LIST_ITEM: a)
                   (.compile-atom self a code-pad out-idx)))})
 ;----------------------------------------------------------------------------
 
 (define hook-compiler-methods
  (lambda (self debug-info)
-   ($!env-stack:    self [])
-   ($!debug-pos:    self nil)
+   ($!env-stack:     self [])
+   ($!env-pos-stack: self [])
+   ($!debug-pos:     self nil)
 
    ($define! self (set-debug-pos atom)
      (let ((info (@(atom-id atom) debug-info)))
@@ -109,10 +119,24 @@
      (error (str-join " " "BukaLISP-Compiler Error: " ($debug-pos: self) msg)
             atom))
 
+   ($define! self (new-tmp-pos)
+     (let ((env-pos (last ($env-pos-stack: self)))
+           (free-tmp-pos-list (@1 env-pos)))
+       (if (> (length free-tmp-pos-list) 0)
+         (pop! free-tmp-pos-list)
+         (let ((new-pos (+ 1 (@0 env-pos))))
+           (@!0 env-pos new-pos)
+           new-pos))))
+
+   ($define! self (recycle-tmp-pos pos)
+     (push! (@1 (last ($env-pos-stack: self))) pos))
+
    ($define! self (push-env)
+     (push! ($env-pos-stack: self) [0 []])
      (push! ($env-stack: self) {}))
 
    ($define! self (pop-env)
+     (pop! ($env-pos-stack: self))
      (pop! ($env-stack: self)))
 
    ($define! self (compile-atom atom code-pad out-idx)
@@ -128,13 +152,15 @@
     (let ((code-pad (.make-code-pad compiler)))
       ; TODO: we need to calculate the actual sized pad we need in future!
       (.op-push-env code-pad 1)
+      (.push-env compiler)
       (do-each (top-level-atom data)
-        (.compile-atom compiler top-level-atom code-pad 0))
+        (.compile-atom compiler top-level-atom code-pad 0)
+        (displayln CODE: code-pad))
+      (.pop-env compiler)
       (.op-dump-env-stack code-pad)
       (.op-set-return code-pad 0)
       (.op-pop-env code-pad)
 
-      (displayln CODE: code-pad)
       (displayln PAD: ($pad: compiler))
 
       (let ((prog (.to-vm-prog compiler code-pad)))
