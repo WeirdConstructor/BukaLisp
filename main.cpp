@@ -575,9 +575,10 @@ void test_ieval_proc()
     TEST_EVAL("(let ((m { 'nil 1234 })) "
               "  (@(type nil) m))",
               "nil");
+
     TEST_EVAL("(let ((m { (type nil) 1234 })) "
               "  (@(type nil) m))",
-              "nil");
+              "1234");
 
 //TEST_EVAL("(eq? \"foo\" (symbol->string 'foo))",               "#true");
 //TEST_EVAL("(let ((p (lambda (x) x))) (eq? p p))",              "#true");
@@ -693,6 +694,42 @@ void test_ieval_cond()
 //                (begin (set! x 32) #t)
 //                (f)))
 //    ]])
+
+    TEST_EVAL(" \
+      (let ((x 0))                          \
+        (case x:                            \
+         ((x: y:) (set! x 9) (+ x 1))       \
+         (else 12)))                        \
+    ", "10")
+
+    TEST_EVAL(" \
+      (let ((x 0))                          \
+        (case y:                            \
+         ((x: y:) (set! x 9) (+ x 1))       \
+         (else 12)))                        \
+    ", "10")
+
+    TEST_EVAL(" \
+      (let ((x 0))                          \
+        (case z:                            \
+         ((x: y:) (set! x 9) (+ x 1))       \
+         (else 12)))                        \
+    ", "12")
+
+    TEST_EVAL(" \
+      (let ((x 0))                          \
+        (case z:                            \
+         (else 19)                          \
+         ((x: y:) (set! x 9) (+ x 1))       \
+         (else 12)))                        \
+    ", "19")
+
+    TEST_EVAL(" \
+      (let ((x 0))                          \
+        (case z:                            \
+         ((x: y:) (set! x 9) (+ x 1))       \
+         ))                                 \
+    ", "nil")
 }
 //---------------------------------------------------------------------------
 

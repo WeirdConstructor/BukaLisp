@@ -45,6 +45,7 @@ void Interpreter::init()
     DEF_SYNTAX(or);
     DEF_SYNTAX(for);
     DEF_SYNTAX(do-each);
+    DEF_SYNTAX(case);
     DEF_SYNTAX(.);
     DEF_SYNTAX($define!);
     DEF_SYNTAX($!);
@@ -135,36 +136,7 @@ void Interpreter::init()
     START_PRIM()
         REQ_EQ_ARGC(eq?, 2);
         out = Atom(T_BOOL);
-        switch (A0.m_type)
-        {
-            case T_BOOL: out.m_d.b =    A1.m_type == T_BOOL
-                                     && A0.m_d.b == A1.m_d.b; break;
-            case T_KW:   out.m_d.b =    A1.m_type == T_KW
-                                     && A0.m_d.sym == A1.m_d.sym; break;
-            case T_SYM:  out.m_d.b =    A1.m_type == T_SYM
-                                     && A0.m_d.sym == A1.m_d.sym; break;
-            case T_STR:  out.m_d.b =    A1.m_type == T_STR
-                                     && A0.m_d.sym == A1.m_d.sym; break;
-            case T_SYNTAX:
-                         out.m_d.b =    A1.m_type == T_SYNTAX
-                                     && A0.m_d.sym == A1.m_d.sym; break;
-            case T_INT:  out.m_d.b =    A1.m_type == T_INT
-                                     && A0.m_d.i == A1.m_d.i; break;
-            case T_DBL:  out.m_d.b =    A1.m_type == T_DBL
-                                     && A0.m_d.d == A1.m_d.d; break;
-            case T_VEC:  out.m_d.b =    A1.m_type == T_VEC
-                                     && A0.m_d.vec == A1.m_d.vec; break;
-            case T_MAP:  out.m_d.b =    A1.m_type == T_MAP
-                                     && A0.m_d.map == A1.m_d.map; break;
-            case T_UD:   out.m_d.b =    A1.m_type == T_UD 
-                                     && A0.m_d.ud == A1.m_d.ud; break;
-            case T_PRIM: out.m_d.b =    A1.m_type == T_PRIM
-                                     && A0.m_d.func == A1.m_d.func; break;
-            case T_NIL:  out.m_d.b = A1.m_type == T_NIL; break;
-            default:
-                out.m_d.b = false;
-                break;
-        }
+        out.m_d.b = A0.eqv(A1);
     END_PRIM(eqv?);
 
     START_PRIM()
@@ -775,6 +747,57 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
 }
 //---------------------------------------------------------------------------
 
+Atom Interpreter::eval_case(Atom e, AtomVec *av)
+{
+    if (av->m_len < 3)
+    {
+        error("'case' needs at least one value expression and "
+              "a comparsion branch", e);
+    }
+
+    Atom val = eval(av->m_data[1]);
+    AtomVecPush avpv(m_root_stack, val);
+
+    Atom ret;
+    size_t case_idx = 2;
+
+    while (case_idx < av->m_len)
+    {
+        if (av->m_data[case_idx].m_type != T_VEC)
+            error("'case' test condition is not a list", av->m_data[case_idx]);
+
+        AtomVec *cc = av->m_data[case_idx].m_d.vec;
+        if (cc->m_len < 2)
+            error("'case' test condition too short", Atom(T_VEC, cc));
+
+        if (cc->m_data[0].m_type == T_SYM
+            && cc->m_data[0].m_d.sym->m_str == "else")
+        {
+            return eval_begin(e, cc, 1);
+        }
+
+        if (cc->m_data[0].m_type != T_VEC)
+            error("'case' test condition starts not with a list", Atom(T_VEC, cc));
+
+        AtomVec *test = cc->m_data[0].m_d.vec;
+        if (test->m_len < 1)
+            error("'case' test condition too short", Atom(T_VEC, cc));
+
+        for (size_t i = 0; i < test->m_len; i++)
+        {
+            if (test->m_data[i].eqv(val))
+            {
+                return eval_begin(e, cc, 1);
+            }
+        }
+
+        case_idx++;
+    }
+
+    return ret;
+}
+//---------------------------------------------------------------------------
+
 Atom Interpreter::eval_field_get(Atom e, AtomVec *av)
 {
     if (av->m_len < 3)
@@ -1038,8 +1061,6 @@ Atom Interpreter::eval(Atom e)
             ret = Atom(T_MAP, nm);
             AtomVecPush avp(m_root_stack, ret);
 
-            std::cout << "INTMAP: " << e.to_write_str() << std::endl;
-
             for (auto el : e.m_d.map->m_map)
             {
                 Atom key = eval(el.first);
@@ -1089,6 +1110,7 @@ Atom Interpreter::eval(Atom e)
                 else if (s == "or")       ret = eval_or(e, av);
                 else if (s == "for")      ret = eval_for(e, av);
                 else if (s == "do-each")  ret = eval_do_each(e, av);
+                else if (s == "case")     ret = eval_case(e, av);
                 else if (s == ".")        ret = eval_dot_call(e, av);
                 else if (s == "$")        ret = eval_field_get(e, av);
                 else if (s == "$!")       ret = eval_field_set(e, av);

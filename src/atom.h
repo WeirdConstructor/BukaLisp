@@ -189,6 +189,39 @@ struct Atom
         return m_d.map->at(a);
     }
 
+    bool eqv(const Atom &o)
+    {
+        switch (m_type)
+        {
+            case T_BOOL: return o.m_type == T_BOOL
+                                && m_d.b == o.m_d.b;
+            case T_KW:   return o.m_type == T_KW
+                                && m_d.sym == o.m_d.sym;
+            case T_SYM:  return o.m_type == T_SYM
+                                && m_d.sym == o.m_d.sym;
+            case T_STR:  return o.m_type == T_STR
+                                && m_d.sym == o.m_d.sym;
+            case T_SYNTAX:
+                         return o.m_type == T_SYNTAX
+                                && m_d.sym == o.m_d.sym;
+            case T_INT:  return o.m_type == T_INT
+                                && m_d.i == o.m_d.i;
+            case T_DBL:  return o.m_type == T_DBL
+                                && m_d.d == o.m_d.d;
+            case T_VEC:  return o.m_type == T_VEC
+                                && m_d.vec == o.m_d.vec;
+            case T_MAP:  return o.m_type == T_MAP
+                                && m_d.map == o.m_d.map;
+            case T_UD:   return o.m_type == T_UD 
+                                && m_d.ud == o.m_d.ud;
+            case T_PRIM: return o.m_type == T_PRIM
+                                && m_d.func == o.m_d.func;
+            case T_NIL:  return o.m_type == T_NIL;
+            default: return false;
+        }
+        return false;
+    }
+
     int64_t id()
     {
         // TODO use X macro
