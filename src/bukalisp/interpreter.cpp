@@ -384,6 +384,27 @@ void Interpreter::init()
         REQ_EQ_ARGC(atom-id, 1);
         out = Atom(T_INT, A0.id());
     END_PRIM(atom-id)
+
+    START_PRIM()
+        REQ_GT_ARGC(str, 0);
+        std::string out_str;
+        for (size_t i = 0; i < args.m_len; i++)
+            out_str += args.m_data[i].to_display_str();
+        out = Atom(T_STR, m_rt->m_gc.new_symbol(out_str));
+    END_PRIM(str)
+
+    START_PRIM()
+        REQ_GT_ARGC(str-join, 1);
+        std::string sep = A0.to_display_str();
+        std::string out_str;
+        for (size_t i = 1; i < args.m_len; i++)
+        {
+            if (i > 1)
+                out_str += sep;
+            out_str += args.m_data[i].to_display_str();
+        }
+        out = Atom(T_STR, m_rt->m_gc.new_symbol(out_str));
+    END_PRIM(str-join)
 }
 //---------------------------------------------------------------------------
 
@@ -548,7 +569,7 @@ Atom Interpreter::eval_while(Atom e, AtomVec *av)
     while (run)
     {
         last = eval_begin(e, av, 2);
-        AtomVecPush(m_root_stack, last);
+        AtomVecPush avpw(m_root_stack, last);
         while_cond = eval(av->m_data[1]);
         run = !while_cond.is_false();
     }
@@ -830,7 +851,7 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
         lambda_av->m_data[i - 1] = av->m_data[i];
 
     Atom lambda(T_VEC, lambda_av);
-    AtomVecPush(m_root_stack, lambda);
+    AtomVecPush avls(m_root_stack, lambda);
 
     lambda = eval_lambda(lambda, lambda_av);
 
@@ -1000,11 +1021,14 @@ Atom Interpreter::eval(Atom e)
             ret = Atom(T_MAP, nm);
             AtomVecPush avp(m_root_stack, ret);
 
-            for (auto e : e.m_d.map->m_map)
+            std::cout << "INTMAP: " << e.to_write_str() << std::endl;
+
+            for (auto el : e.m_d.map->m_map)
             {
-                Atom key = eval(e.first);
-                AtomVecPush(m_root_stack, key);
-                nm->set(key, eval(e.second));
+                Atom key = eval(el.first);
+                AtomVecPush avpk(m_root_stack, key);
+                Atom val = eval(el.second);
+                nm->set(key, val);
             }
             break;
         }

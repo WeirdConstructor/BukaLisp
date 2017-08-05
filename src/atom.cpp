@@ -9,13 +9,13 @@ size_t AtomVec::s_alloc_count = 0;
 
 //---------------------------------------------------------------------------
 
-std::string Atom::to_write_str()
+std::string Atom::to_write_str() const
 {
      return write_atom(*this);
 }
 
 //---------------------------------------------------------------------------
-std::string Atom::to_display_str()
+std::string Atom::to_display_str() const
 {
     return m_type == T_SYM ? m_d.sym->m_str
          : m_type == T_KW  ? m_d.sym->m_str

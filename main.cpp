@@ -446,6 +446,8 @@ void test_ieval_proc()
 {
     bukalisp::Runtime rt;
     bukalisp::Interpreter i(&rt);
+//    i.set_force_always_gc(true);
+//    i.set_trace(true);
     Atom r;
 
     TEST_EVAL("(+ 1 2 3)",           "6");
@@ -563,6 +565,19 @@ void test_ieval_proc()
     TEST_EVAL("(length {x: 12})",                   "1");
     TEST_EVAL("(length {y: 324 x: 12})",            "2");
     TEST_EVAL("(length (let ((l [])) (@!9 l l)))",  "10");
+
+    TEST_EVAL("(let ((aid  (atom-id (type nil))) "
+              "      (aid2 (atom-id (type nil))) "
+              "      (aid3 (atom-id (type nil)))) "
+              "  [(eqv? aid aid2) (eqv? aid aid3)])",
+              "(#true #true)");
+
+    TEST_EVAL("(let ((m { 'nil 1234 })) "
+              "  (@(type nil) m))",
+              "nil");
+    TEST_EVAL("(let ((m { (type nil) 1234 })) "
+              "  (@(type nil) m))",
+              "nil");
 
 //TEST_EVAL("(eq? \"foo\" (symbol->string 'foo))",               "#true");
 //TEST_EVAL("(let ((p (lambda (x) x))) (eq? p p))",              "#true");
@@ -936,6 +951,8 @@ int main(int argc, char *argv[])
             bukalisp::Runtime rt;
             bukalisp::VM vm(&rt);
             bukalisp::Interpreter i(&rt, &vm);
+            i.set_trace(i_trace);
+            i.set_force_always_gc(i_force_gc);
             Atom compiler_func;
             try
             {

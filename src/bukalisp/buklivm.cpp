@@ -60,7 +60,7 @@ void parse_op_desc(INST &instr, Atom &desc)
     }
 #undef X
 
-    cout << "op code: " << op_code << endl;
+//    cout << "op code: " << (int) op_code << endl;
     instr.op = op_code;
     instr.o  = (uint16_t) av->m_data[1].to_int();
     if (av->m_len == 4)

@@ -168,8 +168,8 @@ struct Atom
              : m_type == T_NIL ? 0.0
              :                   m_d.d; }
 
-    std::string to_display_str();
-    std::string to_write_str();
+    std::string to_display_str() const;
+    std::string to_write_str() const;
 
     bool inline is_false()
     {
@@ -203,7 +203,7 @@ struct Atom
             case T_KW:
             case T_SYNTAX:
             case T_SYM:
-                return (int64_t) m_d.sym;
+                return (int64_t) AtomHash()(*this);
 
             case T_PRIM:
                 return (int64_t) m_d.func;
@@ -223,6 +223,7 @@ struct Atom
 
     bool operator==(const Atom &other) const
     {
+//        std::cout << "EQ " << this->to_write_str() << "<=>" << other.to_write_str() << std::endl;
         if (m_type != other.m_type) return false;
         // TODO use X macro
         switch (m_type)
@@ -445,7 +446,7 @@ class GC
                 for (size_t i = 0; i < ext_root->gc_root_count(); i++)
                 {
                     AtomVec *av = ext_root->gc_root_get(i);
-//                    std::cout << "EXT ROOT AV: " << av << ">" << write_atom(Atom(T_VEC, av)) << std::endl;
+//                    std::cout << "EXT ROOT AV: " << av << ">" << Atom(T_VEC, av).to_write_str( << std::endl;
                     mark_vector(av);
                 }
             }
@@ -608,8 +609,8 @@ class GC
                 || (m_num_new_vectors > (m_num_alive_vectors / 2))
                 || (m_num_new_syms    > (m_num_alive_syms    / 2)))
             {
-//                std::cout << "GC collect at " << m_num_new_vectors
-//                          << " <=> " << m_num_alive_vectors << std::endl;
+                std::cout << "GC collect at " << m_num_new_vectors
+                          << " <=> " << m_num_alive_vectors << std::endl;
                 collect();
             }
         }
@@ -641,6 +642,7 @@ class GC
             if (it == m_symtbl.end())
             {
                 Sym *newsym = allocate_sym();
+//                std::cout << "NEW SYM: " << str << std::endl;
                 newsym->m_str = str;
                 m_symtbl.insert(std::pair<std::string, Sym *>(str, newsym));
                 return newsym;

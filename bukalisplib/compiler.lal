@@ -56,34 +56,58 @@
 (define type-dispatch
  (lambda (atom m arg arg2 arg3)
    (if (eqv? (@(type atom) m) nil)
-     (error "unhandled dispatch, for type " (type atom) m))
+     (error (str "unhandled dispatch, for type " (type atom)) atom m))
 
    ((@(type atom) m) atom arg arg2 arg3)))
 ;----------------------------------------------------------------------------
 
 (define compile-atom-dispatch-map
- { 'nil      (lambda (atom self code-pad out-idx) (displayln "GOT NIL!"))
-   'exact    (lambda (atom self code-pad out-idx)
-               (.op-load code-pad atom out-idx))
-   'inexact  (lambda (atom self code-pad out-idx) (displayln "GOT DNUM "   atom))
-   'keyword  (lambda (atom self code-pad out-idx) (displayln "GOT KW "     atom))
-   'symbol   (lambda (atom self code-pad out-idx) (displayln "GOT SYM "    atom))
-   'boolean  (lambda (atom self code-pad out-idx) (displayln "GOT BOOL "   atom))
-   'string   (lambda (atom self code-pad out-idx) (displayln "GOT STRING " atom))
-   'list     (lambda (atom self code-pad out-idx)
-               (displayln "GOT LIST")
-               (do-each (a atom)
-                 (.compile-atom self a code-pad out-idx)))
-   'map      (lambda (atom self code-pad out-idx)
-               (displayln "GOT MAP")
-               (do-each (k v atom)
-                 (.compile-atom self k code-pad out-idx)
-                 (.compile-atom self v code-pad out-idx)))})
+ { (type nil) (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'exact     (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'inexact   (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'keyword   (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'boolean   (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'string    (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'map       (lambda (atom self code-pad out-idx)
+                (.set-debug-pos self atom)
+                (displayln "GOT MAP" (length atom))
+                ; get 2 temporaries k-idx v-idx
+                ; op-new-map out-idx
+                ; eval key to k-idx
+                ; eval value to v-idx
+                ; set-map out-idx key-idx value-idx
+                (do-each (k v atom)
+                  (.compile-atom self k code-pad out-idx)
+                  (.compile-atom self v code-pad out-idx)))
+   'symbol    (lambda (atom self code-pad out-idx)
+                ; lookup symbol, if not found: error
+                (displayln "GOT SYM "    atom))
+   'list      (lambda (atom self code-pad out-idx)
+                (.set-debug-pos self atom)
+                (displayln "GOT LIST")
+                (do-each (a atom)
+                  (.compile-atom self a code-pad out-idx)))})
 ;----------------------------------------------------------------------------
 
 (define hook-compiler-methods
- (lambda (self)
-   ($!env-stack: self [])
+ (lambda (self debug-info)
+   ($!env-stack:    self [])
+   ($!debug-pos:    self nil)
+
+   ($define! self (set-debug-pos atom)
+     (let ((info (@(atom-id atom) debug-info)))
+       (unless (nil? info)
+         ($!debug-pos: self info))))
+
+   ($define! self (error msg atom)
+     (error (str-join " " "BukaLISP-Compiler Error: " ($debug-pos: self) msg)
+            atom))
 
    ($define! self (push-env)
      (push! ($env-stack: self) {}))
@@ -95,9 +119,11 @@
      (type-dispatch atom compile-atom-dispatch-map self code-pad out-idx))))
 ;----------------------------------------------------------------------------
 
-(lambda (name data debug_info)
+(lambda (name data debug-info)
   (let ((compiler (make-output-pad)))
-    (hook-compiler-methods compiler)
+;    (displayln FOO: (@'nil { 'nil 1203  }))
+    (displayln "INFO:" debug-info)
+    (hook-compiler-methods compiler debug-info)
 
     (let ((code-pad (.make-code-pad compiler)))
       ; TODO: we need to calculate the actual sized pad we need in future!
@@ -122,6 +148,6 @@
 ;    (displayln X: (.add-static-data x "xxx")))
 ;  (displayln XXX: name)
 ;  (displayln YYY: data)
-;  (displayln DEBUG-INFO: debug_info)
+;  (displayln DEBUG-INFO: debug-info)
 ;  (displayln (atom-id (@0 data)))
 ;  (@0 (@0 data)))

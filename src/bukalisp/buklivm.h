@@ -14,7 +14,7 @@ class VMException : public std::exception
     private:
         std::string m_err;
     public:
-        VMException(const std::string &err) : m_err(err) { }
+        VMException(const std::string &err) : m_err(err) { std::cout << "FOO" << err << std::endl; }
         virtual const char *what() const noexcept { return m_err.c_str(); }
         virtual ~VMException() { }
 };
