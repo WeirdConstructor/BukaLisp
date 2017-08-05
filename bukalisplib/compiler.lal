@@ -58,6 +58,9 @@
       ($define! self (op-set-vec vec-idx idx src-idx)
         (push-op [SET_VEC: vec-idx idx src-idx]))
 
+      ($define! self (op-cset-vec vec-idx idx src-idx)
+        (push-op [CSET_VEC: vec-idx idx src-idx]))
+
       ($define! self (op-call out-idx func-idx argvec-idx)
         (push-op [CALL: out-idx func-idx argvec-idx]))
 
@@ -296,8 +299,10 @@
 
        (.op-new-vec code-pad argvec-idx (- (length atom) 1))
        (for (i 0 (- end-idx 1))
-         (.op-set-vec code-pad argvec-idx i (@i arg-idxes)))
-       (.op-call code-pad out-idx func-idx argvec-idx)))
+         (.op-cset-vec code-pad argvec-idx i (@i arg-idxes))
+         (.recycle-tmp-pos self (@i arg-idxes)))
+       (.op-call code-pad out-idx func-idx argvec-idx)
+       (.recycle-tmp-pos self func-idx)))
 
    ($define! self (compile-block block code-pad out-idx)
      (do-each (expr block)

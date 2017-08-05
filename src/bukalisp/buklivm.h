@@ -31,7 +31,7 @@ class VMException : public std::exception
     X(LOAD_STATIC,    4) \
     X(LOAD_PRIM,      5) \
     X(NEW_VEC,        6) \
-    X(SET_VEC,        7) \
+    X(CSET_VEC,       8) \
     X(PUSH_ENV,      10) \
     X(POP_ENV,       11) \
     X(DUMP_ENV_STACK,12) \

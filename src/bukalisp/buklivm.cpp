@@ -218,7 +218,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
-            case OP_SET_VEC:
+            case OP_CSET_VEC:
             {
                 size_t vidx = m_pc->o;
                 size_t idx  = m_pc->_.l.a;
@@ -235,6 +235,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
                 auto &v = *(vec.m_d.vec);
                 v.set(idx, cur_env->at(eidx));
+
+                cur_env->m_data[eidx] = Atom();
                 break;
             }
 
@@ -328,6 +330,9 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 }
                 else
                     error("CALL does not support that function type yet", func);
+
+                cur_env->m_data[func_idx] = Atom();
+                cur_env->m_data[argv_idx] = Atom();
                 break;
             }
 
