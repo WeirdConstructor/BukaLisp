@@ -3,39 +3,71 @@
 
 (define make-code-pad-object
   (lambda (out-pad)
-    (let ((self { code: [] }))
+    (let ((self { code: [] debug-info: {} }))
+      (define push-op
+        (lambda (op-desc)
+          (@!op-desc
+           ($debug-info: self)
+           ($debug-pos: out-pad))
+          (push! ($code: self) op-desc)))
 
       ($define! self (append-code-pad code-pad)
         (let ((code ($code: self)))
-          (do-each (op code-pad)
+          (do-each (k v ($debug-info: code-pad))
+            (@! k ($debug-info: self) v))
+          (do-each (op ($code: code-pad))
             (push! code op))))
 
       ($define! self (to-vm-prog-code)
-        (displayln COOOOOODE: ($code: self))
         ($code: self))
 
+      ($define! self (to-vm-prog-debug-info)
+        (let ((m {}) (i 0))
+          (do-each (op-desc ($code: self))
+            (@!i m (@op-desc ($debug-info: self)))
+            (set! i (+ i 1)))
+          m))
+
       ($define! self (op-push-env size)
-        (push! ($code: self) [PUSH_ENV: 0 size]))
+        (push-op [PUSH_ENV: 0 size]))
 
       ($define! self (op-pop-env)
-        (push! ($code: self) [POP_ENV: 0 0]))
+        (push-op [POP_ENV: 0 0]))
 
       ($define! self (op-dump-env-stack)
-        (push! ($code: self) [DUMP_ENV_STACK: 0 0]))
+        (push-op [DUMP_ENV_STACK: 0 0]))
 
       ($define! self (op-set-return idx)
-        (push! ($code: self) [SET_RETURN: 0 idx]))
+        (push-op [SET_RETURN: 0 idx]))
+
+      ($define! self (op-mov out-idx in-idx)
+        (push-op [MOV: out-idx in-idx]))
+
+      ($define! self (op-mov-from out-idx env-idx in-idx)
+        (push-op [MOV_FROM: out-idx env-idx in-idx]))
+
+      ($define! self (op-mov-to out-idx env-idx in-idx)
+        (push-op [MOV_TO: out-idx env-idx in-idx]))
+
+      ($define! self (op-load-prim out-idx prim-nr)
+        (push-op [LOAD_PRIM: out-idx prim-nr]))
 
       ($define! self (op-load static out-idx)
         ; TODO: optimize static data loading by storing their
         ;       positions in a map
         (let ((idx (.add-static-data out-pad static)))
-          (push! ($code: self) [LOAD_STATIC: out-idx idx]))))))
+          (push-op [LOAD_STATIC: out-idx idx]))))))
 ;----------------------------------------------------------------------------
 
 (define make-static-data-pad
- (lambda ()
-   (let ((self { pad: [] }))
+ (lambda (debug-info)
+   (let ((self { pad: []
+                 debug-pos: nil }))
+
+     ($define! self (set-debug-pos atom)
+       (let ((info (@(atom-id atom) debug-info)))
+         (unless (nil? info)
+           ($!debug-pos: self info))))
 
      ($define! self (add-static-data data)
        (push! ($pad: self) data)
@@ -46,8 +78,8 @@
 
      ($define! self (to-vm-prog code-pad)
         (make-vm-prog [($pad:  self)
-                       (.to-vm-prog-code code-pad)
-                       {}]))
+                       (.to-vm-prog-code       code-pad)
+                       (.to-vm-prog-debug-info code-pad)]))
 
      self)))
 ;----------------------------------------------------------------------------
@@ -132,20 +164,46 @@
                 (let ((k-idx (.new-tmp-pos self))
                       (v-idx (.new-tmp-pos self)))
                   (do-each (k v atom)
-                   (.compile-atom self k code-pad k-idx)
-                   (.compile-atom self v code-pad v-idx))
+                    (.compile self k code-pad k-idx)
+                    (.compile self v code-pad v-idx))
                   (.recycle-tmp-pos self k-idx)
                   (.recycle-tmp-pos self v-idx)))
+
    'symbol    (lambda (atom self code-pad out-idx)
-                ; lookup symbol, if not found: error
-                (displayln "GOT SYM "    atom)
-                (.op-load code-pad atom out-idx))
+                (let ((var (.lookup self atom)))
+                  (when (nil? var)
+                    (.error self "Undefined variable" atom))
+                  (case (@0 (@1 var))
+                    ((var:)
+                     (let ((var-idx (@1 (@1 var))))
+                       (if (> (@0 var) 0)
+                         (.op-mov-from code-pad out-idx (@0 var) var-idx)
+                         (.op-mov      code-pad out-idx var-idx))))
+                    ((syntax:)
+                     (let ((prim-nr (@2 (@1 var))))
+                       (when (nil? prim-nr)
+                         (.error self "Syntax is not translatable to a primitive" atom))
+                       (.op-load-prim code-pad out-idx prim-nr)))
+                    (else
+                      (.error self "Not a value binding variable" atom)))))
+
    'list      (lambda (atom self code-pad out-idx)
                 (.set-debug-pos self atom)
-                (displayln "GOT LIST")
-                (do-each (a atom)
-                  (displayln DO-LIST_ITEM: a)
-                  (.compile-atom self a code-pad out-idx)))})
+                (case (type (@0 atom))
+                  ((symbol)
+                   (let ((var (.lookup self (@0 atom))))
+                     (when (nil? var)
+                       (.error self "Undefined variable" (@0 atom)))
+                     (case (@0 (@1 var))
+                       ((syntax:)
+                        ((@1 (@1 var)) atom self code-pad out-idx))
+                       (else
+                         (.error self "Bad variable type" var)))))
+                  (else
+                    (.error self "Invalid atom type at start of list" atom))))})
+;                (do-each (a atom)
+;                  (displayln DO-LIST_ITEM: a)
+;                  (.compile-atom self a code-pad out-idx)))})
 ;----------------------------------------------------------------------------
 
 (define recursive-lookup
@@ -162,15 +220,9 @@
 ;----------------------------------------------------------------------------
 
 (define hook-compiler-methods
- (lambda (self debug-info)
+ (lambda (self)
    ($!env-stack:     self [])
    ($!env-pos-stack: self [])
-   ($!debug-pos:     self nil)
-
-   ($define! self (set-debug-pos atom)
-     (let ((info (@(atom-id atom) debug-info)))
-       (unless (nil? info)
-         ($!debug-pos: self info))))
 
    ($define! self (error msg atom)
      (error (str-join " " "BukaLISP-Compiler Error: " ($debug-pos: self) msg)
@@ -184,6 +236,12 @@
          (let ((new-pos (+ 1 (@0 env-pos))))
            (@!0 env-pos new-pos)
            new-pos))))
+
+   ($define! self (new-pos)
+     (let ((env-pos (last ($env-pos-stack: self)))
+           (new-pos (+ 1 (@0 env-pos))))
+       (@!0 env-pos new-pos)
+       new-pos))
 
    ($define! self (recycle-tmp-pos pos)
      (push! (@1 (last ($env-pos-stack: self))) pos))
@@ -206,6 +264,10 @@
      (pop! ($env-pos-stack: self))
      (pop! ($env-stack: self)))
 
+   ($define! self (compile-block block code-pad out-idx)
+     (do-each (expr block)
+       (.compile self expr code-pad out-idx)))
+
    ($define! self (compile atom code-pad out-idx)
      (type-dispatch atom compile-expr-dispatch-map self code-pad out-idx))
 
@@ -213,20 +275,56 @@
      (type-dispatch atom compile-atom-dispatch-map self code-pad out-idx))))
 ;----------------------------------------------------------------------------
 
+(define make-prim-syntax
+  (lambda (compiler symbol compiler-func prim-nr)
+    (.define-var compiler symbol [syntax: compiler-func prim-nr])))
+
+(define make-syntax
+  (lambda (compiler symbol compiler-func)
+    (.define-var compiler symbol [syntax: compiler-func])))
+
+(define init-base-env
+  (lambda (compiler)
+    (make-syntax compiler '+
+     (lambda (atom self code-pad out-idx) 0)
+     0)
+;       (unless (< 2 (length atom))
+;         (.error self "'+' needs 3 arguments" atom))
+;       (unless (symbol? (@1 atom))
+;         (.error self "Can only define symbols as variable" atom))
+;
+;       (let ((bind-idx (.new-pos self)))
+;         (.define-var self (@1 atom) [var: bind-idx])
+;         (.compile self (@2 atom) code-pad bind-idx)
+;         (.op-mov code-pad out-idx bind-idx))))
+
+    (make-syntax compiler 'define
+     (lambda (atom self code-pad out-idx)
+       (unless (eqv? 3 (length atom))
+         (.error self "'define' needs 3 arguments" atom))
+       (unless (symbol? (@1 atom))
+         (.error self "Can only define symbols as variable" atom))
+
+       (let ((bind-idx (.new-pos self)))
+         (.define-var self (@1 atom) [var: bind-idx])
+         (.compile self (@2 atom) code-pad bind-idx)
+         (.op-mov code-pad out-idx bind-idx))))))
+;----------------------------------------------------------------------------
+
 (lambda (name data debug-info)
-  (let ((compiler (make-static-data-pad)))
+  (let ((compiler (make-static-data-pad debug-info)))
 ;    (displayln FOO: (@'nil { 'nil 1203  }))
     (displayln "INFO:" debug-info)
-    (hook-compiler-methods compiler debug-info)
+    (hook-compiler-methods compiler)
+    (.push-env compiler)
+    (init-base-env compiler)
 
     (let ((code-pad (.make-code-pad compiler)))
       ; TODO: we need to calculate the actual sized pad we need in future!
       (.op-push-env code-pad 1)
-      (.push-env compiler)
       (do-each (top-level-atom data)
         (.compile compiler top-level-atom code-pad 0))
 ;      (displayln ENVPADSIZE: (.cur-env-size compiler))
-      (.pop-env compiler)
       (.op-dump-env-stack code-pad)
       (.op-set-return code-pad 0)
       (.op-pop-env code-pad)

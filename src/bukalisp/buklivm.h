@@ -22,12 +22,15 @@ class VMException : public std::exception
 
 #define OP_CODE_DEF(X) \
     X(NOP,            0) \
-    X(LOAD,           1) \
-    X(LOAD_STATIC,    2) \
-    X(PUSH_ENV,       3) \
-    X(POP_ENV,        4) \
-    X(DUMP_ENV_STACK, 5) \
-    X(SET_RETURN,     6) \
+    X(MOV,            1) \
+    X(MOV_FROM,       2) \
+    X(MOV_TO,         3) \
+    X(LOAD_STATIC,    4) \
+    X(LOAD_PRIM,      5) \
+    X(PUSH_ENV,       6) \
+    X(POP_ENV,        7) \
+    X(DUMP_ENV_STACK, 8) \
+    X(SET_RETURN,     9) \
     X(ADD,          100) \
     X(SUB,          101) \
     X(MUL,          102) \
@@ -152,21 +155,43 @@ class VM : public lilvm::ExternalGCRoot
     private:
         Runtime          *m_rt;
         INST             *m_pc;
+        PROG             *m_prog;
+        VM               *m_vm;
         lilvm::AtomVec   *m_root_stack;
         lilvm::AtomVec   *m_env_stack;
         lilvm::AtomVec   *m_cont_stack;
+        lilvm::AtomVec   *m_prim_table;
 
     public:
         VM(Runtime *rt)
-            : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_pc(nullptr)
+            : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_pc(nullptr),
+              m_vm(this)
         {
             m_rt->m_gc.add_external_root(this);
             m_root_stack = rt->m_gc.allocate_vector(0);
             m_env_stack  = rt->m_gc.allocate_vector(0);
             m_cont_stack = rt->m_gc.allocate_vector(0);
+            m_prim_table = rt->m_gc.allocate_vector(0);
+
+            init_prims();
         }
 
-        virtual size_t gc_root_count() { return 3; }
+        void error(const std::string &msg)
+        {
+            INST *start_pc = &(m_prog->m_instructions[0]);
+            lilvm::Atom a(lilvm::T_INT, m_pc - start_pc);
+            lilvm::Atom info = m_prog->m_debug_info_map.at(a);
+            throw VMException("(@" + info.to_display_str() + "): " + msg);
+        }
+
+        void error(const std::string &msg, lilvm::Atom &err_atom)
+        {
+            error(msg + ", atom: " + err_atom.to_write_str());
+        }
+
+        void init_prims();
+
+        virtual size_t gc_root_count() { return 4; }
 
         virtual lilvm::AtomVec *gc_root_get(size_t idx)
         {
@@ -175,6 +200,7 @@ class VM : public lilvm::ExternalGCRoot
                 case 0:  return m_root_stack;
                 case 1:  return m_env_stack;
                 case 2:  return m_cont_stack;
+                case 3:  return m_prim_table;
                 default: return m_cont_stack;
             }
         }

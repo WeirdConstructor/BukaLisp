@@ -107,6 +107,22 @@ lilvm::Atom make_prog(lilvm::Atom prog_info)
 }
 //---------------------------------------------------------------------------
 
+void VM::init_prims()
+{
+    Atom tmp;
+
+#define START_PRIM() \
+    tmp = Atom(T_PRIM); \
+    tmp.m_d.func = new Atom::PrimFunc; \
+    m_prim_table->push(tmp); \
+    (*tmp.m_d.func) = [this](AtomVec &args, Atom &out) {
+
+#define END_PRIM(name) };
+
+    #include "primitives.cpp"
+}
+//---------------------------------------------------------------------------
+
 lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 {
     Atom ret;
@@ -122,11 +138,11 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
     AtomVecPush avpvmprog(m_root_stack, at_ud);
     AtomVecPush avpvmargs(m_root_stack, Atom(T_VEC, args));
 
-    PROG *p         = dynamic_cast<PROG*>(at_ud.m_d.ud);
-    Atom *data      = p->data_array();
-    size_t data_len = p->data_array_len();
+    m_prog          = dynamic_cast<PROG*>(at_ud.m_d.ud);
+    Atom *data      = m_prog->data_array();
+    size_t data_len = m_prog->data_array_len();
 
-    m_pc = &(p->m_instructions[0]);
+    m_pc = &(m_prog->m_instructions[0]);
 
     AtomVec *cur_env = args;
 
@@ -147,10 +163,69 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
+            case OP_MOV:
+            {
+                size_t idx = m_pc->_.x.a;
+                cur_env->set(
+                    m_pc->o,
+                    idx < cur_env->m_len ? cur_env->m_data[idx] : Atom());
+                break;
+            }
+
+            case OP_MOV_FROM:
+            {
+                size_t env_idx = m_pc->_.l.a;
+                if (env_idx >= m_env_stack->m_len)
+                {
+                    cout << "VM-ERROR: MOVX src env-idx out of range"
+                         << env_idx << endl;
+                    return Atom();
+                }
+                AtomVec *src_env =
+                    m_env_stack->at(m_env_stack->m_len - (env_idx + 1)).m_d.vec;
+
+                size_t idx = m_pc->_.l.b;
+                cur_env->set(
+                    m_pc->o,
+                    idx < src_env->m_len ? src_env->m_data[idx] : Atom());
+                break;
+            }
+
+            case OP_MOV_TO:
+            {
+                size_t env_idx = m_pc->_.l.a;
+                if (env_idx >= m_env_stack->m_len)
+                {
+                    cout << "VM-ERROR: MOVY dst env-idx out of range"
+                         << env_idx << endl;
+                    return Atom();
+                }
+                AtomVec *dst_env =
+                    m_env_stack->at(m_env_stack->m_len - (env_idx + 1)).m_d.vec;
+
+                size_t idx = m_pc->_.l.b;
+                dst_env->set(
+                    m_pc->o,
+                    idx < cur_env->m_len ? cur_env->m_data[idx] : Atom());
+                break;
+            }
+
+            case OP_LOAD_PRIM:
+            {
+                size_t p_nr = m_pc->_.x.a;
+                cur_env->set(
+                    m_pc->o,
+                    p_nr < m_prim_table->m_len
+                    ? m_prim_table->m_data[p_nr] : Atom());
+                break;
+            }
+
             case OP_LOAD_STATIC:
             {
                 size_t idx = m_pc->_.x.a;
-                cur_env->set(m_pc->o, idx < data_len ? data[idx] : Atom());
+                cur_env->set(
+                    m_pc->o,
+                    idx < data_len ? data[idx] : Atom());
                 break;
             }
 
