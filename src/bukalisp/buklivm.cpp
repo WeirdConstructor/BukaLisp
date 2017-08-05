@@ -210,6 +210,34 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
+            case OP_NEW_VEC:
+            {
+                cur_env->set(
+                    m_pc->o,
+                    Atom(T_VEC, m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
+                break;
+            }
+
+            case OP_SET_VEC:
+            {
+                size_t vidx = m_pc->o;
+                size_t idx  = m_pc->_.l.a;
+                size_t eidx = m_pc->_.l.b;
+
+                if (eidx >= cur_env->m_len)
+                    error("Bad index for source value", Atom(T_INT, eidx));
+                if (vidx >= cur_env->m_len)
+                    error("Bad env index for SET_VEC vector", Atom(T_INT, vidx));
+
+                Atom vec = cur_env->m_data[vidx];
+                if (vec.m_type != T_VEC)
+                    error("Can't SET_VEC on non vector", vec);
+
+                auto &v = *(vec.m_d.vec);
+                v.set(idx, cur_env->at(eidx));
+                break;
+            }
+
             case OP_LOAD_PRIM:
             {
                 size_t p_nr = m_pc->_.x.a;
@@ -229,6 +257,35 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
+//            case OP_PUSH_VEC_ENV:
+//            {
+//                size_t idx = m_pc->_.x.a;
+//                if (idx >= cur_env->m_len)
+//                    error("Bad vector index for PUSH_VEC_ENV",
+//                          Atom(T_INT, idx));
+//                Atom vec = cur_env->m_data[idx];
+//                if (vec.m_type != T_VEC)
+//                    error("Can't push non vector as env in PUSH_VEC_ENV", vec);
+//                m_env_stack->push(vec);
+//                break;
+//            }
+//
+//            case OP_PUSH_RNG_ENV:
+//            {
+//                size_t from = m_pc->_.l.a;
+//                size_t to   = m_pc->_.l.b;
+//                if (from >= cur_env->m_len)
+//                    error("Bad env from idx", Atom(T_INT, from));
+//                if (to >= cur_env->m_len)
+//                    error("Bad env to idx", Atom(T_INT, to));
+//
+//                AtomVec *av = m_rt->m_gc.allocate_vector(to - from);
+//                for (size_t i = from; i < to; i++)
+//                    av->m_data[i - from] = cur_env->m_data[i];
+//                m_env_stack->push(Atom(T_VEC, av));
+//                break;
+//            }
+//
             case OP_PUSH_ENV:
             {
                 m_env_stack->push(
@@ -242,6 +299,35 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 Atom *l = m_env_stack->last();
                 if (l) cur_env = l->m_d.vec;
                 else   cur_env = args;
+                break;
+            }
+
+            case OP_CALL:
+            {
+                size_t out_idx = m_pc->o;
+                size_t func_idx = m_pc->_.l.a;
+                size_t argv_idx = m_pc->_.l.b;
+
+                if (func_idx >= cur_env->m_len)
+                    error("CALL function index out of range",
+                          Atom(T_INT, func_idx));
+                if (argv_idx >= cur_env->m_len)
+                    error("CALL argv index out of range",
+                          Atom(T_INT, argv_idx));
+
+                Atom argv = cur_env->m_data[argv_idx];
+                if (argv.m_type != T_VEC)
+                    error("CALL argv not a vector", argv);
+
+                Atom func = cur_env->m_data[func_idx];
+                if (func.m_type == T_PRIM)
+                {
+                    Atom ret;
+                    (*func.m_d.func)(*(argv.m_d.vec), ret);
+                    cur_env->set(out_idx, ret);
+                }
+                else
+                    error("CALL does not support that function type yet", func);
                 break;
             }
 

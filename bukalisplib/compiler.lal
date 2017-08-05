@@ -52,6 +52,15 @@
       ($define! self (op-load-prim out-idx prim-nr)
         (push-op [LOAD_PRIM: out-idx prim-nr]))
 
+      ($define! self (op-new-vec out-idx len)
+        (push-op [NEW_VEC: out-idx len]))
+
+      ($define! self (op-set-vec vec-idx idx src-idx)
+        (push-op [SET_VEC: vec-idx idx src-idx]))
+
+      ($define! self (op-call out-idx func-idx argvec-idx)
+        (push-op [CALL: out-idx func-idx argvec-idx]))
+
       ($define! self (op-load static out-idx)
         ; TODO: optimize static data loading by storing their
         ;       positions in a map
@@ -196,7 +205,10 @@
                        (.error self "Undefined variable" (@0 atom)))
                      (case (@0 (@1 var))
                        ((syntax:)
-                        ((@1 (@1 var)) atom self code-pad out-idx))
+                        (displayln SYN:)
+                        (if (nil? (@2 (@1 var)))
+                          ((@1 (@1 var)) atom self code-pad out-idx)
+                          (.compile-func-apply self atom code-pad out-idx)))
                        (else
                          (.error self "Bad variable type" var)))))
                   (else
@@ -264,6 +276,29 @@
      (pop! ($env-pos-stack: self))
      (pop! ($env-stack: self)))
 
+   ($define! self (compile-func-apply atom code-pad out-idx)
+      ; eval all items (func a b c) into temporary registers
+      ; make new vec
+      ; set vec from tmp registers
+      ; do a CALL with the index of the function and the index of the arg vector
+      ; CALL figures out what to do with #<primitive> or #<closure>
+     (let ((end-idx    (- (length atom) 1))
+           (func-idx   (.new-tmp-pos self))
+           (argvec-idx (.new-tmp-pos self))
+           (arg-idxes []))
+
+       (.compile self (@0 atom) code-pad func-idx)
+
+       (for (i 1 end-idx)
+         (let ((arg-idx (.new-tmp-pos self)))
+           (push! arg-idxes arg-idx)
+           (.compile self (@i atom) code-pad arg-idx)))
+
+       (.op-new-vec code-pad argvec-idx (- (length atom) 1))
+       (for (i 0 (- end-idx 1))
+         (.op-set-vec code-pad argvec-idx i (@i arg-idxes)))
+       (.op-call code-pad out-idx func-idx argvec-idx)))
+
    ($define! self (compile-block block code-pad out-idx)
      (do-each (expr block)
        (.compile self expr code-pad out-idx)))
@@ -285,7 +320,7 @@
 
 (define init-base-env
   (lambda (compiler)
-    (make-syntax compiler '+
+    (make-prim-syntax compiler '+
      (lambda (atom self code-pad out-idx) 0)
      0)
 ;       (unless (< 2 (length atom))
@@ -323,6 +358,7 @@
       ; TODO: we need to calculate the actual sized pad we need in future!
       (.op-push-env code-pad 1)
       (do-each (top-level-atom data)
+        (displayln (str "Compile TLA: [" top-level-atom "]"))
         (.compile compiler top-level-atom code-pad 0))
 ;      (displayln ENVPADSIZE: (.cur-env-size compiler))
       (.op-dump-env-stack code-pad)

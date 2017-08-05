@@ -20,6 +20,9 @@ class VMException : public std::exception
 };
 //---------------------------------------------------------------------------
 
+//    X(PUSH_RNG_ENV,   8)
+//    X(PUSH_VEC_ENV,   9)
+
 #define OP_CODE_DEF(X) \
     X(NOP,            0) \
     X(MOV,            1) \
@@ -27,10 +30,13 @@ class VMException : public std::exception
     X(MOV_TO,         3) \
     X(LOAD_STATIC,    4) \
     X(LOAD_PRIM,      5) \
-    X(PUSH_ENV,       6) \
-    X(POP_ENV,        7) \
-    X(DUMP_ENV_STACK, 8) \
-    X(SET_RETURN,     9) \
+    X(NEW_VEC,        6) \
+    X(SET_VEC,        7) \
+    X(PUSH_ENV,      10) \
+    X(POP_ENV,       11) \
+    X(DUMP_ENV_STACK,12) \
+    X(SET_RETURN,    13) \
+    X(CALL,          14) \
     X(ADD,          100) \
     X(SUB,          101) \
     X(MUL,          102) \
