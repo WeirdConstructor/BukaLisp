@@ -5,31 +5,35 @@
   (lambda (out-pad)
     (let ((self { code: [] }))
 
-     ($define! self (to-vm-prog-code)
-       (displayln COOOOOODE: ($code: self))
-       ($code: self))
+      ($define! self (append-code-pad code-pad)
+        (let ((code ($code: self)))
+          (do-each (op code-pad)
+            (push! code op))))
 
-     ($define! self (op-push-env size)
-       (push! ($code: self) [PUSH_ENV: 0 size]))
+      ($define! self (to-vm-prog-code)
+        (displayln COOOOOODE: ($code: self))
+        ($code: self))
 
-     ($define! self (op-pop-env)
-       (push! ($code: self) [POP_ENV: 0 0]))
+      ($define! self (op-push-env size)
+        (push! ($code: self) [PUSH_ENV: 0 size]))
 
-     ($define! self (op-dump-env-stack)
-       (push! ($code: self) [DUMP_ENV_STACK: 0 0]))
+      ($define! self (op-pop-env)
+        (push! ($code: self) [POP_ENV: 0 0]))
 
-     ($define! self (op-set-return idx)
-       (push! ($code: self) [SET_RETURN: 0 idx]))
+      ($define! self (op-dump-env-stack)
+        (push! ($code: self) [DUMP_ENV_STACK: 0 0]))
 
-     ($define! self (op-load static out-idx)
-       ; TODO: optimize static data loading by storing their
-       ;       positions in a map
-       (let ((idx (.add-static-data out-pad static)))
-         (push! ($code: self) [LOAD_STATIC: out-idx idx])))
-     )))
+      ($define! self (op-set-return idx)
+        (push! ($code: self) [SET_RETURN: 0 idx]))
+
+      ($define! self (op-load static out-idx)
+        ; TODO: optimize static data loading by storing their
+        ;       positions in a map
+        (let ((idx (.add-static-data out-pad static)))
+          (push! ($code: self) [LOAD_STATIC: out-idx idx]))))))
 ;----------------------------------------------------------------------------
 
-(define make-output-pad
+(define make-static-data-pad
  (lambda ()
    (let ((self { pad: [] }))
 
@@ -104,6 +108,59 @@
                   (.compile-atom self a code-pad out-idx)))})
 ;----------------------------------------------------------------------------
 
+(define compile-expr-dispatch-map
+ { (type nil) (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'exact     (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'inexact   (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'keyword   (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'boolean   (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'string    (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
+   'map       (lambda (atom self code-pad out-idx)
+                (.set-debug-pos self atom)
+                (displayln "GOT MAP" (length atom))
+                ; get 2 temporaries k-idx v-idx
+                ; op-new-map out-idx
+                ; eval key to k-idx
+                ; eval value to v-idx
+                ; set-map out-idx key-idx value-idx
+                (let ((k-idx (.new-tmp-pos self))
+                      (v-idx (.new-tmp-pos self)))
+                  (do-each (k v atom)
+                   (.compile-atom self k code-pad k-idx)
+                   (.compile-atom self v code-pad v-idx))
+                  (.recycle-tmp-pos self k-idx)
+                  (.recycle-tmp-pos self v-idx)))
+   'symbol    (lambda (atom self code-pad out-idx)
+                ; lookup symbol, if not found: error
+                (displayln "GOT SYM "    atom)
+                (.op-load code-pad atom out-idx))
+   'list      (lambda (atom self code-pad out-idx)
+                (.set-debug-pos self atom)
+                (displayln "GOT LIST")
+                (do-each (a atom)
+                  (displayln DO-LIST_ITEM: a)
+                  (.compile-atom self a code-pad out-idx)))})
+;----------------------------------------------------------------------------
+
+(define recursive-lookup
+  (lambda (env-stack lvl-idx sym)
+    (let ((cur-env (@(- (length env-stack)
+                        (+ 1 lvl-idx))
+                     env-stack))
+          (var-type (@sym cur-env))
+          (next-lvl-idx (+ 1 lvl-idx)))
+      (if (nil? var-type)
+        (when (< next-lvl-idx (length env-stack))
+          (recursive-lookup env-stack next-lvl-idx sym))
+        [lvl-idx var-type]))))
+;----------------------------------------------------------------------------
+
 (define hook-compiler-methods
  (lambda (self debug-info)
    ($!env-stack:     self [])
@@ -131,20 +188,33 @@
    ($define! self (recycle-tmp-pos pos)
      (push! (@1 (last ($env-pos-stack: self))) pos))
 
+   ($define! self (define-var sym var-type)
+     (let ((cur-env (last ($env-stack: self))))
+       (@!sym cur-env var-type)))
+
+   ($define! self (lookup sym)
+     (recursive-lookup ($env-stack: self) 0 sym))
+
    ($define! self (push-env)
      (push! ($env-pos-stack: self) [0 []])
      (push! ($env-stack: self) {}))
 
+   ($define! self (cur-env-size)
+     (+ 1 (@0 (last ($env-pos-stack: self)))))
+
    ($define! self (pop-env)
      (pop! ($env-pos-stack: self))
      (pop! ($env-stack: self)))
+
+   ($define! self (compile atom code-pad out-idx)
+     (type-dispatch atom compile-expr-dispatch-map self code-pad out-idx))
 
    ($define! self (compile-atom atom code-pad out-idx)
      (type-dispatch atom compile-atom-dispatch-map self code-pad out-idx))))
 ;----------------------------------------------------------------------------
 
 (lambda (name data debug-info)
-  (let ((compiler (make-output-pad)))
+  (let ((compiler (make-static-data-pad)))
 ;    (displayln FOO: (@'nil { 'nil 1203  }))
     (displayln "INFO:" debug-info)
     (hook-compiler-methods compiler debug-info)
@@ -154,8 +224,8 @@
       (.op-push-env code-pad 1)
       (.push-env compiler)
       (do-each (top-level-atom data)
-        (.compile-atom compiler top-level-atom code-pad 0)
-        (displayln CODE: code-pad))
+        (.compile compiler top-level-atom code-pad 0))
+;      (displayln ENVPADSIZE: (.cur-env-size compiler))
       (.pop-env compiler)
       (.op-dump-env-stack code-pad)
       (.op-set-return code-pad 0)
@@ -168,7 +238,7 @@
         (displayln-time (run-vm-prog prog))))))
 ;----------------------------------------------------------------------------
 
-;  (let ((x (make-output-pad)))
+;  (let ((x (make-static-data-pad)))
 ;    (displayln X: (.add-static-data x "xxx"))
 ;    (displayln X: (.add-static-data x "xxx"))
 ;    (displayln X: (.add-static-data x "xxx")))
