@@ -74,7 +74,15 @@
 (define make-static-data-pad
  (lambda (debug-info)
    (let ((self { pad: []
+                 stack: []
                  debug-pos: nil }))
+
+     ($define! self (push-static-data-frame)
+       (push! ($stack: self) ($pad: self))
+       ($!pad: self []))
+
+     ($define! self (pop-static-data-frame)
+       ($!pad: (pop! ($stack: self))))
 
      ($define! self (set-debug-pos atom)
        (let ((info (@(atom-id atom) debug-info)))
@@ -210,7 +218,11 @@
                        ((syntax:)
                         (if (nil? (@2 (@1 var)))
                           ((@1 (@1 var)) atom self code-pad out-idx)
+                          ; TODO: Instead of preferring the primitive,
+                          ;       use the compiler func instead here!
                           (.compile-func-apply self atom code-pad out-idx)))
+                       ((var:)
+                        (.compile-func-apply self atom code-pad out-idx))
                        (else
                          (.error self "Bad variable type" var)))))
                   (else

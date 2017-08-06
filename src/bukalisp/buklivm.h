@@ -113,7 +113,7 @@ class PROG : public lilvm::UserData
             m_instructions[instr_len].op = OP_END;
         }
 
-        size_t data_array_len() { return m_atom_data_len; }
+        size_t data_array_len()   { return m_atom_data_len; }
         lilvm::Atom *data_array() { return m_atom_data; }
 
         void set_data_from(lilvm::AtomVec *av)

@@ -20,8 +20,21 @@
 (T '123         123)
 (T '(+ 123)     123)
 (T '(+ 1 123)   124)
-(t '((define x 12) (define y 34) (+ x y))       46)
-(T '(begin (define x 12) (define y 34) (+ x y)) 46)
+(t '((define x 12)
+     (define y 34)
+     (+ x y))
+   46)
+(T '(begin
+      (define x 12)
+      (define y 34)
+      (+ x y))
+   46)
+(t '((define x 12)
+     (set! x (+ 14.5 x)))
+   26.5)
+(t '((define x +)
+     (set! x (x 1.5 1)))
+   2.5)
 
 (displayln "ALL OK")
 ::
