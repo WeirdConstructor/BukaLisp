@@ -338,10 +338,34 @@
 ;         (.compile self (@2 atom) code-pad bind-idx)
 ;         (.op-mov code-pad out-idx bind-idx))))
 
+    (make-syntax compiler 'begin
+     (lambda (atom self code-pad out-idx)
+       (.compile-block self (drop atom 1) code-pad out-idx)))
+
+    (make-syntax compiler 'set!
+     (lambda (atom self code-pad out-idx)
+       (unless (eqv? 3 (length atom))
+         (.error self "'set!' needs 2 arguments" atom))
+       (unless (symbol? (@1 atom))
+         (.error self "Can only use set! on a symbol" atom))
+
+       (let ((var (.lookup self (@1 atom))))
+         (when (nil? var)
+           (.error self "Undefined variable" atom))
+
+         (.compile self (@2 atom) code-pad out-idx)
+         (if (eqv? (@0 (@1 var)) var:)
+           (if (> (@0 var) 0)
+             (.op-mov-to code-pad (@1 (@1 var)) (@0 var) out-idx)
+             (.op-mov    code-pad (@1 (@1 var)) out-idx)))
+           (let ((bind-idx (.new-pos self)))
+             (.define-var self (@1 atom) [var: bind-idx])
+             (.op-mov     code-pad bind-idx out-idx)))))
+
     (make-syntax compiler 'define
      (lambda (atom self code-pad out-idx)
        (unless (eqv? 3 (length atom))
-         (.error self "'define' needs 3 arguments" atom))
+         (.error self "'define' needs 2 arguments" atom))
        (unless (symbol? (@1 atom))
          (.error self "Can only define symbols as variable" atom))
 

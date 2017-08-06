@@ -331,3 +331,65 @@ START_PRIM()
         error("Can't 'first' on a non-list", A0);
     out = A0.at(0);
 END_PRIM(first)
+
+START_PRIM()
+    REQ_EQ_ARGC(take, 2);
+    if (A0.m_type != T_VEC)
+        error("Can't 'take' on a non-list", A0);
+    size_t ti  = (size_t) A1.to_int();
+    size_t len = (size_t) A0.m_d.vec->m_len;
+    if (ti > len) ti = len;
+    AtomVec *av = m_rt->m_gc.allocate_vector(ti);
+    for (size_t i = 0; i < len && i < ti; i++)
+        av->m_data[i] = A0.m_d.vec->m_data[i];
+    out = Atom(T_VEC, av);
+END_PRIM(take)
+
+START_PRIM()
+    REQ_EQ_ARGC(drop, 2);
+    if (A0.m_type != T_VEC)
+        error("Can't 'take' on a non-list", A0);
+    size_t di  = (size_t) A1.to_int();
+    size_t len = (size_t) A0.m_d.vec->m_len;
+    if (len < di)
+    {
+        out = Atom(T_VEC, m_rt->m_gc.allocate_vector(0));
+        return;
+    }
+    len -= di;
+    AtomVec *av = m_rt->m_gc.allocate_vector(len);
+    for (size_t i = 0; i < len; i++)
+        av->m_data[i] = A0.m_d.vec->m_data[i + di];
+    out = Atom(T_VEC, av);
+END_PRIM(drop)
+
+START_PRIM()
+    REQ_GT_ARGC(append, 0);
+    AtomVec *av = m_rt->m_gc.allocate_vector(0);
+    for (size_t i = 0; i < args.m_len; i++)
+    {
+        Atom &a = args.m_data[i];
+        if (a.m_type == T_VEC)
+        {
+            Atom *v = a.m_d.vec->m_data;
+            for (size_t j = 0; j < a.m_d.vec->m_len; j++)
+                av->push(v[j]);
+        }
+        else if (a.m_type == T_MAP)
+        {
+            AtomMap *map = a.m_d.map;
+            for (UnordAtomMap::iterator i = map->m_map.begin();
+                 i != map->m_map.end();
+                 i++)
+            {
+                av->push(i->first);
+                av->push(i->second);
+            }
+        }
+        else
+        {
+            av->push(a);
+        }
+    }
+    out = Atom(T_VEC, av);
+END_PRIM(append)

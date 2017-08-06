@@ -580,6 +580,28 @@ void test_ieval_proc()
               "  (@(type nil) m))",
               "1234");
 
+    TEST_EVAL("(first '(a b c))",        "a");
+    TEST_EVAL("(first '())",             "nil");
+    TEST_EVAL("(first [3])",             "3");
+    TEST_EVAL("(last [1 2 3])",          "3");
+    TEST_EVAL("(last [3])",              "3");
+    TEST_EVAL("(last [])",               "nil");
+    TEST_EVAL("(take [x: y: 12 3 4] 2)", "(x: y:)");
+    TEST_EVAL("(take [1] 2)",            "(1)");
+    TEST_EVAL("(take [1 2] 2)",          "(1 2)");
+    TEST_EVAL("(take [] 2)",             "()");
+    TEST_EVAL("(drop [1 2 3] 2)",        "(3)");
+    TEST_EVAL("(drop [1 2 3] 4)",        "()");
+    TEST_EVAL("(drop [1 2 3] 3)",        "()");
+    TEST_EVAL("(drop [] 3)",             "()");
+    TEST_EVAL("(drop [1 2 3] 0)",        "(1 2 3)");
+    TEST_EVAL("(drop [1 2 3] 1)",        "(2 3)");
+
+    TEST_EVAL("(append [1 2 3] 1 a: { x: 12 } [5 5 5])",
+              "(1 2 3 1 a: x: 12 5 5 5)");
+    TEST_EVAL("(append [1 2 3])",
+              "(1 2 3)");
+
 //TEST_EVAL("(eq? \"foo\" (symbol->string 'foo))",               "#true");
 //TEST_EVAL("(let ((p (lambda (x) x))) (eq? p p))",              "#true");
 //TEST_EVAL("(eq? t: (string->symbol \"t\"))",                   "#false");
