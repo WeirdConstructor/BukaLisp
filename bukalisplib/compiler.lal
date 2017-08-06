@@ -236,19 +236,23 @@
                 (let ((var (.lookup self atom)))
                   (when (nil? var)
                     (.error self "Undefined variable" atom))
+
                   (case (@0 (@1 var))
                     ((var:)
                      (let ((var-idx (@1 (@1 var))))
                        (if (> (@0 var) 0)
                          (.op-mov-from code-pad out-idx (@0 var) var-idx)
                          (.op-mov      code-pad out-idx var-idx))))
+
                     ((prim:)
                      (.op-load-prim code-pad out-idx (@1 (@1 var))))
+
                     ((syntax:)
                      (let ((prim-nr (@2 (@1 var))))
                        (when (nil? prim-nr)
                          (.error self "Syntax is not translatable to a primitive" atom))
                        (.op-load-prim code-pad out-idx prim-nr)))
+
                     (else
                       (.error self "Not a value binding variable" atom)))))
 
@@ -259,17 +263,21 @@
                    (let ((var (.lookup self (@0 atom))))
                      (when (nil? var)
                        (.error self "Undefined variable" (@0 atom)))
+
                      (case (@0 (@1 var))
                        ((prim:)
                         (.compile-func-apply self atom code-pad out-idx))
+
                        ((syntax:)
                         (if (nil? (@2 (@1 var)))
                           ((@1 (@1 var)) atom self code-pad out-idx)
                           ; TODO: Instead of preferring the primitive,
                           ;       use the compiler func instead here!
                           (.compile-func-apply self atom code-pad out-idx)))
+
                        ((var:)
                         (.compile-func-apply self atom code-pad out-idx))
+
                        (else
                          (.error self "Bad variable type" var)))))
                   (else
