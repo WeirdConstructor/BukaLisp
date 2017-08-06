@@ -1,10 +1,12 @@
 #define BIN_OP_LOOPS(op) \
-        if (out.m_type == T_DBL) \
-            for (size_t i = 1; i < args.m_len; i++) \
-                out.m_d.d = out.m_d.d op args.m_data[i].to_dbl(); \
-        else \
-            for (size_t i = 1; i < args.m_len; i++) \
-                out.m_d.i = out.m_d.i op args.m_data[i].to_int();
+        if (args.m_len > 1) { \
+            if (out.m_type == T_DBL) \
+                for (size_t i = 1; i < args.m_len; i++) \
+                    out.m_d.d = out.m_d.d op args.m_data[i].to_dbl(); \
+            else \
+                for (size_t i = 1; i < args.m_len; i++) \
+                    out.m_d.i = out.m_d.i op args.m_data[i].to_int(); \
+        }
 
 #define NO_ARG_NIL if (args.m_len <= 0) { out = Atom(); return; }
 
@@ -393,3 +395,29 @@ START_PRIM()
     }
     out = Atom(T_VEC, av);
 END_PRIM(append)
+
+#if IN_INTERPRETER
+
+START_PRIM()
+    REQ_GT_ARGC(invoke-compiler, 1);
+    if (args.m_len == 1)
+    {
+        out =
+            this->call_compiler(
+                "", A0.to_display_str(), false);
+    }
+    else if (args.m_len == 2)
+    {
+        out =
+            this->call_compiler(
+                A1.to_display_str(), A0.to_display_str(), false);
+    }
+    else
+    {
+        out =
+            this->call_compiler(
+                A1.to_display_str(), A0.to_display_str(), !A2.is_false());
+    }
+END_PRIM(invoke-compiler)
+
+#endif

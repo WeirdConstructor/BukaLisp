@@ -27,6 +27,7 @@ class Interpreter : public lilvm::ExternalGCRoot
         VM             *m_vm;
         lilvm::AtomVec *m_env_stack;
         lilvm::AtomVec *m_root_stack;
+        lilvm::AtomVec *m_cache;
         lilvm::AtomMap *m_debug_pos_map;
         std::string     m_debug_pos;
         std::vector<lilvm::Atom::PrimFunc *> m_primitives;
@@ -40,7 +41,7 @@ class Interpreter : public lilvm::ExternalGCRoot
         Interpreter(Runtime *rt, VM *vm = nullptr)
             : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_env_stack(nullptr),
               m_trace(false), m_vm(vm), m_debug_pos_map(nullptr),
-              m_force_always_gc(true)
+              m_force_always_gc(true), m_cache(nullptr)
         {
             init();
         }
@@ -53,11 +54,12 @@ class Interpreter : public lilvm::ExternalGCRoot
 
         lilvm::AtomVec *root_stack() { return m_root_stack; }
 
-        virtual size_t gc_root_count() { return 2; }
+        virtual size_t gc_root_count() { return 3; }
         virtual lilvm::AtomVec *gc_root_get(size_t i)
         {
             if (i == 0)      return m_root_stack;
             else if (i == 1) return m_env_stack;
+            else if (i == 2) return m_cache;
             else             return nullptr;
         }
 
@@ -131,6 +133,11 @@ class Interpreter : public lilvm::ExternalGCRoot
 
             return ret;
         }
+
+        lilvm::Atom call_compiler(
+            const std::string &code_name,
+            const std::string &code,
+            bool only_compile = false);
 
         void error(const std::string &msg)
         {

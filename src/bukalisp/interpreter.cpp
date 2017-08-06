@@ -1,6 +1,7 @@
 #include "interpreter.h"
 #include "buklivm.h"
 #include <chrono>
+#include "util.h"
 
 using namespace std;
 using namespace lilvm;
@@ -15,6 +16,7 @@ void Interpreter::init()
 
     m_root_stack = m_rt->m_gc.allocate_vector(0);
     m_env_stack  = m_rt->m_gc.allocate_vector(0);
+    m_cache      = m_rt->m_gc.allocate_vector(0);
 
 //    std::cout << "ENVSTKROOT=" << m_env_stack << ", ROOTSTKROOT=" << m_root_stack << std::endl;
 
@@ -60,7 +62,9 @@ void Interpreter::init()
 
 #define END_PRIM(name) }; root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
 
+#define IN_INTERPRETER 1
     #include "primitives.cpp"
+#undef IN_INTERPRETER
 }
 //---------------------------------------------------------------------------
 
@@ -298,7 +302,7 @@ Atom Interpreter::eval_for(Atom e, AtomVec *av)
     env_map->set(cnt_spec->m_data[0], at_i);
 
     Atom last;
-    if (end > i)
+    if (end >= i)
     {
         while (i <= end)
         {
@@ -831,6 +835,68 @@ Atom Interpreter::eval(Atom e)
     if (m_trace)
         cout << "<< eval: " << write_atom(e) << " => " << ret.to_write_str() << endl;
     return ret;
+}
+//---------------------------------------------------------------------------
+
+lilvm::Atom Interpreter::call_compiler(
+    const std::string &code_name,
+    const std::string &code,
+    bool only_compile)
+{
+    Atom compiler_func = m_cache->at(0);
+
+    if (compiler_func.m_type == T_NIL)
+    {
+        const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
+        if (bukalisp_lib_path == NULL)
+            bukalisp_lib_path = ".\\bukalisplib";
+
+        std::string compiler_path =
+            std::string(bukalisp_lib_path) + "\\" + "compiler.lal";
+
+        try
+        {
+            compiler_func = eval(compiler_path, slurp_str(compiler_path));
+        }
+        catch (std::exception &e)
+        {
+            throw InterpreterException(
+                "ERROR while compiling the compiler ["
+                + compiler_path + "] Exception: " + e.what());
+        }
+
+        if (compiler_func.m_type != T_CLOS)
+            throw InterpreterException(
+                "Compiler did not return a function! : "
+                + compiler_func.to_write_str());
+
+        m_cache->set(0, compiler_func);
+    }
+
+    AtomVecPush avpf(m_root_stack, compiler_func);
+
+    try
+    {
+        AtomMap *debug_info = nullptr;
+        Atom input_name(T_STR, m_rt->m_gc.new_symbol(code_name));
+        Atom input_data = m_rt->read(code_name, code, debug_info);
+        cout << "I:" << compiler_func.to_write_str() << endl;
+
+        AtomVec *args = m_rt->m_gc.allocate_vector(4);
+        args->m_data[0] = input_name;
+        args->m_data[1] = input_data;
+        args->m_data[2] = debug_info ? Atom(T_MAP, debug_info) : Atom();
+        args->m_data[3] = Atom(T_BOOL, only_compile);
+
+        return call(compiler_func, args, false);
+    }
+    catch (std::exception &e)
+    {
+        throw InterpreterException(
+            "Compiler ERROR (" + code_name + "): " + e.what());
+    }
+
+    return Atom();
 }
 //---------------------------------------------------------------------------
 

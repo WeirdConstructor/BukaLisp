@@ -1,0 +1,2 @@
+(invoke-compiler "123")
+(invoke-compiler "(+ 123)")

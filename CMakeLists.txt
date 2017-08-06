@@ -12,6 +12,7 @@ add_library(lilvm_lib STATIC
     src/atom.cpp
     src/bukalisp/interpreter.cpp
     src/bukalisp/buklivm.cpp
+    src/bukalisp/util.cpp
 #    src/lilvm.cpp
 )
 

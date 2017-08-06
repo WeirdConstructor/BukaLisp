@@ -285,12 +285,14 @@
       ; set vec from tmp registers
       ; do a CALL with the index of the function and the index of the arg vector
       ; CALL figures out what to do with #<primitive> or #<closure>
+      (displayln "ATO" (length atom))
      (let ((end-idx    (- (length atom) 1))
            (func-idx   (.new-tmp-pos self))
            (argvec-idx (.new-tmp-pos self))
            (arg-idxes []))
 
        (.compile self (@0 atom) code-pad func-idx)
+
 
        (for (i 1 end-idx)
          (let ((arg-idx (.new-tmp-pos self)))

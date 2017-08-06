@@ -12,66 +12,13 @@
 #include "bukalisp/buklivm.h"
 #include "atom.h"
 #include "atom_printer.h"
+#include "bukalisp/util.h"
 
 //---------------------------------------------------------------------------
 
 using namespace lilvm;
 using namespace std;
 
-UTF8Buffer *slurp(const std::string &filepath)
-{
-    ifstream input_file(filepath.c_str(),
-                        ios::in | ios::binary | ios::ate);
-
-    if (!input_file.is_open())
-        throw bukalisp::BukLiVMException("Couldn't open '" + filepath + "'");
-
-    size_t size = (size_t) input_file.tellg();
-
-    // FIXME (maybe, but not yet)
-    char *unneccesary_buffer_just_to_copy
-        = new char[size];
-
-    input_file.seekg(0, ios::beg);
-    input_file.read(unneccesary_buffer_just_to_copy, size);
-    input_file.close();
-
-//        cout << "read(" << size << ")["
-//             << unneccesary_buffer_just_to_copy << "]" << endl;
-
-    UTF8Buffer *u8b =
-        new UTF8Buffer(unneccesary_buffer_just_to_copy, size);
-    delete[] unneccesary_buffer_just_to_copy;
-
-    return u8b;
-}
-//---------------------------------------------------------------------------
-
-std::string slurp_str(const std::string &filepath)
-{
-    ifstream input_file(filepath.c_str(),
-                        ios::in | ios::binary | ios::ate);
-
-    if (!input_file.is_open())
-        throw bukalisp::BukLiVMException("Couldn't open '" + filepath + "'");
-
-    size_t size = (size_t) input_file.tellg();
-
-    // FIXME (maybe, but not yet)
-    char *unneccesary_buffer_just_to_copy
-        = new char[size];
-
-    input_file.seekg(0, ios::beg);
-    input_file.read(unneccesary_buffer_just_to_copy, size);
-    input_file.close();
-
-//        cout << "read(" << size << ")["
-//             << unneccesary_buffer_just_to_copy << "]" << endl;
-
-    std::string data(unneccesary_buffer_just_to_copy, size);
-    delete[] unneccesary_buffer_just_to_copy;
-    return data;
-}
 //---------------------------------------------------------------------------
 
 #define TEST_TRUE(b, msg) \
@@ -838,6 +785,10 @@ void test_ieval_loops()
               "  ol)                              ",
               "(0 4 8 12 16)");
 
+    TEST_EVAL("(for (i 1 1) (+ i 1))", "2");
+    TEST_EVAL("(let ((x [])) (for (i -1 1) (push! x i)) x)", "(-1 0 1)");
+    TEST_EVAL("(let ((x [])) (for (i -1 -1) (push! x i)) x)", "(-1)");
+
     TEST_EVAL("(let ((l [])) "
               "  (do-each (v [1 2 3]) "
               "    (push! l (* v 2))) "
@@ -1000,58 +951,24 @@ int main(int argc, char *argv[])
         }
         else if (!input_file_path.empty())
         {
-            const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
-            if (bukalisp_lib_path == NULL)
-                bukalisp_lib_path = ".\\bukalisplib";
-
-            std::string compiler_path =
-                std::string(bukalisp_lib_path) + "\\" + "compiler.lal";
-
             bukalisp::Runtime rt;
             bukalisp::VM vm(&rt);
             bukalisp::Interpreter i(&rt, &vm);
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
-            Atom compiler_func;
+
             try
             {
-                compiler_func = i.eval(compiler_path, slurp_str(compiler_path));
+                Atom r =
+                    i.call_compiler(
+                        input_file_path,
+                        slurp_str(input_file_path),
+                        false);
+                cout << r.to_write_str() << endl;
             }
             catch (std::exception &e)
             {
-                cerr << "ERROR while compiling the compiler ["
-                     << compiler_path << "] Exception: "
-                     << e.what() << endl;
-            }
-
-            AtomVecPush ave(i.root_stack(), compiler_func);
-
-            if (compiler_func.m_type != T_NIL)
-            {
-                try
-                {
-                    AtomMap *debug_info = nullptr;
-                    Atom input_name(T_STR, rt.m_gc.new_symbol(input_file_path));
-                    Atom input_data =
-                        rt.read(input_file_path, slurp_str(input_file_path), debug_info);
-
-                    AtomVec *args = rt.m_gc.allocate_vector(3);
-                    args->m_data[0] = input_name;
-                    args->m_data[1] = input_data;
-                    args->m_data[2] = debug_info ? Atom(T_MAP, debug_info) : Atom();
-
-                    cout << "indata: " << input_data.to_write_str() << endl;
-
-                    Atom r = i.call(compiler_func, args, false);
-                    std::string rs = write_atom(r);
-                    cout << rs << endl;
-                }
-                catch (std::exception &e)
-                {
-                    cerr << "ERROR ["
-                         << input_file_path << "] Exception: "
-                         << e.what() << endl;
-                }
+                cerr << "Exception: " << e.what() << endl;
             }
         }
         else
