@@ -880,7 +880,6 @@ lilvm::Atom Interpreter::call_compiler(
         AtomMap *debug_info = nullptr;
         Atom input_name(T_STR, m_rt->m_gc.new_symbol(code_name));
         Atom input_data = m_rt->read(code_name, code, debug_info);
-        cout << "I:" << compiler_func.to_write_str() << endl;
 
         AtomVec *args = m_rt->m_gc.allocate_vector(4);
         args->m_data[0] = input_name;

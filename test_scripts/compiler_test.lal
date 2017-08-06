@@ -1,2 +1,10 @@
-(invoke-compiler "123")
-(invoke-compiler "(+ 123)")
+(define t
+  (lambda (code expected)
+    (let ((r (invoke-compiler code)))
+      (if (eqv? r expected)
+        (displayln (str "OK - " code))
+        (error (str "Test failed: " code ", returned: " r " != " expected))))))
+
+(t "123"        123)
+(t "(+ 123)"    123)
+(t "(+ 1 123)"  124)

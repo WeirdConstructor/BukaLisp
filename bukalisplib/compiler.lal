@@ -208,7 +208,6 @@
                        (.error self "Undefined variable" (@0 atom)))
                      (case (@0 (@1 var))
                        ((syntax:)
-                        (displayln SYN:)
                         (if (nil? (@2 (@1 var)))
                           ((@1 (@1 var)) atom self code-pad out-idx)
                           (.compile-func-apply self atom code-pad out-idx)))
@@ -285,7 +284,6 @@
       ; set vec from tmp registers
       ; do a CALL with the index of the function and the index of the arg vector
       ; CALL figures out what to do with #<primitive> or #<closure>
-      (displayln "ATO" (length atom))
      (let ((end-idx    (- (length atom) 1))
            (func-idx   (.new-tmp-pos self))
            (argvec-idx (.new-tmp-pos self))
@@ -380,7 +378,7 @@
 (lambda (name data debug-info)
   (let ((compiler (make-static-data-pad debug-info)))
 ;    (displayln FOO: (@'nil { 'nil 1203  }))
-    (displayln "INFO:" debug-info)
+;    (displayln "INFO:" debug-info)
     (hook-compiler-methods compiler)
     (.push-env compiler)
     (init-base-env compiler)
@@ -389,17 +387,17 @@
       ; TODO: we need to calculate the actual sized pad we need in future!
       (.op-push-env code-pad 1)
       (do-each (top-level-atom data)
-        (displayln (str "Compile TLA: [" top-level-atom "]"))
+;        (displayln (str "Compile TLA: [" top-level-atom "]"))
         (.compile compiler top-level-atom code-pad 0))
 ;      (displayln ENVPADSIZE: (.cur-env-size compiler))
-      (.op-dump-env-stack code-pad)
+;      (.op-dump-env-stack code-pad)
       (.op-set-return code-pad 0)
       (.op-pop-env code-pad)
 
-      (displayln PAD: ($pad: compiler))
+;      (displayln PAD: ($pad: compiler))
 
       (let ((prog (.to-vm-prog compiler code-pad)))
-        (displayln prog)
+;        (displayln prog)
         (displayln-time (run-vm-prog prog))))))
 ;----------------------------------------------------------------------------
 
