@@ -36,5 +36,8 @@
      (set! x (x 1.5 1)))
    2.5)
 
+(T '(* 2 3 4)          24)
+(T '(> (atom-id []) 0) #true)
+
 (displayln "ALL OK")
 ::

@@ -878,6 +878,7 @@ int main(int argc, char *argv[])
         bool interpret  = false;
         bool i_trace    = false;
         bool i_force_gc = false;
+        bool i_ppt      = false;
 
         for (int i = 1; i < argc; i++)
         {
@@ -890,6 +891,8 @@ int main(int argc, char *argv[])
                 i_force_gc = true;
             else if (arg == "-t")
                 i_trace = true;
+            else if (arg == "-P")
+                i_ppt = true;
             else if (arg[0] == '-')
             {
                 std::cerr << "unknown option: " << argv[i] << std::endl;
@@ -930,6 +933,13 @@ int main(int argc, char *argv[])
             {
                 cerr << "TESTS FAIL, EXCEPTION: " << e.what() << endl;
             }
+        }
+        else if (i_ppt)
+        {
+            bukalisp::Runtime rt;
+            bukalisp::VM vm(&rt);
+            bukalisp::Interpreter i(&rt, &vm);
+            i.print_primitive_table();
         }
         else if (interpret && !input_file_path.empty())
         {

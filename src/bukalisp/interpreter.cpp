@@ -54,17 +54,32 @@ void Interpreter::init()
     DEF_SYNTAX($);
     DEF_SYNTAX(displayln-time);
 
+    AtomVec *av_prim_tbl = m_rt->m_gc.allocate_vector(0);
+    m_cache->set(1, Atom(T_VEC, av_prim_tbl));
+
 #define START_PRIM() \
     tmp = Atom(T_PRIM); \
     tmp.m_d.func = new Atom::PrimFunc; \
     m_primitives.push_back(tmp.m_d.func); \
     (*tmp.m_d.func) = [this](AtomVec &args, Atom &out) {
 
-#define END_PRIM(name) }; root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
+#define END_PRIM(name) }; av_prim_tbl->push(Atom(T_SYM, m_rt->m_gc.new_symbol(#name))); root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
 
 #define IN_INTERPRETER 1
     #include "primitives.cpp"
 #undef IN_INTERPRETER
+}
+//---------------------------------------------------------------------------
+
+void Interpreter::print_primitive_table()
+{
+    AtomVec *ppt = m_cache->at(1).m_d.vec;
+    AtomMap *m = m_rt->m_gc.allocate_map();
+    for (size_t i = 0; i < ppt->m_len; i++)
+    {
+        m->set(ppt->m_data[i], Atom(T_INT, i));
+    }
+    cout << Atom(T_MAP, m).to_write_str() << endl;
 }
 //---------------------------------------------------------------------------
 

@@ -52,6 +52,8 @@ class Interpreter : public lilvm::ExternalGCRoot
                 delete p;
         }
 
+        void print_primitive_table();
+
         lilvm::AtomVec *root_stack() { return m_root_stack; }
 
         virtual size_t gc_root_count() { return 3; }

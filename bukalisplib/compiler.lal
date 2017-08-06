@@ -1,4 +1,47 @@
-(define x 10)
+(define primitive-table
+  '{
+    <=              6
+    symbol?         11
+    +               0
+    *               1
+    /               2
+    -               3
+    <               4
+    first           37
+    exact?          14
+    list            8
+    append          40
+    keyword?        12
+    >               5
+    >=              7
+    eqv?            9
+    map?            19
+    not             10
+    nil?            13
+    inexact?        15
+    string?         16
+    boolean?        17
+    @!              22
+    list?           18
+    pop!            26
+    procedure?      20
+    @               21
+    type            23
+    display         30
+    length          24
+    push!           25
+    make-vm-prog    27
+    str-join        35
+    run-vm-prog     28
+    error           29
+    newline         31
+    displayln       32
+    atom-id         33
+    str             34
+    last            36
+    take            38
+    drop            39
+    invoke-compiler 41 })
 ;----------------------------------------------------------------------------
 
 (define make-code-pad-object
@@ -199,6 +242,8 @@
                        (if (> (@0 var) 0)
                          (.op-mov-from code-pad out-idx (@0 var) var-idx)
                          (.op-mov      code-pad out-idx var-idx))))
+                    ((prim:)
+                     (.op-load-prim code-pad out-idx (@1 (@1 var))))
                     ((syntax:)
                      (let ((prim-nr (@2 (@1 var))))
                        (when (nil? prim-nr)
@@ -215,6 +260,8 @@
                      (when (nil? var)
                        (.error self "Undefined variable" (@0 atom)))
                      (case (@0 (@1 var))
+                       ((prim:)
+                        (.compile-func-apply self atom code-pad out-idx))
                        ((syntax:)
                         (if (nil? (@2 (@1 var)))
                           ((@1 (@1 var)) atom self code-pad out-idx)
@@ -303,16 +350,17 @@
 
        (.compile self (@0 atom) code-pad func-idx)
 
-
-       (for (i 1 end-idx)
-         (let ((arg-idx (.new-tmp-pos self)))
-           (push! arg-idxes arg-idx)
-           (.compile self (@i atom) code-pad arg-idx)))
+       (when (> end-idx 0)
+         (for (i 1 end-idx)
+           (let ((arg-idx (.new-tmp-pos self)))
+             (push! arg-idxes arg-idx)
+             (.compile self (@i atom) code-pad arg-idx))))
 
        (.op-new-vec code-pad argvec-idx (- (length atom) 1))
-       (for (i 0 (- end-idx 1))
-         (.op-cset-vec code-pad argvec-idx i (@i arg-idxes))
-         (.recycle-tmp-pos self (@i arg-idxes)))
+       (when (> end-idx 0)
+         (for (i 0 (- end-idx 1))
+           (.op-cset-vec code-pad argvec-idx i (@i arg-idxes))
+           (.recycle-tmp-pos self (@i arg-idxes))))
        (.op-call code-pad out-idx func-idx argvec-idx)
        (.recycle-tmp-pos self func-idx)))
 
@@ -337,9 +385,12 @@
 
 (define init-base-env
   (lambda (compiler)
-    (make-prim-syntax compiler '+
-     (lambda (atom self code-pad out-idx) 0)
-     0)
+;    (make-prim-syntax compiler '+
+;     (lambda (atom self code-pad out-idx) 0)
+;     0)
+
+    (do-each (k v primitive-table)
+      (.define-var compiler k [prim: v]))
 ;       (unless (< 2 (length atom))
 ;         (.error self "'+' needs 3 arguments" atom))
 ;       (unless (symbol? (@1 atom))
