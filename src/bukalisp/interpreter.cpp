@@ -839,9 +839,34 @@ Atom Interpreter::eval(Atom e)
 //---------------------------------------------------------------------------
 
 lilvm::Atom Interpreter::call_compiler(
-    const std::string &code_name,
-    const std::string &code,
+    lilvm::Atom prog,
+    lilvm::AtomMap *debug_info_map,
+    const std::string &input_name,
     bool only_compile)
+{
+    Atom compiler_func = get_compiler_func();
+
+    try
+    {
+        AtomVec *args = m_rt->m_gc.allocate_vector(4);
+        args->m_data[0] = Atom(T_STR, m_rt->m_gc.new_symbol(input_name));
+        args->m_data[1] = prog;
+        args->m_data[2] = debug_info_map ? Atom(T_MAP, debug_info_map) : Atom();
+        args->m_data[3] = Atom(T_BOOL, only_compile);
+
+        return call(compiler_func, args, false);
+    }
+    catch (std::exception &e)
+    {
+        throw InterpreterException(
+            "Compiler ERROR (" + input_name + "): " + e.what());
+    }
+
+    return Atom();
+}
+//---------------------------------------------------------------------------
+
+lilvm::Atom Interpreter::get_compiler_func()
 {
     Atom compiler_func = m_cache->at(0);
 
@@ -873,21 +898,22 @@ lilvm::Atom Interpreter::call_compiler(
         m_cache->set(0, compiler_func);
     }
 
-    AtomVecPush avpf(m_root_stack, compiler_func);
+    return compiler_func;
+}
+//---------------------------------------------------------------------------
+
+lilvm::Atom Interpreter::call_compiler(
+    const std::string &code_name,
+    const std::string &code,
+    bool only_compile)
+{
+    Atom compiler_func = get_compiler_func();
 
     try
     {
         AtomMap *debug_info = nullptr;
-        Atom input_name(T_STR, m_rt->m_gc.new_symbol(code_name));
         Atom input_data = m_rt->read(code_name, code, debug_info);
-
-        AtomVec *args = m_rt->m_gc.allocate_vector(4);
-        args->m_data[0] = input_name;
-        args->m_data[1] = input_data;
-        args->m_data[2] = debug_info ? Atom(T_MAP, debug_info) : Atom();
-        args->m_data[3] = Atom(T_BOOL, only_compile);
-
-        return call(compiler_func, args, false);
+        return call_compiler(input_data, debug_info, code_name, only_compile);
     }
     catch (std::exception &e)
     {

@@ -402,21 +402,36 @@ START_PRIM()
     REQ_GT_ARGC(invoke-compiler, 1);
     if (args.m_len == 1)
     {
-        out =
-            this->call_compiler(
-                "", A0.to_display_str(), false);
+        if (A0.m_type == T_STR)
+            out =
+                this->call_compiler(
+                    "", A0.to_display_str(), false);
+        else
+            out =
+                this->call_compiler(
+                    A0, this->m_debug_pos_map, "", false);
     }
     else if (args.m_len == 2)
     {
-        out =
-            this->call_compiler(
-                A1.to_display_str(), A0.to_display_str(), false);
+        if (A0.m_type == T_STR)
+            out =
+                this->call_compiler(
+                    A1.to_display_str(), A0.to_display_str(), false);
+        else
+            out =
+                this->call_compiler(
+                    A0, this->m_debug_pos_map, A1.to_display_str(), false);
     }
     else
     {
-        out =
-            this->call_compiler(
-                A1.to_display_str(), A0.to_display_str(), !A2.is_false());
+        if (A0.m_type == T_STR)
+            out =
+                this->call_compiler(
+                    A1.to_display_str(), A0.to_display_str(), !A2.is_false());
+        else
+            out =
+                this->call_compiler(
+                    A0, this->m_debug_pos_map, A1.to_display_str(), !A2.is_false());
     }
 END_PRIM(invoke-compiler)
 

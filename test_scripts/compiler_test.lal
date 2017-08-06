@@ -5,6 +5,23 @@
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
+(define T
+  (lambda (code expected)
+    (let ((r (invoke-compiler [code])))
+      (if (eqv? r expected)
+        (displayln (str "OK - " code))
+        (error (str "Test failed: " code ", returned: " r " != " expected))))))
+
 (t "123"        123)
 (t "(+ 123)"    123)
 (t "(+ 1 123)"  124)
+(t "(define x 12) (define y 34) (+ x y)" 46)
+
+(T '123         123)
+(T '(+ 123)     123)
+(T '(+ 1 123)   124)
+(t '((define x 12) (define y 34) (+ x y))       46)
+(T '(begin (define x 12) (define y 34) (+ x y)) 46)
+
+(displayln "ALL OK")
+::

@@ -134,6 +134,13 @@ class Interpreter : public lilvm::ExternalGCRoot
             return ret;
         }
 
+        lilvm::Atom get_compiler_func();
+        lilvm::Atom call_compiler(
+            lilvm::Atom prog,
+            lilvm::AtomMap *debug_info_map,
+            const std::string &input_name = "",
+            bool only_compile = false);
+
         lilvm::Atom call_compiler(
             const std::string &code_name,
             const std::string &code,
