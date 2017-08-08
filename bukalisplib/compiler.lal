@@ -107,6 +107,9 @@
       ($define! self (op-call out-idx func-idx argvec-idx)
         (push-op [CALL: out-idx func-idx argvec-idx]))
 
+      ($define! self (op-new-closure out-idx in-idx)
+        (push-op [NEW_CLOSURE: out-idx in-idx]))
+
       ($define! self (op-load static out-idx)
         ; TODO: optimize static data loading by storing their
         ;       positions in a map
@@ -125,7 +128,7 @@
        ($!pad: self []))
 
      ($define! self (pop-static-data-frame)
-       ($!pad: (pop! ($stack: self))))
+       ($!pad: self (pop! ($stack: self))))
 
      ($define! self (set-debug-pos atom)
        (let ((info (@(atom-id atom) debug-info)))
@@ -280,6 +283,8 @@
 
                        (else
                          (.error self "Bad variable type" var)))))
+                  ((list)
+                   (.compile-func-apply self atom code-pad out-idx))
                   (else
                     (.error self "Invalid atom type at start of list" atom))))})
 ;                (do-each (a atom)
@@ -399,6 +404,7 @@
 
     (do-each (k v primitive-table)
       (.define-var compiler k [prim: v]))
+
 ;       (unless (< 2 (length atom))
 ;         (.error self "'+' needs 3 arguments" atom))
 ;       (unless (symbol? (@1 atom))
@@ -412,6 +418,36 @@
     (make-syntax compiler 'begin
      (lambda (atom self code-pad out-idx)
        (.compile-block self (drop atom 1) code-pad out-idx)))
+
+    (make-syntax compiler 'lambda
+     (lambda (atom self code-pad out-idx)
+       (.push-static-data-frame self)
+       (.push-env self)
+       (do-each (var (@1 atom))
+         (unless (symbol? var)
+           (.error self "Can't use non symbol in lambda parameter list" var))
+         (.define-var self var [var: (.new-pos self)]))
+       (let ((lambda-code-pad (.make-code-pad self)))
+         (.compile-block self (drop atom 2) lambda-code-pad 0)
+         (let ((new-prog (.to-vm-prog self lambda-code-pad)))
+           (.pop-env self)
+           (.pop-static-data-frame self)
+           (.op-load code-pad new-prog out-idx)
+           (.op-new-closure code-pad out-idx out-idx)
+           (displayln LAMBDA: new-prog)))
+        ; push static data pad
+
+        ; push environment (but not on VM, because there the CALL
+        ;                   does that with the argument vector)
+
+        ; create PROG data structure and store it on the parent
+        ; static data pad.
+        ; pop static data pad
+
+        ; emit .op-new-func     with pointer to the PROG data structure
+        ; The VM stores a copy of the current env stack in the closure
+        ; together with the PROG data structure.
+        ))
 
     (make-syntax compiler 'set!
      (lambda (atom self code-pad out-idx)
@@ -461,15 +497,16 @@
 ;        (displayln (str "Compile TLA: [" top-level-atom "]"))
         (.compile compiler top-level-atom code-pad 0))
 ;      (displayln ENVPADSIZE: (.cur-env-size compiler))
-;      (.op-dump-env-stack code-pad)
+      (.op-dump-env-stack code-pad)
       (.op-set-return code-pad 0)
       (.op-pop-env code-pad)
 
 ;      (displayln PAD: ($pad: compiler))
 
       (let ((prog (.to-vm-prog compiler code-pad)))
-;        (displayln prog)
-        (displayln-time (run-vm-prog prog))))))
+        (displayln prog)
+        (displayln-time (run-vm-prog prog)))
+      )))
 ;----------------------------------------------------------------------------
 
 ;  (let ((x (make-static-data-pad)))

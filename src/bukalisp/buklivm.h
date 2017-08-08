@@ -37,6 +37,7 @@ class VMException : public std::exception
     X(DUMP_ENV_STACK,12) \
     X(SET_RETURN,    13) \
     X(CALL,          14) \
+    X(NEW_CLOSURE,   15) \
     X(ADD,          100) \
     X(SUB,          101) \
     X(MUL,          102) \

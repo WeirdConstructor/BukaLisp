@@ -304,9 +304,25 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
+            case OP_NEW_CLOSURE:
+            {
+                Atom prog = cur_env->at(m_pc->_.x.a);
+                if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
+                    error("VM can't make closure from non VM-PROG", prog);
+
+                Atom cl(T_CLOS);
+                cl.m_d.vec = m_rt->m_gc.allocate_vector(2);
+                cl.m_d.vec->m_data[0] = prog;
+                cl.m_d.vec->m_data[1] =
+                    Atom(T_VEC, m_rt->m_gc.clone_vector(m_env_stack));
+
+                cur_env->set(m_pc->o, cl);
+                break;
+            }
+
             case OP_CALL:
             {
-                size_t out_idx = m_pc->o;
+                size_t out_idx  = m_pc->o;
                 size_t func_idx = m_pc->_.l.a;
                 size_t argv_idx = m_pc->_.l.b;
 
