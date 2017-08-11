@@ -25,7 +25,8 @@ enum Type : int16_t
     T_PRIM,     // m_d.func
     T_SYNTAX,   // m_d.sym
     T_CLOS,     // m_d.vec
-    T_UD        // m_d.ud
+    T_UD,       // m_d.ud
+    T_C_PTR     // m_d.ptr
 };
 //---------------------------------------------------------------------------
 
@@ -117,6 +118,7 @@ struct Atom
         AtomVec     *vec;
         AtomMap     *map;
         UserData    *ud;
+        void        *ptr;
     } m_d;
 
     Atom() : m_type(T_NIL)
@@ -212,8 +214,10 @@ struct Atom
                                 && m_d.vec == o.m_d.vec;
             case T_MAP:  return o.m_type == T_MAP
                                 && m_d.map == o.m_d.map;
-            case T_UD:   return o.m_type == T_UD 
+            case T_UD:   return o.m_type == T_UD
                                 && m_d.ud == o.m_d.ud;
+            case T_C_PTR:return o.m_type == T_UD
+                                && m_d.ptr == o.m_d.ptr;
             case T_PRIM: return o.m_type == T_PRIM
                                 && m_d.func == o.m_d.func;
             case T_NIL:  return o.m_type == T_NIL;
@@ -246,6 +250,9 @@ struct Atom
 
             case T_UD:
                 return (int64_t) m_d.ud;
+
+            case T_C_PTR:
+                return (int64_t) m_d.ptr;
 
             case T_VEC:
             case T_CLOS:
@@ -281,6 +288,9 @@ struct Atom
 
             case T_UD:
                 return m_d.ud == other.m_d.ud;
+
+            case T_C_PTR:
+                return m_d.ptr == other.m_d.ptr;
 
             default:
                 // pointer comparsion

@@ -83,6 +83,9 @@
       ($define! self (op-set-return idx)
         (push-op [SET_RETURN: 0 idx]))
 
+      ($define! self (op-return idx)
+        (push-op [RETURN: 0 idx]))
+
       ($define! self (op-mov out-idx in-idx)
         (push-op [MOV: out-idx in-idx]))
 
@@ -423,18 +426,23 @@
      (lambda (atom self code-pad out-idx)
        (.push-static-data-frame self)
        (.push-env self)
+
        (do-each (var (@1 atom))
          (unless (symbol? var)
            (.error self "Can't use non symbol in lambda parameter list" var))
          (.define-var self var [var: (.new-pos self)]))
+
        (let ((lambda-code-pad (.make-code-pad self)))
          (.compile-block self (drop atom 2) lambda-code-pad 0)
+         (.op-return lambda-code-pad 0)
+
          (let ((new-prog (.to-vm-prog self lambda-code-pad)))
            (.pop-env self)
            (.pop-static-data-frame self)
            (.op-load code-pad new-prog out-idx)
            (.op-new-closure code-pad out-idx out-idx)
            (displayln LAMBDA: new-prog)))
+
         ; push static data pad
 
         ; push environment (but not on VM, because there the CALL

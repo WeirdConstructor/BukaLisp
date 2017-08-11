@@ -144,10 +144,14 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
     m_pc = &(m_prog->m_instructions[0]);
 
-    AtomVec *cur_env = args;
+    AtomVec *cur_env = m_cur_env = args;
 
     while (m_pc->op != OP_END)
     {
+        cout << "VMTRC: ";
+        m_pc->to_string(cout);
+        cout << endl;
+
         switch (m_pc->op)
         {
             case OP_DUMP_ENV_STACK:
@@ -291,7 +295,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
             case OP_PUSH_ENV:
             {
                 m_env_stack->push(
-                    Atom(T_VEC, cur_env = m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
+                    Atom(T_VEC, m_cur_env = cur_env = m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
                 break;
             }
 
@@ -301,6 +305,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 Atom *l = m_env_stack->last();
                 if (l) cur_env = l->m_d.vec;
                 else   cur_env = args;
+                m_cur_env = cur_env;
                 break;
             }
 
@@ -343,12 +348,94 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     Atom ret;
                     (*func.m_d.func)(*(argv.m_d.vec), ret);
                     cur_env->set(out_idx, ret);
+
+                    cur_env->m_data[func_idx] = Atom();
+                    m_cur_env->m_data[argv_idx] = Atom();
+                }
+                else if (func.m_type == T_CLOS)
+                {
+                    if (func.m_d.vec->m_len < 2)
+                        error("Bad closure found", func);
+                    if (func.m_d.vec->m_data[0].m_type != T_UD)
+                        error("Bad closure found", func);
+
+                    AtomVec *cont = m_rt->m_gc.allocate_vector(5);
+
+                    Atom prog(T_UD);
+                    prog.m_d.ud = (UserData *) m_prog;
+                    Atom pc(T_C_PTR);
+                    pc.m_d.ptr = m_pc + 1;
+
+                    cont->m_data[0] = prog;
+                    cont->m_data[1] = pc;
+                    cont->m_data[2] = Atom(T_VEC, m_env_stack);
+                    cont->m_data[3] = Atom(T_VEC, m_cur_env);
+                    cont->m_data[4] = Atom(T_INT, out_idx);
+
+                    m_cont_stack->push(Atom(T_VEC, cont));
+
+                    m_cur_env->m_data[func_idx] = Atom();
+                    m_cur_env->m_data[argv_idx] = Atom();
+
+                    // FIXME: we need to make sure m_prog is seeable by
+                    //        the GC. Maybe we need to push the current function
+                    //        to be always on the continuation-stack?!
+                    m_prog   = dynamic_cast<PROG*>(func.m_d.vec->m_data[0].m_d.ud);
+                    data     = m_prog->data_array();
+                    data_len = m_prog->data_array_len();
+                    m_pc     = &(m_prog->m_instructions[0]);
+                    m_pc--;
+
+                    m_env_stack = func.m_d.vec->m_data[1].m_d.vec;
+                    cur_env = m_cur_env = argv.m_d.vec;
+
+                    //    m_prog          = dynamic_cast<PROG*>(at_ud.m_d.ud);
+                    //    Atom *data      = m_prog->data_array();
+                    //    size_t data_len = m_prog->data_array_len();
+                    //
+                    //    m_pc = &(m_prog->m_instructions[0]);
+                    //
+                    //    m_env_stack = closure env stack.
+                    //    AtomVec *m_cur_env = arg-vector;
+                    // m_prog ersetzen, m_pc auf (anfang - 1) setzen
+                    // m_env_stack setzen und m_cur_env setzen
                 }
                 else
                     error("CALL does not support that function type yet", func);
 
-                cur_env->m_data[func_idx] = Atom();
-                cur_env->m_data[argv_idx] = Atom();
+                break;
+            }
+
+            case OP_RETURN:
+            {
+                Atom retval = cur_env->at(m_pc->_.x.a);
+
+                Atom cont = *m_cont_stack->last();
+                m_cont_stack->pop();
+                if (cont.m_type != T_VEC || cont.m_d.vec->m_len < 5)
+                    error("Empty or bad continuation stack item!", cont);
+
+
+                Atom proc   = cont.m_d.vec->m_data[0];
+                Atom pc     = cont.m_d.vec->m_data[1];
+                Atom envs   = cont.m_d.vec->m_data[2];
+                Atom env    = cont.m_d.vec->m_data[3];
+                size_t oidx = cont.m_d.vec->m_data[4].m_d.i;
+
+                // FIXME: we need to make sure m_prog is seeable by
+                //        the GC. Maybe we need to push the current function
+                //        to be always on the continuation-stack?!
+                m_prog   = dynamic_cast<PROG*>(proc.m_d.ud);
+                data     = m_prog->data_array();
+                data_len = m_prog->data_array_len();
+                m_pc     = (INST *) pc.m_d.ptr;
+
+                m_env_stack         = envs.m_d.vec;
+                cur_env = m_cur_env = env.m_d.vec;
+                cur_env->set(oidx, retval);
+
+                cout << "VMRETURN VAL: " << retval.to_write_str() << endl;
+
                 break;
             }
 

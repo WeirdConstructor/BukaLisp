@@ -74,6 +74,9 @@ void write_atom(const Atom &a, std::ostream &o)
         case T_CLOS:
             o << "#<closure:" << ((void *) a.m_d.vec) << ">";
             break;
+        case T_C_PTR:
+            o << "#<cpointer:" << a.m_d.ptr << ">";
+            break;
         case T_UD:
             {
                 std::string s = a.m_d.ud->as_string();
@@ -90,7 +93,7 @@ void write_atom(const Atom &a, std::ostream &o)
 
 std::string write_atom(const Atom &a)
 {
-    std::stringstream ss;
+    std::stringstream ss; 
     write_atom(a, ss);
     return ss.str();
 }
