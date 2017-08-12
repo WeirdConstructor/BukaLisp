@@ -677,8 +677,6 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
             // TODO: Refactor for (apply ...)?
             for (size_t i = 0; i < binds->m_len; i++)
             {
-                set_debug_pos(e);
-
                 if (binds->m_data[i].m_type != T_SYM)
                     error("Atom in binding list is not a symbol",
                           lambda_form.m_d.vec->m_data[1]);

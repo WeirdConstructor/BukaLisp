@@ -377,7 +377,7 @@
          (for (i 0 (- end-idx 1))
            (.op-cset-vec code-pad argvec-idx i (@i arg-idxes))
            (.recycle-tmp-pos self (@i arg-idxes))))
-       (.op-dump-env-stack code-pad)
+;       (.op-dump-env-stack code-pad)
        (.op-call code-pad out-idx func-idx argvec-idx)
        (.recycle-tmp-pos self func-idx)))
 
@@ -443,7 +443,8 @@
            (.pop-static-data-frame self)
            (.op-load code-pad new-prog out-idx)
            (.op-new-closure code-pad out-idx out-idx)
-           (displayln LAMBDA: new-prog)))
+;           (displayln LAMBDA: new-prog)
+           ))
 
         ; push static data pad
 
@@ -508,14 +509,14 @@
 ;        (displayln (str "Compile TLA: [" top-level-atom "]"))
         (.compile compiler top-level-atom code-pad ret-val-pos))
 ;      (displayln ENVPADSIZE: (.cur-env-size compiler))
-      (.op-dump-env-stack code-pad)
+;      (.op-dump-env-stack code-pad)
       (.op-set-return code-pad ret-val-pos)
       (.op-pop-env code-pad)
 
 ;      (displayln PAD: ($pad: compiler))
 
       (let ((prog (.to-vm-prog compiler code-pad)))
-        (displayln prog)
+;        (displayln prog)
         (displayln-time (run-vm-prog prog)))
       )))
 ;----------------------------------------------------------------------------

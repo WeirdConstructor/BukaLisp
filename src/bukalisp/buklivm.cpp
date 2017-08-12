@@ -150,10 +150,10 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
     while (m_pc->op != OP_END)
     {
-        cout << "VMTRC: ";
-        m_pc->to_string(cout);
-        cout << endl;
-
+//        cout << "VMTRC FRMS(" << m_cont_stack->m_len << "): ";
+//        m_pc->to_string(cout);
+//        cout << " {ENV= " << Atom(T_VEC, cur_env).to_write_str() << "}" << endl;
+//
         switch (m_pc->op)
         {
             case OP_DUMP_ENV_STACK:
@@ -221,7 +221,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 cur_env->set(
                     m_pc->o,
                     Atom(T_VEC, m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
-                cout << "NEW VEC: " << m_pc->o << " = " << cur_env->m_data[m_pc->o].to_write_str() << endl;
                 break;
             }
 
@@ -236,7 +235,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 if (vidx >= cur_env->m_len)
                     error("Bad env index for SET_VEC vector", Atom(T_INT, vidx));
 
-                cout << "CSET_VEC CURENV: " << Atom(T_VEC, cur_env).to_write_str() << endl;
                 Atom vec = cur_env->m_data[vidx];
                 if (vec.m_type != T_VEC)
                     error("Can't SET_VEC on non vector", vec);
@@ -351,7 +349,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 {
                     Atom ret;
                     (*func.m_d.func)(*(argv.m_d.vec), ret);
-                    cout << "argv: " << argv.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
+//                    cout << "argv: " << argv.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
                     cur_env->set(out_idx, ret);
 
                     cur_env->m_data[func_idx] = Atom();
@@ -369,7 +367,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     Atom prog(T_UD);
                     prog.m_d.ud = (UserData *) m_prog;
                     Atom pc(T_C_PTR);
-                    pc.m_d.ptr = m_pc + 1;
+                    pc.m_d.ptr = m_pc;
 
                     cont->m_data[0] = prog;
                     cont->m_data[1] = pc;
