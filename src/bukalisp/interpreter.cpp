@@ -147,6 +147,8 @@ Atom Interpreter::eval_let(Atom e, AtomVec *av)
 
     for (size_t i = 0; i < binds->m_len; i++)
     {
+        set_debug_pos(e);
+
         if (binds->m_data[i].m_type != T_VEC)
             error("Binding specification in 'let' is not a list", binds->m_data[i]);
 
@@ -449,6 +451,8 @@ Atom Interpreter::eval_case(Atom e, AtomVec *av)
 
     while (case_idx < av->m_len)
     {
+        set_debug_pos(e);
+
         if (av->m_data[case_idx].m_type != T_VEC)
             error("'case' test condition is not a list", av->m_data[case_idx]);
 
@@ -461,6 +465,8 @@ Atom Interpreter::eval_case(Atom e, AtomVec *av)
         {
             return eval_begin(e, cc, 1);
         }
+
+        set_debug_pos(e);
 
         if (cc->m_data[0].m_type != T_VEC)
             error("'case' test condition starts not with a list", Atom(T_VEC, cc));
@@ -501,6 +507,7 @@ Atom Interpreter::eval_field_get(Atom e, AtomVec *av)
     Atom obj = eval(av->m_data[2]);
     AtomVecPush avpo(m_root_stack, obj);
 
+    set_debug_pos(e);
     if (obj.m_type != T_MAP)
         error("Can't set key on non map", obj);
 
@@ -525,6 +532,7 @@ Atom Interpreter::eval_field_set(Atom e, AtomVec *av)
     Atom obj = eval(av->m_data[2]);
     AtomVecPush avpo(m_root_stack, obj);
 
+    set_debug_pos(e);
     if (obj.m_type != T_MAP)
         error("Can't set key on non map", obj);
 
@@ -547,6 +555,7 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
     Atom obj = eval(av->m_data[1]);
     AtomVecPush avpo(m_root_stack, obj);
 
+    set_debug_pos(e);
     if (obj.m_type != T_MAP)
         error("Can't define method on non map atom", obj);
 
@@ -562,6 +571,7 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
         key = eval(key);
     AtomVecPush avpk(m_root_stack, key);
 
+    set_debug_pos(e);
     AtomVec *arg_def_av = m_rt->m_gc.allocate_vector(arg_bind_def->m_len - 1);
     for (size_t i = 1; i < arg_bind_def->m_len; i++)
     {
@@ -603,6 +613,7 @@ Atom Interpreter::eval_dot_call(Atom e, AtomVec *av)
     Atom obj = eval(av->m_data[2]);
     AtomVecPush avpo(m_root_stack, obj);
 
+    set_debug_pos(e);
     Atom method = obj.at(key);
     AtomVecPush avpm(m_root_stack, method);
     if (   method.m_type != T_PRIM
@@ -666,6 +677,8 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
             // TODO: Refactor for (apply ...)?
             for (size_t i = 0; i < binds->m_len; i++)
             {
+                set_debug_pos(e);
+
                 if (binds->m_data[i].m_type != T_SYM)
                     error("Atom in binding list is not a symbol",
                           lambda_form.m_d.vec->m_data[1]);

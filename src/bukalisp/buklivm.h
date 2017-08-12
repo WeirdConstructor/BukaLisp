@@ -169,7 +169,6 @@ class VM : public lilvm::ExternalGCRoot
         lilvm::AtomVec   *m_env_stack;
         lilvm::AtomVec   *m_cont_stack;
         lilvm::AtomVec   *m_prim_table;
-        lilvm::AtomVec   *m_cur_env;
 
     public:
         VM(Runtime *rt)
@@ -181,7 +180,6 @@ class VM : public lilvm::ExternalGCRoot
             m_env_stack  = rt->m_gc.allocate_vector(0);
             m_cont_stack = rt->m_gc.allocate_vector(0);
             m_prim_table = rt->m_gc.allocate_vector(0);
-            m_cur_env    = nullptr;
 
             init_prims();
         }
@@ -201,7 +199,7 @@ class VM : public lilvm::ExternalGCRoot
 
         void init_prims();
 
-        virtual size_t gc_root_count() { return 5; }
+        virtual size_t gc_root_count() { return 4; }
 
         virtual lilvm::AtomVec *gc_root_get(size_t idx)
         {
@@ -211,7 +209,6 @@ class VM : public lilvm::ExternalGCRoot
                 case 1:  return m_env_stack;
                 case 2:  return m_cont_stack;
                 case 3:  return m_prim_table;
-                case 4:  return m_cur_env;
                 default: return m_cont_stack;
             }
         }
