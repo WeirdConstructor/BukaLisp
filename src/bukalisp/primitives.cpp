@@ -399,6 +399,11 @@ END_PRIM(append)
 #if IN_INTERPRETER
 
 START_PRIM()
+    REQ_EQ_ARGC(eval, 1);
+    out = eval(A0);
+END_PRIM(eval)
+
+START_PRIM()
     REQ_GT_ARGC(invoke-compiler, 1);
     if (args.m_len == 1)
     {

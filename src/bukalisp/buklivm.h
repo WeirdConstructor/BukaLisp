@@ -176,10 +176,14 @@ class VM : public lilvm::ExternalGCRoot
               m_vm(this)
         {
             m_rt->m_gc.add_external_root(this);
-            m_root_stack = rt->m_gc.allocate_vector(0);
-            m_env_stack  = rt->m_gc.allocate_vector(0);
-            m_cont_stack = rt->m_gc.allocate_vector(0);
+            m_root_stack = rt->m_gc.allocate_vector(10);
+            m_env_stack  = rt->m_gc.allocate_vector(100);
+            m_cont_stack = rt->m_gc.allocate_vector(100);
             m_prim_table = rt->m_gc.allocate_vector(0);
+
+            m_root_stack->m_len = 0;
+            m_cont_stack->m_len = 0;
+            m_env_stack->m_len  = 0;
 
             init_prims();
         }

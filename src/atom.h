@@ -652,8 +652,8 @@ class GC
                 || (m_num_new_vectors > (m_num_alive_vectors / 2))
                 || (m_num_new_syms    > (m_num_alive_syms    / 2)))
             {
-//                std::cout << "GC collect at " << m_num_new_vectors
-//                          << " <=> " << m_num_alive_vectors << std::endl;
+                std::cout << "GC collect at " << m_num_new_vectors
+                          << " <=> " << m_num_alive_vectors << std::endl;
                 collect();
             }
         }

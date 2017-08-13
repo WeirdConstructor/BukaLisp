@@ -1,5 +1,6 @@
 #include "buklivm.h"
 #include "atom_printer.h"
+#include <chrono>
 
 using namespace lilvm;
 using namespace std;
@@ -125,6 +126,9 @@ void VM::init_prims()
 
 lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 {
+    using namespace std::chrono;
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+
     Atom ret;
 
     if (at_ud.m_type != T_UD || at_ud.m_d.ud->type() != "VM-PROG")
@@ -145,6 +149,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
     m_pc = &(m_prog->m_instructions[0]);
 
     AtomVec *cur_env = args;
+    m_env_stack = m_rt->m_gc.allocate_vector(10);
+    m_env_stack->m_len = 0;
     m_env_stack->push(Atom(T_VEC, cur_env));
     m_cont_stack->push(at_ud);
 
@@ -426,7 +432,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 Atom pc     = cont.m_d.vec->m_data[1];
                 Atom envs   = cont.m_d.vec->m_data[2];
                 Atom env    = cont.m_d.vec->m_data[3];
-                size_t oidx = cont.m_d.vec->m_data[4].m_d.i;
+                size_t oidx = (size_t) cont.m_d.vec->m_data[4].m_d.i;
 
                 // save current function for gc:
                 m_cont_stack->push(proc);
@@ -439,7 +445,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 cur_env     = env.m_d.vec;
                 cur_env->set(oidx, retval);
 
-                cout << "VMRETURN VAL: " << retval.to_write_str() << endl;
+//                cout << "VMRETURN VAL: " << retval.to_write_str() << endl;
 
                 break;
             }
@@ -457,6 +463,15 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
     }
 
     m_cont_stack->pop();
+
+    cout << "STACKS: " << m_cont_stack->m_len << "; " << m_env_stack->m_len << endl;
+
+    high_resolution_clock::time_point t2 = high_resolution_clock::now();
+    duration<double> time_span
+        = duration_cast<duration<double>>(t2 - t1);
+    std::cout << "vm eval run time: "
+              << (time_span.count() * 1000)
+              << " ms" << std::endl;
 
     return ret;
 }
