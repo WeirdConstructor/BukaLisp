@@ -864,6 +864,23 @@ void test_ieval_objs()
 }
 //---------------------------------------------------------------------------
 
+void test_ieval_comments()
+{
+    bukalisp::Runtime rt;
+    bukalisp::Interpreter i(&rt);
+    Atom r;
+
+    TEST_EVAL("(begin (define x 10) #;(set! x 20) x)", "10");
+    TEST_EVAL("#;()(begin #;[] (define x 10)#;{} #;(set! x 20) x)", "10");
+    TEST_EVAL("(begin 13 #;12)",    "13");
+    TEST_EVAL("(begin 13 #;32.23)", "13");
+    TEST_EVAL("(begin 13 #;[])",    "13");
+    TEST_EVAL("(begin 13 #;{})",    "13");
+    TEST_EVAL("(begin 13 #;#t)",    "13");
+    TEST_EVAL("(begin 13 #;nil)",   "13");
+}
+//---------------------------------------------------------------------------
+
 int main(int argc, char *argv[])
 {
     using namespace std::chrono;
@@ -926,6 +943,7 @@ int main(int argc, char *argv[])
                 RUN_TEST(ieval_index_procs);
                 RUN_TEST(ieval_loops);
                 RUN_TEST(ieval_objs);
+                RUN_TEST(ieval_comments);
 
                 cout << "TESTS OK" << endl;
             }

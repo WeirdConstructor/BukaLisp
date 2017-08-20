@@ -203,6 +203,11 @@ class Tokenizer
                     m_u8buf.skip_bytes(1);
                     push(Token("~@"));
                 }
+                else if (c == '#' && m_u8buf.first_byte() == ';')
+                {
+                    m_u8buf.skip_bytes(1);
+                    push(Token("#;"));
+                }
                 else if (charClass(c, "[]{}()'`~^@$."))
                 {
                     push(Token(c));

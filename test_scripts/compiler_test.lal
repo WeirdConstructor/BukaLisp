@@ -545,6 +545,12 @@
 	 22.345
 	 my-env))
 
+; Test comments:
+(t "(define x 10) #;(set! x 20) x" 10)
+(t "(define x #;20 10) #;(set! x 20) x" 10)
+(t "#;()(define x #;20 10 #;[])#;{} #;(set! x 20) x #;()" 10)
+(t "#;()(#;() define #;() x #;20 10 #;[])#;{} #;(set! x 20) x" 10)
+
 ;    TEST_EVAL("(let ((aid  (atom-id (type nil))) "
 ;              "      (aid2 (atom-id (type nil))) "
 ;              "      (aid3 (atom-id (type nil)))) "

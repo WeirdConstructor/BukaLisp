@@ -46,14 +46,17 @@ class Parser
         Tokenizer   &m_tok;
         SEX_Builder *m_builder;
         bool        m_eof;
+        bool        m_builder_enabled;
+#       define      M_BUILDER(X)   do { if (m_builder_enabled) { m_builder->X; } } while(0)
 
     public:
         Parser(Tokenizer &tok, SEX_Builder *builder)
-            : m_tok(tok), m_eof(false), m_builder(builder)
+            : m_tok(tok), m_eof(false), m_builder(builder),
+              m_builder_enabled(true)
         {
         }
 
-        void reset() { m_eof = false; }
+        void reset() { m_eof = false; m_builder_enabled = true; }
 
         bool is_eof() { return m_eof; }
 
@@ -64,42 +67,47 @@ class Parser
 
         void debug_token(Token &t)
         {
-            m_builder->set_debug_info(t.m_input_name, t.m_line);
+            M_BUILDER(set_debug_info(t.m_input_name, t.m_line));
         }
 
         bool parse_map()
         {
             m_tok.next();
+            if (!skip_comments())
+                return false;
             Token t = m_tok.peek();
 
             debug_token(t);
-            m_builder->start_map();
+            M_BUILDER(start_map());
 
             while (t.m_token_id != TOK_EOF)
             {
                 if (t.m_token_id == TOK_CHR && t.nth(0) == '}')
                     break;
 
-                m_builder->start_kv_pair();
+                M_BUILDER(start_kv_pair());
 
                 if (!parse())
                     return false;
 
-                m_builder->end_kv_key();
+                M_BUILDER(end_kv_key());
 
                 if (!parse())
                     return false;
 
-                m_builder->end_kv_pair();
+                M_BUILDER(end_kv_pair());
 
-
+                if (!skip_comments())
+                    return false;
                 t = m_tok.peek();
             }
 
             debug_token(t);
-            m_builder->end_map();
+            M_BUILDER(end_map());
 
             m_tok.next();
+            if (!skip_comments())
+                return false;
 
             return true;
         }
@@ -107,13 +115,15 @@ class Parser
         bool parse_sequence(bool quoted, char end_delim)
         {
             m_tok.next();
+            if (!skip_comments())
+                return false;
             Token t = m_tok.peek();
 
             debug_token(t);
 
-            m_builder->start_list();
+            M_BUILDER(start_list());
             if (quoted)
-                m_builder->atom_symbol("list");
+                M_BUILDER(atom_symbol("list"));
 
             while (t.m_token_id != TOK_EOF)
             {
@@ -123,13 +133,17 @@ class Parser
                 if (!parse())
                     return false;
 
+                if (!skip_comments())
+                    return false;
                 t = m_tok.peek();
             }
 
             debug_token(t);
-            m_builder->end_list();
+            M_BUILDER(end_list());
 
             m_tok.next();
+            if (!skip_comments())
+                return false;
 
             return true;
         }
@@ -141,8 +155,8 @@ class Parser
 
             switch (t.m_token_id)
             {
-                case TOK_DBL:      m_tok.next(); m_builder->atom_dbl(t.m_num.d); break;
-                case TOK_INT:      m_tok.next(); m_builder->atom_int(t.m_num.i); break;
+                case TOK_DBL:      m_tok.next(); M_BUILDER(atom_dbl(t.m_num.d)); break;
+                case TOK_INT:      m_tok.next(); M_BUILDER(atom_int(t.m_num.i)); break;
                 case TOK_CHR:
                     {
                         m_tok.next();
@@ -151,11 +165,11 @@ class Parser
                             m_builder->atom_keyword(
                                 t.m_text.substr(0, t.m_text.size() - 1));
                         else if (t.m_text == "#t" || t.m_text == "#true")
-                            m_builder->atom_bool(true);
+                            M_BUILDER(atom_bool(true));
                         else if (t.m_text == "#f" || t.m_text == "#false")
-                            m_builder->atom_bool(false);
+                            M_BUILDER(atom_bool(false));
                         else if (t.m_text == "nil")
-                            m_builder->atom_nil();
+                            M_BUILDER(atom_nil());
                         else if (t.m_text == "\"")
                         {
                             t = m_tok.peek();
@@ -164,12 +178,12 @@ class Parser
                                 log_error("Expected string body", t);
                                 return false;
                             }
-                            m_builder->atom_string(t.m_text);
+                            M_BUILDER(atom_string(t.m_text));
                             m_tok.next();
                             m_tok.next(); // skip end '"'
                         }
                         else
-                            m_builder->atom_symbol(t.m_text);
+                            M_BUILDER(atom_symbol(t.m_text));
                         break;
                     }
                 case TOK_BAD_NUM:
@@ -179,9 +193,28 @@ class Parser
             return true;
         }
 
+        bool skip_comments()
+        {
+            Token t = m_tok.peek();
+
+            if (t.m_token_id == TOK_CHR && t.m_text == "#;")
+            {
+                m_tok.next();
+                m_builder_enabled = false;
+                parse();
+                m_builder_enabled = true;
+                return true;
+            }
+
+            return true;
+        }
+
         bool parse()
         {
             using namespace std;
+
+            if (!skip_comments())
+                return false;
 
             Token t = m_tok.peek();
             debug_token(t);
@@ -207,11 +240,11 @@ class Parser
                         {
                             m_tok.next();
                             debug_token(t);
-                            m_builder->start_list();
-                            m_builder->atom_symbol("quote");
+                            M_BUILDER(start_list());
+                            M_BUILDER(atom_symbol("quote"));
                             bool b = parse();
                             debug_token(t);
-                            m_builder->end_list();
+                            M_BUILDER(end_list());
                             return b;
                         }
                         default: return parse_atom(); break;
@@ -224,6 +257,7 @@ class Parser
 
             return true;
         }
+#undef M_BUILDER
 };
 //---------------------------------------------------------------------------
 
