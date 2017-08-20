@@ -327,6 +327,16 @@ void test_atom_debug_info()
 }
 //---------------------------------------------------------------------------
 
+#define TEST_EVAL(expr, b) \
+    r = i.eval(std::string(__FILE__ ":") + std::to_string(__LINE__), expr); \
+    if (lilvm::write_atom(r) != (b)) \
+        throw bukalisp::BukLiVMException( \
+            std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
+            #expr " not eq: " \
+            + lilvm::write_atom(r) + " != " + (b));
+
+//---------------------------------------------------------------------------
+
 void test_ieval_atoms()
 {
     bukalisp::Runtime rt;
@@ -335,6 +345,21 @@ void test_ieval_atoms()
     Atom r = i.eval("testatoms", "123");
     TEST_EQ(r.m_type, T_INT, "is int");
     TEST_EQ(r.to_int(), 123, "correct int");
+
+    TEST_EVAL("\"foo\"",        "\"foo\"");
+    TEST_EVAL("\"f\\\\ oo\"",   "\"f\\\\ oo\"");
+    TEST_EVAL("\"f\\\" oo\"",   "\"f\\\" oo\"");
+    TEST_EVAL("\"f\\n oo\"",    "\"f\\n oo\"");
+    TEST_EVAL("\"f\\r oo\"",    "\"f\\r oo\"");
+    TEST_EVAL("\"f\\a oo\"",    "\"f\\a oo\"");
+    TEST_EVAL("\"f\\b oo\"",    "\"f\\b oo\"");
+    TEST_EVAL("\"f\\t oo\"",    "\"f\\t oo\"");
+    TEST_EVAL("\"f\\v oo\"",    "\"f\\v oo\"");
+    TEST_EVAL("\"f\\f oo\"",    "\"f\\f oo\"");
+    TEST_EVAL("\"f\\xE4; oo\"", "\"f\\xe4; oo\"");
+    TEST_EVAL("\"f\\uE4; oo\"", "\"f\\xc3;\\xa4; oo\"");
+    TEST_EVAL("\"fä oo\"",      "\"f\\xc3;\\xa4; oo\"");
+    TEST_EVAL("\"f\\\n oo\"",   "\"f\\\\\\n oo\"");
 }
 //---------------------------------------------------------------------------
 
@@ -355,16 +380,6 @@ void test_ieval_vars()
             "(begin (define x 12) (define y 30) (set! y 10) y)");
     TEST_EQ(r.to_int(), 10, "correct y");
 }
-//---------------------------------------------------------------------------
-
-#define TEST_EVAL(expr, b) \
-    r = i.eval(std::string(__FILE__ ":") + std::to_string(__LINE__), expr); \
-    if (lilvm::write_atom(r) != (b)) \
-        throw bukalisp::BukLiVMException( \
-            std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
-            #expr " not eq: " \
-            + lilvm::write_atom(r) + " != " + (b));
-
 //---------------------------------------------------------------------------
 
 void test_ieval_basic_stuff()

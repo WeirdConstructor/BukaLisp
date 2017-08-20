@@ -12,14 +12,17 @@ void dump_string_to_ostream(std::ostream &out, const std::string &s)
     for (auto i : s)
     {
         if (i == '"')        out << "\\\"";
+        else if (i == '\\')  out << "\\\\";
         else if (isgraph((unsigned char) i)) out << i;
         else if (i == ' ')   out << " ";
         else if (i == '\t')  out << "\\t";
         else if (i == '\n')  out << "\\n";
+        else if (i == '\a')  out << "\\a";
+        else if (i == '\b')  out << "\\b";
         else if (i == '\v')  out << "\\v";
         else if (i == '\f')  out << "\\f";
         else if (i == '\r')  out << "\\r";
-        else                 out << "\\x" << std::hex << std::setw(2) << std::setfill('0') << (int) (unsigned char) i << std::dec;
+        else                 out << "\\x" << std::hex << std::setw(2) << std::setfill('0') << (int) (unsigned char) i << ";" << std::dec;
     }
     out << "\"";
 }

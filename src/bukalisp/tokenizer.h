@@ -208,6 +208,20 @@ class Tokenizer
                     m_u8buf.skip_bytes(1);
                     push(Token("#;"));
                 }
+                else if (c == '#' && m_u8buf.first_byte() == 'q')
+                {
+                    m_u8buf.skip_bytes(1);
+                    c = m_u8buf.first_byte();
+                    if (c == '\'')
+                    {
+                        m_u8buf.skip_bytes(1);
+
+                    }
+                    else
+                    {
+                        push(Token("#q"));
+                    }
+                }
                 else if (charClass(c, "[]{}()'`~^@$."))
                 {
                     push(Token(c));
@@ -222,9 +236,59 @@ class Tokenizer
                         c = m_u8buf.first_byte(true);
                         if (c == '\\')
                         {
+                            char peek_c = m_u8buf.first_byte();
+
                             if (checkEOF()) return;
-                            if (charClass(m_u8buf.first_byte(), "\\\""))
+                            if (charClass(peek_c, "\\\""))
                                 m_u8tmp.append_byte(m_u8buf.first_byte(true));
+                            else if (peek_c == 'r')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\r'); }
+                            else if (peek_c == 'n')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\n'); }
+                            else if (peek_c == 'v')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\v'); }
+                            else if (peek_c == 'f')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\f'); }
+                            else if (peek_c == 'a')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\a'); }
+                            else if (peek_c == 'b')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\b'); }
+                            else if (peek_c == 't')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\t'); }
+                            else if (peek_c == '|')
+                            { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('|'); }
+                            else if (peek_c == 'x' || peek_c == 'u')
+                            {
+                                bool is_unicode = peek_c == 'u';
+                                m_u8buf.skip_bytes(1);
+                                peek_c = m_u8buf.first_byte();
+
+                                std::string hex_chr = "0x";
+
+                                while (peek_c != ';'
+                                       && charClass(peek_c, "0123456789ABCDEFabcdef"))
+                                {
+                                    m_u8buf.skip_bytes(1);
+                                    hex_chr += peek_c;
+                                    peek_c = m_u8buf.first_byte();
+                                    if (checkEOF()) return;
+                                }
+                                m_u8buf.skip_bytes(1);
+
+                                try
+                                {
+                                    if (is_unicode)
+                                        m_u8tmp.append_unicode(
+                                            std::stol(hex_chr, 0, 16));
+                                    else
+                                        m_u8tmp.append_byte(
+                                            std::stoi(hex_chr, 0, 16));
+                                }
+                                catch (std::exception &e)
+                                {
+                                    m_u8tmp.append_byte('?');
+                                }
+                            }
                             else
                             {
                                 m_u8tmp.append_byte(c);
