@@ -1,14 +1,17 @@
+(define root-env [{} []])
 
 (define t
-  (lambda (code expected)
-    (let ((r (invoke-compiler code)))
+  (lambda (code expected env)
+    (when (nil? env) (set! env [{} []]))
+    (let ((r (invoke-compiler code code #f env)))
       (if (eqv? r expected)
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
 (define T
-  (lambda (code expected)
-    (let ((r (invoke-compiler [code])))
+  (lambda (code expected env)
+    (when (nil? env) (set! env [{} []]))
+    (let ((r (invoke-compiler [code] code #f env)))
       (if (eqv? (write-str r) (write-str expected))
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
@@ -513,6 +516,11 @@
         [a z])
       (x 1 2 3))
    [1 [2 3]])
+
+(t "(define x 13.3)" 13.3 root-env)
+(t "x"               13.3 root-env)
+(t "(define y x)"    13.3 root-env)
+(t "(+ x y)"         26.6 root-env)
 
 ;    TEST_EVAL("(let ((aid  (atom-id (type nil))) "
 ;              "      (aid2 (atom-id (type nil))) "

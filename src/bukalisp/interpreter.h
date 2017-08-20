@@ -140,12 +140,14 @@ class Interpreter : public lilvm::ExternalGCRoot
         lilvm::Atom call_compiler(
             lilvm::Atom prog,
             lilvm::AtomMap *debug_info_map,
+            lilvm::AtomVec *root_env,
             const std::string &input_name = "",
             bool only_compile = false);
 
         lilvm::Atom call_compiler(
             const std::string &code_name,
             const std::string &code,
+            lilvm::AtomVec *root_env,
             bool only_compile = false);
 
         void error(const std::string &msg)

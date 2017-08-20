@@ -870,6 +870,7 @@ Atom Interpreter::eval(Atom e)
 lilvm::Atom Interpreter::call_compiler(
     lilvm::Atom prog,
     lilvm::AtomMap *debug_info_map,
+    lilvm::AtomVec *root_env,
     const std::string &input_name,
     bool only_compile)
 {
@@ -877,11 +878,12 @@ lilvm::Atom Interpreter::call_compiler(
 
     try
     {
-        AtomVec *args = m_rt->m_gc.allocate_vector(4);
+        AtomVec *args = m_rt->m_gc.allocate_vector(5);
         args->m_data[0] = Atom(T_STR, m_rt->m_gc.new_symbol(input_name));
         args->m_data[1] = prog;
         args->m_data[2] = debug_info_map ? Atom(T_MAP, debug_info_map) : Atom();
         args->m_data[3] = Atom(T_BOOL, only_compile);
+        args->m_data[4] = Atom(T_VEC, root_env);
 
         return call(compiler_func, args, false);
     }
@@ -934,6 +936,7 @@ lilvm::Atom Interpreter::get_compiler_func()
 lilvm::Atom Interpreter::call_compiler(
     const std::string &code_name,
     const std::string &code,
+    lilvm::AtomVec *root_env,
     bool only_compile)
 {
     Atom compiler_func = get_compiler_func();
@@ -942,7 +945,7 @@ lilvm::Atom Interpreter::call_compiler(
     {
         AtomMap *debug_info = nullptr;
         Atom input_data = m_rt->read(code_name, code, debug_info);
-        return call_compiler(input_data, debug_info, code_name, only_compile);
+        return call_compiler(input_data, debug_info, root_env, code_name, only_compile);
     }
     catch (std::exception &e)
     {

@@ -63,6 +63,7 @@ END_PRIM(>=);
 #define A0  (args.m_data[0])
 #define A1  (args.m_data[1])
 #define A2  (args.m_data[2])
+#define A3  (args.m_data[3])
 
 START_PRIM()
     out = Atom(T_VEC);
@@ -238,15 +239,18 @@ START_PRIM()
 END_PRIM(make-vm-prog)
 
 START_PRIM()
-    REQ_EQ_ARGC(run-vm-prog, 1);
+    REQ_EQ_ARGC(run-vm-prog, 2);
 
     if (A0.m_type != T_UD || A0.m_d.ud->type() != "VM-PROG")
         error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
 
+    if (A1.m_type != T_VEC)
+        error("No root env given to run-vm-prog.", A1);
+
     if (!m_vm)
         error("Can't execute VM progs, no VM instance loaded into interpreter", A0);
 
-    out = m_vm->eval(A0, &args);
+    out = m_vm->eval(A0, A1.m_d.vec);
 END_PRIM(run-vm-prog)
 
 START_PRIM()
@@ -408,41 +412,24 @@ START_PRIM()
     out = eval(A0);
 END_PRIM(eval)
 
+// (invoke-compiler code-name code only-compile root-env)
+// (invoke-compiler [code] code-name only-compile root-env)
 START_PRIM()
-    REQ_GT_ARGC(invoke-compiler, 1);
-    if (args.m_len == 1)
-    {
-        if (A0.m_type == T_STR)
-            out =
-                this->call_compiler(
-                    "", A0.to_display_str(), false);
-        else
-            out =
-                this->call_compiler(
-                    A0, this->m_debug_pos_map, "", false);
-    }
-    else if (args.m_len == 2)
-    {
-        if (A0.m_type == T_STR)
-            out =
-                this->call_compiler(
-                    A1.to_display_str(), A0.to_display_str(), false);
-        else
-            out =
-                this->call_compiler(
-                    A0, this->m_debug_pos_map, A1.to_display_str(), false);
-    }
+    REQ_GT_ARGC(invoke-compiler, 4);
+    if (A3.m_type != T_VEC)
+        error("invoke-compiler needs a root-env (<map>, <storage>) "
+              "to compile and evaluate in", A3);
+
+    if (A0.m_type == T_STR)
+        out =
+            this->call_compiler(
+                A1.to_display_str(), A0.to_display_str(),
+                A3.m_d.vec, !A2.is_false());
     else
-    {
-        if (A0.m_type == T_STR)
-            out =
-                this->call_compiler(
-                    A1.to_display_str(), A0.to_display_str(), !A2.is_false());
-        else
-            out =
-                this->call_compiler(
-                    A0, this->m_debug_pos_map, A1.to_display_str(), !A2.is_false());
-    }
+        out =
+            this->call_compiler(
+                A0, this->m_debug_pos_map,
+                A3.m_d.vec, A1.to_display_str(), !A2.is_false());
 END_PRIM(invoke-compiler)
 
 #endif

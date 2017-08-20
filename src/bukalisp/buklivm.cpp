@@ -159,6 +159,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
     m_pc = &(m_prog->m_instructions[0]);
 
+    // TODO: To be recusively usabe, we need to save cont_stack and env_stack!
+
     AtomVec *cur_env = args;
     m_env_stack = m_rt->m_gc.allocate_vector(10);
     m_env_stack->m_len = 0;
@@ -421,8 +423,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     pc.m_d.ptr = m_pc;
 
                     cont->m_data[0] = prog;
-                    cont->m_data[1] = pc;
-                    cont->m_data[2] = Atom(T_VEC, m_env_stack);
+                    cont->m_data[1] = Atom(T_VEC, m_env_stack);
+                    cont->m_data[2] = pc;
                     cont->m_data[3] = Atom(T_INT, out_idx);
                     // just for keepin a reference to the called function:
                     cont->m_data[4] = func;
@@ -447,17 +449,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
                     m_env_stack = func.m_d.vec->m_data[1].m_d.vec;
                     m_env_stack->push(Atom(T_VEC, cur_env = argv.m_d.vec));
-
-                    //    m_prog          = dynamic_cast<PROG*>(at_ud.m_d.ud);
-                    //    Atom *data      = m_prog->data_array();
-                    //    size_t data_len = m_prog->data_array_len();
-                    //
-                    //    m_pc = &(m_prog->m_instructions[0]);
-                    //
-                    //    m_env_stack = closure env stack.
-                    //    AtomVec *m_cur_env = arg-vector;
-                    // m_prog ersetzen, m_pc auf (anfang - 1) setzen
-                    // m_env_stack setzen und m_cur_env setzen
                 }
                 else
                     error("CALL does not support that function type yet", func);
@@ -477,8 +468,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     error("Empty or bad continuation stack item!", cont);
 
                 Atom proc   = cont.m_d.vec->m_data[0];
-                Atom pc     = cont.m_d.vec->m_data[1];
-                Atom envs   = cont.m_d.vec->m_data[2];
+                Atom envs   = cont.m_d.vec->m_data[1];
+                Atom pc     = cont.m_d.vec->m_data[2];
                 size_t oidx = (size_t) cont.m_d.vec->m_data[3].m_d.i;
 
                 // save current function for gc:
