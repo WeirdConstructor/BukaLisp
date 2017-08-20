@@ -49,6 +49,7 @@ class VMException : public std::exception
     X(GE,           107) \
     X(EQ,           108) \
     X(NOT,          109) \
+    X(PACK_VA,      200) \
     X(RETURN,       250) \
     X(END,          254)
 

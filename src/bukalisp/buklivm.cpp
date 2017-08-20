@@ -169,7 +169,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
-#define SET_O(env, val) if (m_pc->o >= (env)->m_len) (env)->check_size(m_pc->o); (env)->m_data[m_pc->o] = (val);
+#define SET_O(env, val) do { if (m_pc->o >= (env)->m_len) (env)->check_size(m_pc->o); (env)->m_data[m_pc->o] = (val); } while (0)
 
     bool alloc = false;
     while (m_pc->op != OP_END)
@@ -356,6 +356,24 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     Atom(T_VEC, m_rt->m_gc.clone_vector(m_env_stack)));
 
                 SET_O(cur_env, cl);
+                break;
+            }
+
+            case OP_PACK_VA:
+            {
+                size_t pack_idx = m_pc->_.x.a;
+                if (pack_idx < cur_env->m_len)
+                {
+                    size_t va_len = cur_env->m_len - pack_idx;
+                    AtomVec *v = m_rt->m_gc.allocate_vector(va_len);
+                    for (size_t i = 0; i < va_len; i++)
+                        v->m_data[i] = cur_env->m_data[i + pack_idx];
+                    SET_O(cur_env, Atom(T_VEC, v));
+                }
+                else
+                {
+                    SET_O(cur_env, Atom(T_VEC, m_rt->m_gc.allocate_vector(0)));
+                }
                 break;
             }
 

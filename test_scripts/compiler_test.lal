@@ -484,6 +484,35 @@
 (T '(length {y: 324 x: 12}) 2)
 (T '(length (let ((l [])) (@!9 l l))) 10)
 
+; Test let TODO: Moar!
+(T '(let ((x 10)) x) 10)
+
+; Test define
+(T '(begin (define x 10) x)     10)
+(T '(begin (define (x) 10) (x)) 10)
+(T '(begin
+      (define (x b c)
+        (+ (* b c) 10))
+      (x 2.5 10))
+   35)
+
+; Test varargs
+(T '((lambda (. x) x))              [])
+(T '((lambda (. x) x) 1 2 3)        [1 2 3])
+(T '((lambda (a . x) [a x]) 1 2 3)  [1 [2 3]])
+(T '((lambda (a . x) [a x]) 1)      [1 []])
+(T '((lambda (a . x) [a x]))        [nil []])
+(T '(begin
+      (define (x a . v) [a v])
+      (x 1 2 3))
+   [1 [2 3]])
+
+(T '(begin
+      (define (x a . v)
+        (define z v)
+        [a z])
+      (x 1 2 3))
+   [1 [2 3]])
 
 ;    TEST_EVAL("(let ((aid  (atom-id (type nil))) "
 ;              "      (aid2 (atom-id (type nil))) "
@@ -520,8 +549,6 @@
 ;              "(1 2 3 1 a: x: 12 5 5 5)");
 ;    TEST_EVAL("(append [1 2 3])",
 ;              "(1 2 3)");
-
-(T '(let ((x 10)) x) 10)
 
 (displayln "ALL OK")
 ::
