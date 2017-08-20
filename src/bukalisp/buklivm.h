@@ -167,6 +167,32 @@ class PROG : public lilvm::UserData
 lilvm::Atom make_prog(lilvm::Atom prog_info);
 //---------------------------------------------------------------------------
 
+class VMProgStateGuard
+{
+    private:
+        PROG        *m_old_prog;
+        INST        *m_old_pc;
+
+        PROG       *&m_prog_ref;
+        INST       *&m_pc_ref;
+    public:
+        VMProgStateGuard(PROG *&prog, INST *&pc, PROG *new_prog, INST *new_pc)
+            : m_prog_ref(prog), m_pc_ref(pc)
+        {
+            m_old_prog = m_prog_ref;
+            m_old_pc   = m_pc_ref;
+            prog       = new_prog;
+            pc         = new_pc;
+        }
+
+        ~VMProgStateGuard()
+        {
+            m_prog_ref = m_old_prog;
+            m_pc_ref   = m_old_pc;
+        }
+};
+//---------------------------------------------------------------------------
+
 class VM : public lilvm::ExternalGCRoot
 {
     private:
@@ -175,24 +201,20 @@ class VM : public lilvm::ExternalGCRoot
         PROG             *m_prog;
         VM               *m_vm;
         lilvm::AtomVec   *m_root_stack;
-        lilvm::AtomVec   *m_env_stack;
-        lilvm::AtomVec   *m_cont_stack;
         lilvm::AtomVec   *m_prim_table;
 
     public:
         VM(Runtime *rt)
-            : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_pc(nullptr),
+            : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt),
+              m_pc(nullptr),
+              m_prog(nullptr),
               m_vm(this)
         {
             m_rt->m_gc.add_external_root(this);
             m_root_stack = rt->m_gc.allocate_vector(10);
-            m_env_stack  = rt->m_gc.allocate_vector(100);
-            m_cont_stack = rt->m_gc.allocate_vector(100);
             m_prim_table = rt->m_gc.allocate_vector(0);
 
             m_root_stack->m_len = 0;
-            m_cont_stack->m_len = 0;
-            m_env_stack->m_len  = 0;
 
             init_prims();
         }
@@ -212,17 +234,14 @@ class VM : public lilvm::ExternalGCRoot
 
         void init_prims();
 
-        virtual size_t gc_root_count() { return 4; }
+        virtual size_t gc_root_count() { return 2; }
 
         virtual lilvm::AtomVec *gc_root_get(size_t idx)
         {
             switch (idx)
             {
                 case 0:  return m_root_stack;
-                case 1:  return m_env_stack;
-                case 2:  return m_cont_stack;
-                case 3:  return m_prim_table;
-                default: return m_cont_stack;
+                default: return m_prim_table;
             }
         }
 

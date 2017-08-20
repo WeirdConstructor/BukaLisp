@@ -583,7 +583,9 @@
 ;      (displayln PAD: ($pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
 ;        (displayln prog)
-        (displayln-time (run-vm-prog prog (@1 root-env)))))))
+        (if only-compile
+          prog
+          (displayln-time (run-vm-prog prog (@1 root-env))))))))
 ;----------------------------------------------------------------------------
 
 ;  (let ((x (make-static-data-pad)))
