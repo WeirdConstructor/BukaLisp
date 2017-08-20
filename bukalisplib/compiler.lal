@@ -353,10 +353,12 @@
 (define make-prim-syntax
   (lambda (compiler symbol compiler-func prim-nr)
     (.define-var compiler symbol [syntax: compiler-func prim-nr])))
+;----------------------------------------------------------------------------
 
 (define make-syntax
   (lambda (compiler symbol compiler-func)
     (.define-var compiler symbol [syntax: compiler-func])))
+;----------------------------------------------------------------------------
 
 (define init-base-env
   (lambda (compiler)
@@ -366,6 +368,7 @@
 
     (do-each (k v primitive-table)
       (.define-var compiler k [prim: v]))
+;----------------------------------------------------------------------------
 
 ;       (unless (< 2 (length atom))
 ;         (.error self "'+' needs 3 arguments" atom))
@@ -380,6 +383,7 @@
     (make-syntax compiler 'begin
      (lambda (atom self code-pad out-idx)
        (.compile-block self (drop atom 1) code-pad out-idx)))
+;----------------------------------------------------------------------------
 
     (make-syntax compiler 'lambda
      (lambda (atom self code-pad out-idx)
@@ -403,6 +407,41 @@
            (.op-new-closure code-pad out-idx out-idx)
 ;           (displayln LAMBDA: new-prog)
            ))))
+;----------------------------------------------------------------------------
+
+    (make-syntax compiler 'let
+     (lambda (atom self code-pad out-idx)
+       (unless (> (length atom) 1)
+         (.error self "'let' needs at least 1 argument (the binding list)" atom))
+       (unless (eqv? (type (@1 atom)) 'list)
+         (.error self "'let' binding list needs to be a list" atom))
+
+       (let ((env-size 0))
+         (do-each (bind-pair (@1 atom))
+           (unless (eqv? (type bind-pair) 'list)
+             (.error self "'let' binding pair needs to be a list" bind-pair))
+           (unless (eqv? (length bind-pair) 2)
+             (.error self "'let' binding pair needs exactly 2 elements" bind-pair))
+           (unless (eqv? (type (@0 bind-pair)) 'symbol)
+             (.error self "'let' binding pair must contain a symbol as first element" bind-pair))
+           (set! env-size (+ env-size 1)))
+
+         (.push-env self)
+         (.op-push-env code-pad env-size)
+
+         (let ((transmit-pos (.new-tmp-pos self)))
+           (do-each (bind-pair (@1 atom))
+             (let ((var-pos (.new-pos self)))
+               (.define-var self (@0 bind-pair) [var: var-pos])
+               (.compile self (@1 bind-pair) code-pad var-pos)))
+
+           (.compile-block self (drop atom 2) code-pad transmit-pos)
+           (.op-mov-to code-pad out-idx 1 transmit-pos)
+
+           (.recycle-tmp-pos self transmit-pos)
+           (.op-pop-env code-pad)
+           (.pop-env self)))))
+;----------------------------------------------------------------------------
 
     (make-syntax compiler 'set!
      (lambda (atom self code-pad out-idx)
@@ -423,6 +462,7 @@
            (let ((bind-idx (.new-pos self)))
              (.define-var self (@1 atom) [var: bind-idx])
              (.op-mov     code-pad bind-idx out-idx)))))
+;----------------------------------------------------------------------------
 
     (make-syntax compiler 'define
      (lambda (atom self code-pad out-idx)
@@ -435,6 +475,7 @@
          (.define-var self (@1 atom) [var: bind-idx])
          (.compile self (@2 atom) code-pad bind-idx)
          (.op-mov code-pad out-idx bind-idx))))
+;----------------------------------------------------------------------------
 
     (make-syntax compiler 'quote
      (lambda (atom self code-pad out-idx)
