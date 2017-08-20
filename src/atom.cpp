@@ -66,6 +66,7 @@ void AtomVec::alloc(size_t len)
     m_alloc = len;
     m_len   = 0;
     m_data  = new Atom[len];
+//    std::cout << "ALLOC:" << ((void *) this) << "@" << ((void *) m_data) << std::endl;
 }
 //---------------------------------------------------------------------------
 
@@ -74,7 +75,7 @@ void AtomVec::init(uint8_t current_gc_color, size_t len)
     m_len      = len;
     m_gc_color = current_gc_color;
 
-    for (size_t i = 0; i < len; i++)
+    for (size_t i = 0; i < m_len; i++)
         m_data[i].clear();
 }
 //---------------------------------------------------------------------------
@@ -107,19 +108,21 @@ void AtomVec::pop()
 }
 //---------------------------------------------------------------------------
 
-void AtomVec::push(const Atom &a)
-{
-    size_t new_idx = m_len;
-    check_size(new_idx);
-    m_data[new_idx] = a;
-}
-//---------------------------------------------------------------------------
-
 void AtomVec::set(size_t idx, Atom &a)
 {
     if (idx >= m_len)
         check_size(idx);
+//    std::cout << "SET @(" << idx << ")" << ((void *) m_data) << std::endl;
     m_data[idx] = a;
+}
+//---------------------------------------------------------------------------
+
+void AtomVec::push(const Atom &a)
+{
+    size_t new_idx = m_len;
+    check_size(new_idx);
+//    std::cout << "PUSH @(" << new_idx << ")" << ((void *) m_data) << std::endl;
+    m_data[new_idx] = a;
 }
 //---------------------------------------------------------------------------
 
@@ -130,9 +133,12 @@ void AtomVec::check_size(size_t idx)
         Atom *old_data = m_data;
         m_alloc = idx * 2;
         m_data = new Atom[m_alloc];
+//        std::cout << "ALLOC:" << ((void *) this) << "@" << ((void *) m_data) << " ; " << m_alloc << std::endl;
         for (size_t i = 0; i < m_len; i++)
             m_data[i] = old_data[i];
-        delete[] old_data;
+//        std::cout << "DELETE AR " << ((void *) this) << "@" << ((void *) old_data) << std::endl;
+        if (old_data)
+            delete[] old_data;
     }
     else
     {

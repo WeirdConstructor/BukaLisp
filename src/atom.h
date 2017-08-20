@@ -399,6 +399,7 @@ class GC
 
 #define GC_SMALL_VEC_LEN     10
 #define GC_MEDIUM_VEC_LEN    100
+#define GC_BIG_VEC_LEN       200
 
         AtomVec     *m_small_vectors;
         AtomVec     *m_medium_vectors;
@@ -435,7 +436,7 @@ class GC
                 cur = cur->m_gc_next;
             }
 
-            num += new_num;
+            num = i;
         }
 
         void mark_vector(AtomVec *&vec)
@@ -516,7 +517,11 @@ class GC
                     m_maps,
                     m_num_alive_maps,
                     m_current_color,
-                    [this](AtomMap *cur) { delete cur; });
+                    [this](AtomMap *cur)
+                    {
+//                        std::cout << "SWPMAP[" << Atom(T_MAP, cur).to_write_str() << "]" << std::endl;
+                        delete cur;
+                    });
 
             m_userdata =
                 gc_list_sweep<UserData>(
@@ -538,11 +543,11 @@ class GC
                     {
 //                        std::cout << "SWEEP VEC " << cur << std::endl;
 
-                        if (cur->m_alloc > GC_MEDIUM_VEC_LEN)
+                        if (cur->m_alloc >= GC_BIG_VEC_LEN)
                         {
                             delete cur;
                         }
-                        else if (cur->m_alloc > GC_SMALL_VEC_LEN)
+                        else if (cur->m_alloc >= GC_MEDIUM_VEC_LEN)
                         {
                             // FIXME: We need to limit the number of medium sized
                             //        vectors. or else small vectors will just
@@ -553,12 +558,16 @@ class GC
                             cur->m_len       = 0;
                             m_medium_vectors = cur;
                         }
-                        else
+                        else if (cur->m_alloc >= GC_SMALL_VEC_LEN)
                         {
                             cur->m_gc_next  = m_small_vectors;
                             cur->m_gc_color = GC_COLOR_FREE;
                             cur->m_len      = 0;
                             m_small_vectors = cur;
+                        }
+                        else
+                        {
+                            delete cur;
                         }
                     });
         }
@@ -648,12 +657,16 @@ class GC
 
         void collect_maybe()
         {
-            if (   (m_num_new_maps    > (m_num_alive_maps    / 2))
-                || (m_num_new_vectors > (m_num_alive_vectors / 2))
-                || (m_num_new_syms    > (m_num_alive_syms    / 2)))
+            if (   (m_num_new_maps    > m_num_alive_maps   )
+                || (m_num_new_vectors > m_num_alive_vectors)
+                || (m_num_new_syms    > m_num_alive_syms   ))
             {
-                std::cout << "GC collect at " << m_num_new_vectors
-                          << " <=> " << m_num_alive_vectors << std::endl;
+//                std::cout << "GC collect at " << m_num_new_vectors
+//                          << " <=> " << m_num_alive_vectors << std::endl;
+//                std::cout << "GC collect at " << m_num_new_maps
+//                          << " <=> " << m_num_alive_maps << std::endl;
+//                std::cout << "GC collect at " << m_num_new_syms
+//                          << " <=> " << m_num_alive_syms << std::endl;
                 collect();
             }
         }
@@ -713,7 +726,9 @@ class GC
             if (vec_len > GC_MEDIUM_VEC_LEN)
             {
                 new_vec = new AtomVec;
+//                new_vec->alloc(vec_len == 0 ? 10 : vec_len);
                 new_vec->alloc(vec_len);
+//                std::cout << "NEWVEC " << new_vec << std::endl;
             }
             else if (vec_len > GC_SMALL_VEC_LEN)
             {
@@ -752,6 +767,7 @@ class GC
             AtomVec *new_vec = allocate_vector(av->m_len);
             for (size_t i = 0; i < av->m_len; i++)
                 new_vec->m_data[i] = av->m_data[i];
+            new_vec->m_len = av->m_len;
             return new_vec;
         }
 

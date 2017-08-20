@@ -907,8 +907,8 @@ int main(int argc, char *argv[])
             try
             {
 #               define RUN_TEST(name)   test_##name(); std::cout << "OK - " << #name << std::endl;
-                RUN_TEST(gc1);
-                RUN_TEST(gc2);
+//                RUN_TEST(gc1);
+//                RUN_TEST(gc2);
                 RUN_TEST(atom_gen1);
                 RUN_TEST(atom_gen2);
                 RUN_TEST(symbols_and_keywords);

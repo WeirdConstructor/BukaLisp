@@ -106,13 +106,19 @@ class PROG : public lilvm::UserData
         size_t          m_instructions_len;
 
     public:
+        PROG()
+            : m_atom_data_len(0), m_instructions(nullptr), m_atom_data(nullptr)
+        {
+//            std::cout << "*NEW PROG" << ((void *) this) << std::endl;
+        }
         PROG(size_t atom_data_len, size_t instr_len)
         {
             m_atom_data_len    = atom_data_len;
-            m_atom_data        = new lilvm::Atom[atom_data_len];
+            m_atom_data        = new lilvm::Atom[atom_data_len + 1];
             m_instructions_len = instr_len;
             m_instructions     = new INST[instr_len + 1];
             m_instructions[instr_len].op = OP_END;
+//            std::cout << "NEW PROG" << ((void *) this) << ";; " << atom_data_len << " ;;" << std::endl;
         }
 
         size_t data_array_len()   { return m_atom_data_len; }
@@ -151,6 +157,7 @@ class PROG : public lilvm::UserData
         {
             if (m_atom_data)    delete[] m_atom_data;
             if (m_instructions) delete[] m_instructions;
+//            std::cout << "DEL PROG" << ((void *) this) << std::endl;
         }
 };
 //---------------------------------------------------------------------------

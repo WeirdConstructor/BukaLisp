@@ -205,7 +205,7 @@ START_PRIM()
     REQ_EQ_ARGC(length, 1);
     out = Atom(T_INT);
     if (A0.m_type == T_VEC)         out.m_d.i = A0.m_d.vec->m_len;
-    else if (A1.m_type == T_MAP)    out.m_d.i = A0.m_d.map->m_map.size();
+    else if (A0.m_type == T_MAP)    out.m_d.i = A0.m_d.map->m_map.size();
     else                            out.m_d.i = 0;
 END_PRIM(length)
 

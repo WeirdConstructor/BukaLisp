@@ -639,7 +639,9 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
         AtomVecPush avp(m_root_stack, Atom(T_VEC, ev_av));
 
         for (size_t i = 1 + arg_offs; i < av->m_len; i++)
+        {
             ev_av->m_data[i - (1 + arg_offs)] = eval(av->m_data[i]);
+        }
 
         av = ev_av;
     }
@@ -853,6 +855,7 @@ Atom Interpreter::eval(Atom e)
     }
 
     AtomVecPush avr(m_root_stack, ret);
+
     if (m_force_always_gc)
         m_rt->m_gc.collect();
     else

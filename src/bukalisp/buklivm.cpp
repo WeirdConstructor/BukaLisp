@@ -90,14 +90,24 @@ lilvm::Atom make_prog(lilvm::Atom prog_info)
         || debug.m_type != T_MAP)
         return Atom();
 
-    PROG *new_prog = new PROG(data.m_d.vec->m_len, prog.m_d.vec->m_len);
+    PROG *new_prog = new PROG(data.m_d.vec->m_len, prog.m_d.vec->m_len + 1);
     new_prog->set_debug_info(debug);
     new_prog->set_data_from(data.m_d.vec);
 
-    for (size_t i = 0; i < prog.m_d.vec->m_len; i++)
+    for (size_t i = 0; i < prog.m_d.vec->m_len + 1; i++)
     {
         INST instr;
-        parse_op_desc(instr, prog.m_d.vec->m_data[i]);
+        if (i == (prog.m_d.vec->m_len))
+        {
+            instr.op = OP_END;
+            instr.o = 0;
+            instr.m = 0;
+            instr._.x.a = 0;
+            instr._.l.a = 0;
+            instr._.l.b = 0;
+        }
+        else
+            parse_op_desc(instr, prog.m_d.vec->m_data[i]);
         new_prog->set(i, instr);
     }
 
@@ -127,7 +137,8 @@ void VM::init_prims()
 lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 {
     using namespace std::chrono;
-    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+
+    cout << "vm start" << endl;
 
     Atom ret;
 
@@ -154,12 +165,21 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
     m_env_stack->push(Atom(T_VEC, cur_env));
     m_cont_stack->push(at_ud);
 
+//    cout << "VM PROG: " << at_ud.to_write_str() << endl;
+
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+
+#define SET_O(env, val) if (m_pc->o >= (env)->m_len) (env)->check_size(m_pc->o); (env)->m_data[m_pc->o] = (val);
+
+    bool alloc = false;
     while (m_pc->op != OP_END)
     {
-//        cout << "VMTRC FRMS(" << m_cont_stack->m_len << "): ";
+//        cout << "VMTRC FRMS(" << m_cont_stack->m_len << "/" << m_env_stack->m_len << "): ";
 //        m_pc->to_string(cout);
+//        cout << endl;
+
 //        cout << " {ENV= " << Atom(T_VEC, cur_env).to_write_str() << "}" << endl;
-//
+
         switch (m_pc->op)
         {
             case OP_DUMP_ENV_STACK:
@@ -178,9 +198,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
             case OP_MOV:
             {
                 size_t idx = m_pc->_.x.a;
-                cur_env->set(
-                    m_pc->o,
-                    idx < cur_env->m_len ? cur_env->m_data[idx] : Atom());
+                SET_O(cur_env, idx < cur_env->m_len ? cur_env->m_data[idx] : Atom());
                 break;
             }
 
@@ -197,9 +215,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     m_env_stack->at(m_env_stack->m_len - (env_idx + 1)).m_d.vec;
 
                 size_t idx = m_pc->_.l.b;
-                cur_env->set(
-                    m_pc->o,
-                    idx < src_env->m_len ? src_env->m_data[idx] : Atom());
+                SET_O(cur_env, idx < src_env->m_len ? src_env->m_data[idx] : Atom());
                 break;
             }
 
@@ -216,17 +232,14 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     m_env_stack->at(m_env_stack->m_len - (env_idx + 1)).m_d.vec;
 
                 size_t idx = m_pc->_.l.b;
-                dst_env->set(
-                    m_pc->o,
-                    idx < cur_env->m_len ? cur_env->m_data[idx] : Atom());
+                SET_O(dst_env, idx < cur_env->m_len ? cur_env->m_data[idx] : Atom());
                 break;
             }
 
             case OP_NEW_VEC:
             {
-                cur_env->set(
-                    m_pc->o,
-                    Atom(T_VEC, m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
+                alloc = true;
+                SET_O(cur_env, Atom(T_VEC, m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
                 break;
             }
 
@@ -245,18 +258,15 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 if (vec.m_type != T_VEC)
                     error("Can't SET_VEC on non vector", vec);
 
-                auto &v = *(vec.m_d.vec);
-                v.set(idx, cur_env->at(eidx));
-
-                cur_env->m_data[eidx] = Atom();
+                vec.m_d.vec->set(idx, cur_env->at(eidx));
+                cur_env->m_data[eidx].clear();
                 break;
             }
 
             case OP_LOAD_PRIM:
             {
                 size_t p_nr = m_pc->_.x.a;
-                cur_env->set(
-                    m_pc->o,
+                SET_O(cur_env,
                     p_nr < m_prim_table->m_len
                     ? m_prim_table->m_data[p_nr] : Atom());
                 break;
@@ -265,9 +275,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
             case OP_LOAD_STATIC:
             {
                 size_t idx = m_pc->_.x.a;
-                cur_env->set(
-                    m_pc->o,
-                    idx < data_len ? data[idx] : Atom());
+                SET_O(cur_env, idx < data_len ? data[idx] : Atom());
                 break;
             }
 
@@ -302,6 +310,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 //
             case OP_PUSH_ENV:
             {
+                alloc = true;
                 m_env_stack->push(
                     Atom(T_VEC, cur_env = m_rt->m_gc.allocate_vector(m_pc->_.x.a)));
                 break;
@@ -312,24 +321,25 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 m_env_stack->pop();
                 Atom *l = m_env_stack->last();
                 if (l) cur_env = l->m_d.vec;
-                else   cur_env = args;
-                cur_env;
                 break;
             }
 
             case OP_NEW_CLOSURE:
             {
+                alloc = true;
+
                 Atom prog = cur_env->at(m_pc->_.x.a);
                 if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
                     error("VM can't make closure from non VM-PROG", prog);
 
                 Atom cl(T_CLOS);
                 cl.m_d.vec = m_rt->m_gc.allocate_vector(2);
-                cl.m_d.vec->m_data[0] = prog;
-                cl.m_d.vec->m_data[1] =
-                    Atom(T_VEC, m_rt->m_gc.clone_vector(m_env_stack));
+//                std::cout << "NEW CLOS " << ((void *) cl.m_d.vec) << "@" << ((void *) cl.m_d.vec->m_data) << std::endl;
+                cl.m_d.vec->set(0, prog); // XXX: m_data[0] = prog;
+                cl.m_d.vec->set(1,        //      m_data[1] =
+                    Atom(T_VEC, m_rt->m_gc.clone_vector(m_env_stack)));
 
-                cur_env->set(m_pc->o, cl);
+                SET_O(cur_env, cl);
                 break;
             }
 
@@ -358,8 +368,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 //                    cout << "argv: " << argv.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
                     cur_env->set(out_idx, ret);
 
-                    cur_env->m_data[func_idx] = Atom();
-                    cur_env->m_data[argv_idx] = Atom();
+                    cur_env->m_data[func_idx].clear();
+                    cur_env->m_data[argv_idx].clear();
                 }
                 else if (func.m_type == T_CLOS)
                 {
@@ -368,7 +378,8 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     if (func.m_d.vec->m_data[0].m_type != T_UD)
                         error("Bad closure found", func);
 
-                    AtomVec *cont = m_rt->m_gc.allocate_vector(6);
+                    alloc = true;
+                    AtomVec *cont = m_rt->m_gc.allocate_vector(5);
 
                     Atom prog(T_UD);
                     prog.m_d.ud = (UserData *) m_prog;
@@ -378,18 +389,21 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     cont->m_data[0] = prog;
                     cont->m_data[1] = pc;
                     cont->m_data[2] = Atom(T_VEC, m_env_stack);
-                    cont->m_data[3] = Atom(T_VEC, cur_env);
-                    cont->m_data[4] = Atom(T_INT, out_idx);
+                    cont->m_data[3] = Atom(T_INT, out_idx);
                     // just for keepin a reference to the called function:
-                    cont->m_data[5] = func;
+                    cont->m_data[4] = func;
 
                     // replace current function with continuation
-                    m_cont_stack->pop();
-                    m_cont_stack->push(Atom(T_VEC, cont));
+                    *m_cont_stack->last() = Atom(T_VEC, cont);
                     m_cont_stack->push(func); // save the current function
 
-                    cur_env->m_data[func_idx] = Atom();
-                    cur_env->m_data[argv_idx] = Atom();
+                    if (func_idx >= cur_env->m_len)
+                        error("Bad func idx", func);
+                    if (argv_idx >= cur_env->m_len)
+                        error("Bad func idx", argv);
+
+                    cur_env->m_data[func_idx].clear();
+                    cur_env->m_data[argv_idx].clear();
 
                     m_prog   = dynamic_cast<PROG*>(func.m_d.vec->m_data[0].m_d.ud);
                     data     = m_prog->data_array();
@@ -425,14 +439,13 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 // retrieve the continuation:
                 Atom cont = *m_cont_stack->last();
                 m_cont_stack->pop();
-                if (cont.m_type != T_VEC || cont.m_d.vec->m_len < 5)
+                if (cont.m_type != T_VEC || cont.m_d.vec->m_len < 4)
                     error("Empty or bad continuation stack item!", cont);
 
                 Atom proc   = cont.m_d.vec->m_data[0];
                 Atom pc     = cont.m_d.vec->m_data[1];
                 Atom envs   = cont.m_d.vec->m_data[2];
-                Atom env    = cont.m_d.vec->m_data[3];
-                size_t oidx = (size_t) cont.m_d.vec->m_data[4].m_d.i;
+                size_t oidx = (size_t) cont.m_d.vec->m_data[3].m_d.i;
 
                 // save current function for gc:
                 m_cont_stack->push(proc);
@@ -442,7 +455,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 m_pc     = (INST *) pc.m_d.ptr;
 
                 m_env_stack = envs.m_d.vec;
-                cur_env     = env.m_d.vec;
+                cur_env     = m_env_stack->last()->m_d.vec;
                 cur_env->set(oidx, retval);
 
 //                cout << "VMRETURN VAL: " << retval.to_write_str() << endl;
@@ -460,11 +473,16 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 throw VMException("Unknown VM opcode: " + to_string(m_pc->op));
         }
         m_pc++;
+
+        if (alloc)
+        {
+            m_rt->m_gc.collect_maybe();
+        }
     }
 
     m_cont_stack->pop();
 
-    cout << "STACKS: " << m_cont_stack->m_len << "; " << m_env_stack->m_len << endl;
+//    cout << "STACKS: " << m_cont_stack->m_len << "; " << m_env_stack->m_len << endl;
 
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     duration<double> time_span
