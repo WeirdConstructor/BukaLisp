@@ -396,6 +396,11 @@ START_PRIM()
     out = Atom(T_VEC, av);
 END_PRIM(append)
 
+START_PRIM()
+    REQ_EQ_ARGC(write-str, 1);
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(A0.to_write_str()));
+END_PRIM(write-str);
+
 #if IN_INTERPRETER
 
 START_PRIM()

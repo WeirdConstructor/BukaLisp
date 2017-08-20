@@ -1,47 +1,6 @@
 (define primitive-table
-  '{
-    <=              6
-    symbol?         11
-    +               0
-    *               1
-    /               2
-    -               3
-    <               4
-    first           37
-    exact?          14
-    list            8
-    append          40
-    keyword?        12
-    >               5
-    >=              7
-    eqv?            9
-    map?            19
-    not             10
-    nil?            13
-    inexact?        15
-    string?         16
-    boolean?        17
-    @!              22
-    list?           18
-    pop!            26
-    procedure?      20
-    @               21
-    type            23
-    display         30
-    length          24
-    push!           25
-    make-vm-prog    27
-    str-join        35
-    run-vm-prog     28
-    error           29
-    newline         31
-    displayln       32
-    atom-id         33
-    str             34
-    last            36
-    take            38
-    drop            39
-    invoke-compiler 41 })
+'{<= 6 symbol? 11 + 0 * 1 / 2 - 3 < 4 first 37 exact? 14 list 8 append 40 keyword? 12 > 5 >= 7 eqv? 9 map? 19 not 10 nil? 13 inexact? 15 string? 16 boolean? 17 write-str 41 @! 22 list? 18 pop! 26 procedure? 20 @ 21 type 23 display 30 length 24 push! 25 make-vm-prog 27 str-join 35 run-vm-prog 28 error 29 newline 31 eval 42 displayln 32 atom-id 33 str 34 last 36 take 38 drop 39 invoke-compiler 43}
+)
 ;----------------------------------------------------------------------------
 
 (define make-code-pad-object
@@ -100,6 +59,9 @@
 
       ($define! self (op-new-vec out-idx len)
         (push-op [NEW_VEC: out-idx len]))
+
+      ($define! self (op-new-map out-idx)
+        (push-op [NEW_MAP: out-idx 0]))
 
       ($define! self (op-set-vec vec-idx idx src-idx)
         (push-op [SET_VEC: vec-idx idx src-idx]))
@@ -169,7 +131,7 @@
    ((@(type atom) m) atom arg arg2 arg3)))
 ;----------------------------------------------------------------------------
 
-(define compile-atom-dispatch-map
+(define compile-quote-dispatch-map
  { (type nil) (lambda (atom self code-pad out-idx)
                 (.op-load code-pad atom out-idx))
    'exact     (lambda (atom self code-pad out-idx)
@@ -182,31 +144,30 @@
                 (.op-load code-pad atom out-idx))
    'string    (lambda (atom self code-pad out-idx)
                 (.op-load code-pad atom out-idx))
+   'symbol    (lambda (atom self code-pad out-idx)
+                (.op-load code-pad atom out-idx))
    'map       (lambda (atom self code-pad out-idx)
                 (.set-debug-pos self atom)
-                (displayln "GOT MAP" (length atom))
-                ; get 2 temporaries k-idx v-idx
-                ; op-new-map out-idx
-                ; eval key to k-idx
-                ; eval value to v-idx
-                ; set-map out-idx key-idx value-idx
+                (.op-new-map code-pad out-idx)
                 (let ((k-idx (.new-tmp-pos self))
                       (v-idx (.new-tmp-pos self)))
                   (do-each (k v atom)
-                   (.compile-atom self k code-pad k-idx)
-                   (.compile-atom self v code-pad v-idx))
+                   (.compile-quote self k code-pad k-idx)
+                   (.compile-quote self v code-pad v-idx)
+                   (.op-cset-vec code-pad out-idx k-idx v-idx))
                   (.recycle-tmp-pos self k-idx)
                   (.recycle-tmp-pos self v-idx)))
-   'symbol    (lambda (atom self code-pad out-idx)
-                ; lookup symbol, if not found: error
-                (displayln "GOT SYM "    atom)
-                (.op-load code-pad atom out-idx))
+
    'list      (lambda (atom self code-pad out-idx)
-                (.set-debug-pos self atom)
-                (displayln "GOT LIST")
-                (do-each (a atom)
-                  (displayln DO-LIST_ITEM: a)
-                  (.compile-atom self a code-pad out-idx)))})
+                (let ((tmp-idx (.new-tmp-pos self))
+                      (i 0))
+                  (.op-new-vec code-pad out-idx (length atom))
+                  (do-each (a atom)
+                    (.set-debug-pos self atom)
+                    (.compile-quote self a code-pad tmp-idx)
+                    (.op-cset-vec code-pad out-idx i tmp-idx)
+                    (set! i (+ i 1)))
+                  (.recycle-tmp-pos self tmp-idx)))})
 ;----------------------------------------------------------------------------
 
 (define compile-expr-dispatch-map
@@ -224,17 +185,13 @@
                 (.op-load code-pad atom out-idx))
    'map       (lambda (atom self code-pad out-idx)
                 (.set-debug-pos self atom)
-                (displayln "GOT MAP" (length atom))
-                ; get 2 temporaries k-idx v-idx
-                ; op-new-map out-idx
-                ; eval key to k-idx
-                ; eval value to v-idx
-                ; set-map out-idx key-idx value-idx
+                (.op-new-map code-pad out-idx)
                 (let ((k-idx (.new-tmp-pos self))
                       (v-idx (.new-tmp-pos self)))
                   (do-each (k v atom)
-                    (.compile self k code-pad k-idx)
-                    (.compile self v code-pad v-idx))
+                   (.compile self k code-pad k-idx)
+                   (.compile self v code-pad v-idx)
+                   (.op-cset-vec code-pad out-idx k-idx v-idx))
                   (.recycle-tmp-pos self k-idx)
                   (.recycle-tmp-pos self v-idx)))
 
@@ -292,7 +249,7 @@
                     (.error self "Invalid atom type at start of list" atom))))})
 ;                (do-each (a atom)
 ;                  (displayln DO-LIST_ITEM: a)
-;                  (.compile-atom self a code-pad out-idx)))})
+;                  (.compile-quote self a code-pad out-idx)))})
 ;----------------------------------------------------------------------------
 
 (define recursive-lookup
@@ -370,6 +327,7 @@
          (for (i 1 end-idx)
            (let ((arg-idx (.new-tmp-pos self)))
              (push! arg-idxes arg-idx)
+             (.set-debug-pos self atom)
              (.compile self (@i atom) code-pad arg-idx))))
 
        (.op-new-vec code-pad argvec-idx (- (length atom) 1))
@@ -388,8 +346,8 @@
    ($define! self (compile atom code-pad out-idx)
      (type-dispatch atom compile-expr-dispatch-map self code-pad out-idx))
 
-   ($define! self (compile-atom atom code-pad out-idx)
-     (type-dispatch atom compile-atom-dispatch-map self code-pad out-idx))))
+   ($define! self (compile-quote atom code-pad out-idx)
+     (type-dispatch atom compile-quote-dispatch-map self code-pad out-idx))))
 ;----------------------------------------------------------------------------
 
 (define make-prim-syntax
@@ -444,21 +402,7 @@
            (.op-load code-pad new-prog out-idx)
            (.op-new-closure code-pad out-idx out-idx)
 ;           (displayln LAMBDA: new-prog)
-           ))
-
-        ; push static data pad
-
-        ; push environment (but not on VM, because there the CALL
-        ;                   does that with the argument vector)
-
-        ; create PROG data structure and store it on the parent
-        ; static data pad.
-        ; pop static data pad
-
-        ; emit .op-new-func     with pointer to the PROG data structure
-        ; The VM stores a copy of the current env stack in the closure
-        ; together with the PROG data structure.
-        ))
+           ))))
 
     (make-syntax compiler 'set!
      (lambda (atom self code-pad out-idx)
@@ -490,7 +434,13 @@
        (let ((bind-idx (.new-pos self)))
          (.define-var self (@1 atom) [var: bind-idx])
          (.compile self (@2 atom) code-pad bind-idx)
-         (.op-mov code-pad out-idx bind-idx))))))
+         (.op-mov code-pad out-idx bind-idx))))
+
+    (make-syntax compiler 'quote
+     (lambda (atom self code-pad out-idx)
+       (unless (eqv? 2 (length atom))
+         (.error self "'quote' needs exactly 1 argument" atom))
+       (.compile-quote self (@1 atom) code-pad out-idx)))))
 ;----------------------------------------------------------------------------
 
 (lambda (name data debug-info)

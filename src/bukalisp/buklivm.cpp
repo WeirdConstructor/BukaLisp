@@ -243,6 +243,13 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
+            case OP_NEW_MAP:
+            {
+                alloc = true;
+                SET_O(cur_env, Atom(T_MAP, m_rt->m_gc.allocate_map()));
+                break;
+            }
+
             case OP_CSET_VEC:
             {
                 size_t vidx = m_pc->o;
@@ -255,11 +262,20 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     error("Bad env index for SET_VEC vector", Atom(T_INT, vidx));
 
                 Atom vec = cur_env->m_data[vidx];
-                if (vec.m_type != T_VEC)
-                    error("Can't SET_VEC on non vector", vec);
+                if (vec.m_type == T_VEC)
+                {
+                    vec.m_d.vec->set(idx, cur_env->at(eidx));
+                    cur_env->m_data[eidx].clear();
+                }
+                else if (vec.m_type == T_MAP)
+                {
+                    vec.m_d.map->set(cur_env->at(idx), cur_env->at(eidx));
+                    cur_env->m_data[idx].clear();
+                    cur_env->m_data[eidx].clear();
+                }
+                else
+                    error("Can CSET_VEC on vector and map", vec);
 
-                vec.m_d.vec->set(idx, cur_env->at(eidx));
-                cur_env->m_data[eidx].clear();
                 break;
             }
 
