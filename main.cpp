@@ -359,7 +359,22 @@ void test_ieval_atoms()
     TEST_EVAL("\"f\\xE4; oo\"", "\"f\\xe4; oo\"");
     TEST_EVAL("\"f\\uE4; oo\"", "\"f\\xc3;\\xa4; oo\"");
     TEST_EVAL("\"fä oo\"",      "\"f\\xc3;\\xa4; oo\"");
-    TEST_EVAL("\"f\\\n oo\"",   "\"f\\\\\\n oo\"");
+    TEST_EVAL("\"f\\\n oo\"",   "\"foo\"");
+    TEST_EVAL("\"f\\ \t\n oo\"","\"foo\"");
+
+    TEST_EVAL("#q'fooobar'",              "\"fooobar\"");
+    TEST_EVAL("#q'foo\nobar'",            "\"foo\\nobar\"");
+    TEST_EVAL("#q'fo\\'oobar'",           "\"fo'oobar\"");
+    TEST_EVAL("#q'fo\\'\\\\oobar'",       "\"fo'\\\\oobar\"");
+    TEST_EVAL("#q'fo\\'\\\\oobar\\\\'",   "\"fo'\\\\oobar\\\\\"");
+    TEST_EVAL("#q'fo\\'\\\\oo\"bar\\\\'", "\"fo'\\\\oo\\\"bar\\\\\"");
+    TEST_EVAL("#q'\\s\\x\\foobar+[]\\''", "\"\\\\s\\\\x\\\\foobar+[]'\"");
+
+    TEST_EVAL("\"\\xFF;\\xFE;\"",         "\"\\xff;\\xfe;\"");
+    TEST_EVAL("\"\xFF\xFE\"",             "\"\\xff;\\xfe;\"");
+    TEST_EVAL("\"\r\n\\\"\a\t\b\"",       "\"\\r\\n\\\"\\a\\t\\b\"");
+    TEST_EVAL("\"   fewfew \\\n    f ewufi wfew \\\n        \"",
+              "\"   fewfew f ewufi wfew \"");
 }
 //---------------------------------------------------------------------------
 
@@ -885,14 +900,20 @@ void test_ieval_comments()
     bukalisp::Interpreter i(&rt);
     Atom r;
 
-    TEST_EVAL("(begin (define x 10) #;(set! x 20) x)", "10");
+    TEST_EVAL("(begin (define x 10) #;(set! x 20) x)",              "10");
     TEST_EVAL("#;()(begin #;[] (define x 10)#;{} #;(set! x 20) x)", "10");
-    TEST_EVAL("(begin 13 #;12)",    "13");
-    TEST_EVAL("(begin 13 #;32.23)", "13");
-    TEST_EVAL("(begin 13 #;[])",    "13");
-    TEST_EVAL("(begin 13 #;{})",    "13");
-    TEST_EVAL("(begin 13 #;#t)",    "13");
-    TEST_EVAL("(begin 13 #;nil)",   "13");
+    TEST_EVAL("(begin 13 #;12)",                    "13");
+    TEST_EVAL("(begin 13 #;32.23)",                 "13");
+    TEST_EVAL("(begin 13 #;[])",                    "13");
+    TEST_EVAL("(begin 13 #;{})",                    "13");
+    TEST_EVAL("(begin 13 #;#t)",                    "13");
+    TEST_EVAL("(begin 13 #;nil)",                   "13");
+
+    TEST_EVAL("(begin 13 #|nil|#)",                 "13");
+    TEST_EVAL("#|\n    test\n foo |#\n123",         "123");
+    TEST_EVAL("(begin 13 #||#)",                    "13");
+    TEST_EVAL("(begin (define |# 14) 13 #||#|#)",   "14");
+    TEST_EVAL("(begin (define |# 14) 13 #|#||##|feuw weifew u #|fe wf wefwee w|#|#|#)",   "13");
 }
 //---------------------------------------------------------------------------
 

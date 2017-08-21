@@ -38,6 +38,7 @@ enum TokenType
     TOK_EOF,
     TOK_CHR,
     TOK_STR,
+    TOK_STR_DELIM,
     TOK_DBL,
     TOK_INT,
     TOK_BAD_NUM
@@ -77,6 +78,9 @@ struct Token
     {
         m_text = sStrBody;
     }
+    Token(TokenType tt, char c)
+        : m_line(0), m_token_id(tt), m_text(std::string(&c, 1))
+    { }
 
     char nth(unsigned int i)
     {
@@ -98,6 +102,8 @@ struct Token
             s = "TOK_CHR[" + m_text + "]";
         else if (m_token_id == TOK_STR)
             s = "TOK_STR\"" + m_text + "\"";
+        else if (m_token_id == TOK_STR_DELIM)
+            s = "TOK_STR_DELIM(" + m_text + ")";
         else
             s = "TOK_BAD_NUM";
 
@@ -215,11 +221,93 @@ class Tokenizer
                     if (c == '\'')
                     {
                         m_u8buf.skip_bytes(1);
+                        push(Token(TOK_STR_DELIM, c));
+                        m_u8tmp.reset();
 
+                        while (m_u8buf.length() > 0)
+                        {
+                            c = m_u8buf.first_byte(true);
+                            if (c == '\\')
+                            {
+                                char peek_c = m_u8buf.first_byte();
+
+                                if (checkEOF()) return;
+                                if (peek_c == '\'')
+                                    m_u8tmp.append_byte(m_u8buf.first_byte(true));
+                                else if (peek_c == '\\')
+                                    m_u8tmp.append_byte(m_u8buf.first_byte(true));
+                                else
+                                {
+                                    if (c      == '\n') m_cur_line++;
+                                    if (peek_c == '\n') m_cur_line++;
+
+                                    m_u8tmp.append_byte(c);
+                                    m_u8tmp.append_byte(m_u8buf.first_byte(true));
+                                }
+                            }
+                            else if (c == '\'')
+                            {
+                                push(Token(m_u8tmp.as_string()));
+                                push(Token(TOK_STR_DELIM, c));
+                                break;
+                            }
+                            else
+                            {
+                                m_u8tmp.append_byte(c);
+                            }
+                        }
+
+                        if (checkEOF()) return;
                     }
                     else
                     {
                         push(Token("#q"));
+                    }
+                }
+                else if (c == '#' && m_u8buf.first_byte() == '|')
+                {
+                    m_u8buf.skip_bytes(1);
+
+                    c = m_u8buf.first_byte();
+                    if (c == '\n') m_cur_line++;
+
+                    int nest = 1;
+                    while (nest > 0 && m_u8buf.length() > 0)
+                    {
+                        while (m_u8buf.length() > 0 && c != '|' && c != '#')
+                        {
+                            m_u8buf.skip_bytes(1);
+                            c = m_u8buf.first_byte();
+                            if (c == '\n') m_cur_line++;
+                        }
+
+                        if (c == '|')
+                        {
+                            m_u8buf.skip_bytes(1);
+                            c = m_u8buf.first_byte();
+
+                            if (c == '#')
+                            {
+                                m_u8buf.skip_bytes(1);
+                                nest--;
+                                continue;
+                            }
+
+                        }
+                        else if (c == '#')
+                        {
+                            m_u8buf.skip_bytes(1);
+                            c = m_u8buf.first_byte();
+
+                            if (c == '|')
+                            {
+                                m_u8buf.skip_bytes(1);
+                                nest++;
+                                continue;
+                            }
+                        }
+
+                        if (c == '\n') m_cur_line++;
                     }
                 }
                 else if (charClass(c, "[]{}()'`~^@$."))
@@ -228,7 +316,7 @@ class Tokenizer
                 }
                 else if (c == '"')
                 {
-                    push(Token(c));
+                    push(Token(TOK_STR_DELIM, c));
                     m_u8tmp.reset();
 
                     while (m_u8buf.length() > 0)
@@ -257,6 +345,30 @@ class Tokenizer
                             { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('\t'); }
                             else if (peek_c == '|')
                             { m_u8buf.skip_bytes(1); m_u8tmp.append_byte('|'); }
+                            else if (peek_c == ' ' || peek_c == '\t' || peek_c == '\n' || peek_c == '\r')
+                            {
+                                while (peek_c == ' ' || peek_c == '\t' || peek_c == '\n' || peek_c == '\r')
+                                {
+                                    m_u8buf.skip_bytes(1);
+                                    peek_c = m_u8buf.first_byte();
+                                    if (peek_c == '\n')
+                                    {
+                                        m_u8buf.skip_bytes(1);
+                                        m_cur_line++;
+                                    }
+                                    else if (peek_c == '\r')
+                                    {
+                                        m_u8buf.skip_bytes(1);
+                                        peek_c = m_u8buf.first_byte();
+                                        if (peek_c == '\n')
+                                        {
+                                            m_u8buf.skip_bytes(1);
+                                            peek_c = m_u8buf.first_byte();
+                                        }
+                                        m_cur_line++;
+                                    }
+                                }
+                            }
                             else if (peek_c == 'x' || peek_c == 'u')
                             {
                                 bool is_unicode = peek_c == 'u';
@@ -284,7 +396,7 @@ class Tokenizer
                                         m_u8tmp.append_byte(
                                             std::stoi(hex_chr, 0, 16));
                                 }
-                                catch (std::exception &e)
+                                catch (std::exception &)
                                 {
                                     m_u8tmp.append_byte('?');
                                 }
@@ -300,7 +412,7 @@ class Tokenizer
                         else if (c == '"')
                         {
                             push(Token(m_u8tmp.as_string()));
-                            push(Token(c));
+                            push(Token(TOK_STR_DELIM, c));
                             break;
                         }
                         else

@@ -27,6 +27,7 @@ struct Runtime
         m_par.reset();
         m_tok.reset();
         m_tok.tokenize(input_name, input);
+        // m_tok.dump_tokens();
         lilvm::AtomVec *elems = m_gc.allocate_vector(0);
         while (!m_par.is_eof())
         {

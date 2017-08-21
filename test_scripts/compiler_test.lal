@@ -16,6 +16,26 @@
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
+(T '(begin (define x 11) (set! x 32) (return x)) 32)
+(T '(begin (define x 11)
+           (set! x (return x))
+           (return x)) 11)
+(T '(begin (define g 10)
+           ((lambda ()
+              (set! g 33)
+              (return nil)
+              (set! g 45)))
+           g)
+   33)
+(T '(begin (define g 10)
+           ((lambda ()
+              (set! g 33)
+              (return g)
+              (set! g 45))))
+   33)
+(T '(return 32) 32)
+(T '{a: 10 x: (return 20)} 20)
+
 (t "123"        123)
 (t "(+ 123)"    123)
 (t "(+ 1 123)"  124)
@@ -550,6 +570,7 @@
 (t "(define x #;20 10) #;(set! x 20) x" 10)
 (t "#;()(define x #;20 10 #;[])#;{} #;(set! x 20) x #;()" 10)
 (t "#;()(#;() define #;() x #;20 10 #;[])#;{} #;(set! x 20) x" 10)
+
 
 ;    TEST_EVAL("(let ((aid  (atom-id (type nil))) "
 ;              "      (aid2 (atom-id (type nil))) "

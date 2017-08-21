@@ -471,7 +471,15 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
                 cont_stack->pop(); // the current function can be discarded
                 // retrieve the continuation:
-                Atom cont = *cont_stack->last();
+                Atom *c = cont_stack->last();
+                if (!c || c->m_type == T_NIL)
+                {
+                    ret = retval;
+                    m_pc = &(m_prog->m_instructions[m_prog->m_instructions_len - 2]);
+                    break;
+                }
+
+                Atom cont = *c;
                 cont_stack->pop();
                 if (cont.m_type != T_VEC || cont.m_d.vec->m_len < 4)
                     error("Empty or bad continuation stack item!", cont);

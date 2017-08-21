@@ -512,6 +512,14 @@
              (.error self "Can only define symbols as variable" atom)))))
       ;----------------------------------------------------------------------------
 
+      (set-env-syntax new-env 'return
+       (lambda (atom self code-pad out-idx)
+         (unless (eqv? (length atom) 2)
+           (.error self "'return' needs exactly 1 argument" atom))
+         (.compile self (@1 atom) code-pad out-idx)
+         (.op-return code-pad out-idx)))
+      ;----------------------------------------------------------------------------
+
       (set-env-syntax new-env 'define-macro
        (lambda (atom self code-pad out-idx)
          (unless (> (length atom) 2)

@@ -170,20 +170,22 @@ class Parser
                             M_BUILDER(atom_bool(false));
                         else if (t.m_text == "nil")
                             M_BUILDER(atom_nil());
-                        else if (t.m_text == "\"")
-                        {
-                            t = m_tok.peek();
-                            if (t.m_token_id != TOK_STR)
-                            {
-                                log_error("Expected string body", t);
-                                return false;
-                            }
-                            M_BUILDER(atom_string(t.m_text));
-                            m_tok.next();
-                            m_tok.next(); // skip end '"'
-                        }
                         else
                             M_BUILDER(atom_symbol(t.m_text));
+                        break;
+                    }
+                case TOK_STR_DELIM:
+                    {
+                        m_tok.next();
+                        t = m_tok.peek();
+                        if (t.m_token_id != TOK_STR)
+                        {
+                            log_error("Expected string body", t);
+                            return false;
+                        }
+                        M_BUILDER(atom_string(t.m_text));
+                        m_tok.next();
+                        m_tok.next(); // skip end TOK_STR_DELIM
                         break;
                     }
                 case TOK_BAD_NUM:
@@ -222,9 +224,10 @@ class Parser
             switch (t.m_token_id)
             {
                 case TOK_EOF: m_tok.next(); m_eof = true; break;
-                case TOK_DBL: return parse_atom();        break;
-                case TOK_INT: return parse_atom();        break;
-                case TOK_STR: return parse_atom();        break;
+                case TOK_DBL:       return parse_atom();  break;
+                case TOK_INT:       return parse_atom();  break;
+                case TOK_STR:       return parse_atom();  break;
+                case TOK_STR_DELIM: return parse_atom();  break;
 
                 case TOK_CHR:
                 {
