@@ -97,6 +97,12 @@
       ($define! self (op-brnif jmp-offs val-idx)
         (push-op [BRNIF: jmp-offs val-idx]))
 
+      ($define! self (op-ge out-idx a-idx b-idx)
+        (push-op [GE: out-idx a-idx b-idx]))
+
+      ($define! self (op-inc val-idx incrementor-idx)
+        (push-op [INC: val-idx incrementor-idx]))
+
       ($define! self (op-load static out-idx)
         ; TODO: optimize static data loading by storing their
         ;       positions in a map
@@ -542,7 +548,7 @@
       (set-env-syntax new-env 'if
        (lambda (atom self code-pad out-idx)
          (unless (> (length atom) 2)
-           (.error self "'if needs at least 2 arguments"))
+           (.error self "'if needs at least 2 arguments" atom))
          (if (eqv? (length atom) 4)
            (let ((true-pad   (.make-code-pad self))
                  (false-pad  (.make-code-pad self))
@@ -568,7 +574,7 @@
       (set-env-syntax new-env 'when
        (lambda (atom self code-pad out-idx)
          (unless (> (length atom) 2)
-           (.error self "'when' needs at least 1 argument"))
+           (.error self "'when' needs at least 1 argument" atom))
          (let ((branch-pad (.make-code-pad self))
                (cond-idx   (.new-tmp-pos   self)))
            (.compile-block self (drop atom 2) branch-pad out-idx)
@@ -582,7 +588,7 @@
       (set-env-syntax new-env 'unless
        (lambda (atom self code-pad out-idx)
          (unless (> (length atom) 2)
-           (.error self "'when' needs at least 1 argument"))
+           (.error self "'when' needs at least 1 argument" atom))
          (let ((branch-pad (.make-code-pad self))
                (cond-idx   (.new-tmp-pos   self)))
            (.compile-block self (drop atom 2) branch-pad out-idx)
@@ -591,6 +597,55 @@
            (.op-brif                code-pad (.count-ops branch-pad) cond-idx)
            (.append-code-pad        code-pad branch-pad)
            (.recycle-tmp-pos self cond-idx))))
+      ;----------------------------------------------------------------------------
+
+      (set-env-syntax new-env 'for
+       (lambda (atom self code-pad out-idx)
+         (unless (> (length atom) 2)
+           (.error self "'for' needs at least 1 argument" atom))
+         (unless (list? (@1 atom))
+           (.error self "first argument of 'for' needs to be a list" atom))
+         (unless (> (length (@1 atom)) 2)
+           (.error self "first part of the iteration definition of \
+                         'for' needs to contain at least 3 elements" atom))
+         (when (> (length (@1 atom)) 3)
+           (.error self "first part of the iteration definition of \
+                         'for' contains too many elements (only 3 or 4 allowed)" atom))
+         (unless (symbol? (@0 (@1 atom)))
+           (.error self "first part of the iteration definition of \
+                         'for' needs to be a symbol" atom))
+         (let ((i-def         (@1 atom))
+               (iter-name     (@0 i-def))
+               (start-val     (@1 i-def))
+               (end-val       (@2 i-def))
+               (iter-val      (@3 i-def))
+               (iter-idx      (.new-pos self))
+               (end-idx       (.new-pos self))
+               (ival-idx      (.new-pos self))
+               (cond-idx      (.new-pos self))
+               (tmp-out-idx   (.new-pos self))
+               (body-pad      (.make-code-pad self)))
+           (.push-env   self)
+           (.op-push-env code-pad 5)
+           ; prepare values:
+           (.compile    self start-val code-pad iter-idx)
+           (.compile    self end-val   code-pad end-idx)
+           (if (nil? iter-val)
+             (.op-load                code-pad 1 ival-idx)
+             (.compile self iter-val  code-pad ival-idx))
+           (.define-var self (@0 (@1 atom)) [var: iter-idx])
+           ; execute block and iteration step:
+           (.compile-block self (drop atom 2) body-pad tmp-out-idx)
+           (.op-inc body-pad iter-idx ival-idx)
+           (.op-ge  body-pad cond-idx iter-idx end-idx)
+           (.append-code-pad code-pad body-pad)
+           (.op-brnif        code-pad
+                             (- 0 (+ 1 (.count-ops body-pad)))
+                             cond-idx)
+           ; cleanup:
+           (.op-mov-to  code-pad out-idx 1 tmp-out-idx)
+           (.op-pop-env code-pad)
+           (.pop-env    self))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'define-macro
@@ -663,7 +718,7 @@
       (.op-set-return code-pad ret-val-pos)
 ;      (displayln PAD: ($pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
-;        (displayln prog)
+        (displayln prog)
         (if only-compile
           prog
           (run-vm-prog prog (@1 root-env)))))))

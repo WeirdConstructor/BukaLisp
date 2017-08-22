@@ -16,7 +16,10 @@
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
-
+(T '(for (i 1 2)
+      (displayln i))
+   nil)
+(error x:)
 
 (T '(begin (define x 11) (set! x 32) (return x)) 32)
 (T '(begin (define x 11)

@@ -43,6 +43,7 @@ class VMException : public std::exception
     X(BRNIF,         17) \
     X(BRIF,          18) \
     X(BR,            19) \
+    X(INC,           20) \
     X(ADD,          100) \
     X(SUB,          101) \
     X(MUL,          102) \
@@ -70,8 +71,7 @@ OP_CODE_DEF(X)
 struct INST
 {
     uint8_t  op;
-    uint8_t  m;
-    uint16_t o;
+    int32_t  o;
     union {
         struct {
             uint16_t a;
@@ -95,7 +95,6 @@ struct INST
     void clear()
     {
         op    = 0;
-        m     = 0;
         o     = 0;
         _.x.a = 0;
     }

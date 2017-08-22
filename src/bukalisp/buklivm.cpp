@@ -63,7 +63,7 @@ void parse_op_desc(INST &instr, Atom &desc)
 
 //    cout << "op code: " << (int) op_code << endl;
     instr.op = op_code;
-    instr.o  = (uint16_t) av->m_data[1].to_int();
+    instr.o  = (int32_t) av->m_data[1].to_int();
     if (av->m_len == 4)
     {
         instr._.l.a = (uint16_t) av->m_data[2].to_int();
@@ -101,7 +101,6 @@ lilvm::Atom make_prog(lilvm::Atom prog_info)
         {
             instr.op = OP_END;
             instr.o = 0;
-            instr.m = 0;
             instr._.x.a = 0;
             instr._.l.a = 0;
             instr._.l.b = 0;
@@ -185,11 +184,11 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
     bool alloc = false;
     while (m_pc->op != OP_END)
     {
-//        cout << "VMTRC FRMS(" << cont_stack->m_len << "/" << env_stack->m_len << "): ";
-//        m_pc->to_string(cout);
-//        cout << endl;
+        cout << "VMTRC FRMS(" << cont_stack->m_len << "/" << env_stack->m_len << "): ";
+        m_pc->to_string(cout);
+        cout << endl;
 
-//        cout << " {ENV= " << Atom(T_VEC, cur_env).to_write_str() << "}" << endl;
+        cout << " {ENV= " << Atom(T_VEC, cur_env).to_write_str() << "}" << endl;
 
         switch (m_pc->op)
         {
@@ -546,6 +545,40 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
                         error("BRIF out of PROG", Atom());
                 }
+                break;
+            }
+
+            case OP_INC:
+            {
+                size_t idx_a = m_pc->_.x.a;
+                if (idx_a >= cur_env->m_len)
+                    error("INC can't work with an undefined increment", Atom());
+
+                size_t idx_o = m_pc->o;
+                if (idx_o >= cur_env->m_len)
+                    cur_env->set(idx_o, Atom(T_INT));
+
+                Atom *o = &(cur_env->m_data[idx_o]);
+                if (o->m_type == T_DBL)
+                    o->m_d.d += cur_env->m_data[idx_a].m_d.d;
+                else
+                    o->m_d.i += cur_env->m_data[idx_a].m_d.i;
+                break;
+            }
+
+            case OP_GE:
+            {
+                size_t idx_a = m_pc->_.l.a;
+                size_t idx_b = m_pc->_.l.b;
+                Atom a;
+                if (idx_a < cur_env->m_len) a = cur_env->m_data[idx_a];
+                Atom b;
+                if (idx_b < cur_env->m_len) b = cur_env->m_data[idx_b];
+                Atom o(T_BOOL);
+                if (a.m_type == T_DBL)
+                    o.m_d.b = a.to_dbl() >= b.to_dbl();
+                else
+                    o.m_d.b = a.to_int() >= b.to_int();
                 break;
             }
 
