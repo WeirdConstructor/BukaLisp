@@ -30,15 +30,19 @@ class VMException : public std::exception
     X(MOV_TO,         3) \
     X(LOAD_STATIC,    4) \
     X(LOAD_PRIM,      5) \
-    X(NEW_VEC,        6) \
-    X(NEW_MAP,        7) \
-    X(CSET_VEC,       8) \
-    X(PUSH_ENV,      10) \
-    X(POP_ENV,       11) \
-    X(DUMP_ENV_STACK,12) \
-    X(SET_RETURN,    13) \
-    X(CALL,          14) \
-    X(NEW_CLOSURE,   15) \
+    X(LOAD_NIL,       6) \
+    X(NEW_VEC,        7) \
+    X(NEW_MAP,        8) \
+    X(CSET_VEC,       9) \
+    X(PUSH_ENV,      11) \
+    X(POP_ENV,       12) \
+    X(DUMP_ENV_STACK,13) \
+    X(SET_RETURN,    14) \
+    X(CALL,          15) \
+    X(NEW_CLOSURE,   16) \
+    X(BRNIF,         17) \
+    X(BRIF,          18) \
+    X(BR,            19) \
     X(ADD,          100) \
     X(SUB,          101) \
     X(MUL,          102) \

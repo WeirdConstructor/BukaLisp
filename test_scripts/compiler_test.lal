@@ -16,6 +16,8 @@
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
+
+
 (T '(begin (define x 11) (set! x 32) (return x)) 32)
 (T '(begin (define x 11)
            (set! x (return x))
@@ -483,6 +485,15 @@
 ;(T '(procedure? if) #false)
 (T '(procedure? '()) #false)
 
+; Test (type ...):
+(T '(let ((m { 'nil 1234 }))
+      (@(type nil) m))
+   nil)
+
+(T '(let ((m { (type nil) 1234 }))
+      (@(type nil) m))
+   1234)
+
 (T '(type []) 'list)
 (T '(type [1 2 3]) 'list)
 (T '(type '()) 'list)
@@ -506,6 +517,25 @@
 (T '(length {x: 12}) 1)
 (T '(length {y: 324 x: 12}) 2)
 (T '(length (let ((l [])) (@!9 l l))) 10)
+
+(T '(first '(a b c)) 'a)
+(T '(first '()) 'nil)
+(T '(first [3]) '3)
+(T '(last [1 2 3]) '3)
+(T '(last [3]) '3)
+(T '(last []) 'nil)
+(T '(take [x: y: 12 3 4] 2) '(x: y:))
+(T '(take [1] 2) '(1))
+(T '(take [1 2] 2) '(1 2))
+(T '(take [] 2) '())
+(T '(drop [1 2 3] 2) '(3))
+(T '(drop [1 2 3] 4) '())
+(T '(drop [1 2 3] 3) '())
+(T '(drop [] 3) '())
+(T '(drop [1 2 3] 0) '(1 2 3))
+(T '(drop [1 2 3] 1) '(2 3))
+(T '(append [1 2 3] 1 a: { x: 12 } [5 5 5]) '(1 2 3 1 a: x: 12 5 5 5))
+(T '(append [1 2 3]) '(1 2 3))
 
 ; Test let TODO: Moar!
 (T '(let ((x 10)) x) 10)
@@ -571,41 +601,56 @@
 (t "#;()(define x #;20 10 #;[])#;{} #;(set! x 20) x #;()" 10)
 (t "#;()(#;() define #;() x #;20 10 #;[])#;{} #;(set! x 20) x" 10)
 
+; Test conditionals:
+(T '(when   #t 10) 10)
+(T '(when   #f 10) nil)
+(T '(unless #t 10) nil)
+(T '(unless #f 10) 10)
+(T '(begin
+      (define x 10)
+      (when (> 0 -1)
+        (let ((y 22))
+          (set! x (* 1.23 x y))))
+      x)
+   270.6)
+(T '(begin
+      (define x 10)
+      (when (> 0 1)
+        (let ((y 22))
+          (set! x (* 1.23 x y))))
+      x)
+   10)
 
-;    TEST_EVAL("(let ((aid  (atom-id (type nil))) "
-;              "      (aid2 (atom-id (type nil))) "
-;              "      (aid3 (atom-id (type nil)))) "
-;              "  [(eqv? aid aid2) (eqv? aid aid3)])",
-;              "(#true #true)");
-;
-;    TEST_EVAL("(let ((m { 'nil 1234 })) "
-;              "  (@(type nil) m))",
-;              "nil");
-;
-;    TEST_EVAL("(let ((m { (type nil) 1234 })) "
-;              "  (@(type nil) m))",
-;              "1234");
-;
-;    TEST_EVAL("(first '(a b c))",        "a");
-;    TEST_EVAL("(first '())",             "nil");
-;    TEST_EVAL("(first [3])",             "3");
-;    TEST_EVAL("(last [1 2 3])",          "3");
-;    TEST_EVAL("(last [3])",              "3");
-;    TEST_EVAL("(last [])",               "nil");
-;    TEST_EVAL("(take [x: y: 12 3 4] 2)", "(x: y:)");
-;    TEST_EVAL("(take [1] 2)",            "(1)");
-;    TEST_EVAL("(take [1 2] 2)",          "(1 2)");
-;    TEST_EVAL("(take [] 2)",             "()");
-;    TEST_EVAL("(drop [1 2 3] 2)",        "(3)");
-;    TEST_EVAL("(drop [1 2 3] 4)",        "()");
-;    TEST_EVAL("(drop [1 2 3] 3)",        "()");
-;    TEST_EVAL("(drop [] 3)",             "()");
-;    TEST_EVAL("(drop [1 2 3] 0)",        "(1 2 3)");
-;    TEST_EVAL("(drop [1 2 3] 1)",        "(2 3)");
-;
-;    TEST_EVAL("(append [1 2 3] 1 a: { x: 12 } [5 5 5])",
-;              "(1 2 3 1 a: x: 12 5 5 5)");
-;    TEST_EVAL("(append [1 2 3])",
-;              "(1 2 3)");
+(T '(if #t 10 20) 10)
+(T '(if #t 10)    10)
+(T '(if #f 10 20) 20)
+(T '(if #f 10)    nil)
+
+(T '(begin
+      (define x 10)
+      (if (> 0 -1)
+        (let ((y 22))
+          (set! x (* 1.27 x y)))
+        (let ((y 22))
+          (set! x (* 1.23 x y))))
+      x)
+   279.4)
+
+(T '(begin
+      (define x 10)
+      (if (> 0 1)
+        (let ((y 22))
+          (set! x (* 1.27 x y)))
+        (let ((y 22))
+          (set! x (* 1.23 x y))))
+      x)
+   270.6)
+
+(T '(let ((aid  (atom-id (type nil)))
+          (aid2 (atom-id (type nil)))
+          (aid3 (atom-id (type nil))))
+      [(eqv? aid aid2) (eqv? aid aid3)])
+   '(#t #t))
+
 (displayln "ALL OK")
 ::

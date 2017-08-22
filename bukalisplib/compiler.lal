@@ -4,13 +4,14 @@
 ;----------------------------------------------------------------------------
 
 (define make-code-pad-object
-  (lambda (out-pad)
-    (let ((self { code: [] debug-info: {} }))
+  (lambda (static-data-pad)
+    (let ((self { code:       []
+                  debug-info: {} }))
       (define push-op
         (lambda (op-desc)
           (@!op-desc
            ($debug-info: self)
-           ($debug-pos: out-pad))
+           ($debug-pos: static-data-pad))
           (push! ($code: self) op-desc)))
 
       ($define! self (append-code-pad code-pad)
@@ -19,6 +20,9 @@
             (@! k ($debug-info: self) v))
           (do-each (op ($code: code-pad))
             (push! code op))))
+
+      ($define! self (count-ops)
+        (length ($code: self)))
 
       ($define! self (to-vm-prog-code)
         ($code: self))
@@ -29,6 +33,9 @@
             (@!i m (@op-desc ($debug-info: self)))
             (set! i (+ i 1)))
           m))
+
+      ($define! self (op-nop)
+        (push-op [NOP: 0 0]))
 
       ($define! self (op-push-env size)
         (push-op [PUSH_ENV: 0 size]))
@@ -57,6 +64,9 @@
       ($define! self (op-load-prim out-idx prim-nr)
         (push-op [LOAD_PRIM: out-idx prim-nr]))
 
+      ($define! self (op-load-nil out-idx)
+        (push-op [LOAD_NIL: out-idx 0]))
+
       ($define! self (op-new-vec out-idx len)
         (push-op [NEW_VEC: out-idx len]))
 
@@ -78,10 +88,19 @@
       ($define! self (op-pack-va out-idx env-pos-idx)
         (push-op [PACK_VA: out-idx env-pos-idx]))
 
+      ($define! self (op-br jmp-offs)
+        (push-op [BR: jmp-offs 0]))
+
+      ($define! self (op-brif jmp-offs val-idx)
+        (push-op [BRIF: jmp-offs val-idx]))
+
+      ($define! self (op-brnif jmp-offs val-idx)
+        (push-op [BRNIF: jmp-offs val-idx]))
+
       ($define! self (op-load static out-idx)
         ; TODO: optimize static data loading by storing their
         ;       positions in a map
-        (let ((idx (.add-static-data out-pad static)))
+        (let ((idx (.add-static-data static-data-pad static)))
           (push-op [LOAD_STATIC: out-idx idx]))))))
 ;----------------------------------------------------------------------------
 
@@ -520,6 +539,60 @@
          (.op-return code-pad out-idx)))
       ;----------------------------------------------------------------------------
 
+      (set-env-syntax new-env 'if
+       (lambda (atom self code-pad out-idx)
+         (unless (> (length atom) 2)
+           (.error self "'if needs at least 2 arguments"))
+         (if (eqv? (length atom) 4)
+           (let ((true-pad   (.make-code-pad self))
+                 (false-pad  (.make-code-pad self))
+                 (cond-idx   (.new-tmp-pos   self)))
+             (.compile self (@2 atom) true-pad  out-idx)
+             (.compile self (@3 atom) false-pad out-idx)
+             (.compile self (@1 atom) code-pad cond-idx)
+             (.op-brnif               code-pad (+ 1 (.count-ops true-pad)) cond-idx)
+             (.append-code-pad        code-pad true-pad)
+             (.op-br                  code-pad (.count-ops false-pad))
+             (.append-code-pad        code-pad false-pad)
+             (.recycle-tmp-pos self cond-idx))
+           (let ((true-pad (.make-code-pad self))
+                 (cond-idx (.new-tmp-pos   self)))
+             (.compile self (@2 atom) true-pad out-idx)
+             (.compile self (@1 atom) code-pad cond-idx)
+             (.op-load-nil            code-pad out-idx)
+             (.op-brnif               code-pad (.count-ops true-pad) cond-idx)
+             (.append-code-pad        code-pad true-pad)
+             (.recycle-tmp-pos self cond-idx)))))
+      ;----------------------------------------------------------------------------
+
+      (set-env-syntax new-env 'when
+       (lambda (atom self code-pad out-idx)
+         (unless (> (length atom) 2)
+           (.error self "'when' needs at least 1 argument"))
+         (let ((branch-pad (.make-code-pad self))
+               (cond-idx   (.new-tmp-pos   self)))
+           (.compile-block self (drop atom 2) branch-pad out-idx)
+           (.compile self (@1 atom) code-pad cond-idx)
+           (.op-load-nil            code-pad out-idx)
+           (.op-brnif               code-pad (.count-ops branch-pad) cond-idx)
+           (.append-code-pad        code-pad branch-pad)
+           (.recycle-tmp-pos self cond-idx))))
+      ;----------------------------------------------------------------------------
+
+      (set-env-syntax new-env 'unless
+       (lambda (atom self code-pad out-idx)
+         (unless (> (length atom) 2)
+           (.error self "'when' needs at least 1 argument"))
+         (let ((branch-pad (.make-code-pad self))
+               (cond-idx   (.new-tmp-pos   self)))
+           (.compile-block self (drop atom 2) branch-pad out-idx)
+           (.compile self (@1 atom) code-pad cond-idx)
+           (.op-load-nil            code-pad out-idx)
+           (.op-brif                code-pad (.count-ops branch-pad) cond-idx)
+           (.append-code-pad        code-pad branch-pad)
+           (.recycle-tmp-pos self cond-idx))))
+      ;----------------------------------------------------------------------------
+
       (set-env-syntax new-env 'define-macro
        (lambda (atom self code-pad out-idx)
          (unless (> (length atom) 2)
@@ -593,7 +666,8 @@
 ;        (displayln prog)
         (if only-compile
           prog
-          (displayln-time (run-vm-prog prog (@1 root-env))))))))
+          (run-vm-prog prog (@1 root-env)))))))
+;          (displayln-time (run-vm-prog prog (@1 root-env))))))))
 ;----------------------------------------------------------------------------
 
 ;  (let ((x (make-static-data-pad)))

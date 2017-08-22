@@ -299,6 +299,12 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
+            case OP_LOAD_NIL:
+            {
+                SET_O(cur_env, Atom());
+                break;
+            }
+
             case OP_LOAD_STATIC:
             {
                 size_t idx = m_pc->_.x.a;
@@ -508,6 +514,38 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
             case OP_SET_RETURN:
             {
                 ret = cur_env->at(m_pc->_.x.a);
+                break;
+            }
+
+            case OP_BR:
+            {
+                m_pc += m_pc->o;
+                if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
+                    error("BR out of PROG", Atom());
+                break;
+            }
+
+            case OP_BRIF:
+            {
+                Atom a = cur_env->at(m_pc->_.x.a);
+                if (!a.is_false())
+                {
+                    m_pc += m_pc->o;
+                    if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
+                        error("BRIF out of PROG", Atom());
+                }
+                break;
+            }
+
+            case OP_BRNIF:
+            {
+                Atom a = cur_env->at(m_pc->_.x.a);
+                if (a.is_false())
+                {
+                    m_pc += m_pc->o;
+                    if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
+                        error("BRIF out of PROG", Atom());
+                }
                 break;
             }
 
