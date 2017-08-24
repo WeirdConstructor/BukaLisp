@@ -1,11 +1,14 @@
 #define BIN_OP_LOOPS(op) \
         if (args.m_len > 1) { \
-            if (out.m_type == T_DBL) \
+            if (out.m_type == T_DBL) { \
+                double &o = out.m_d.d; \
                 for (size_t i = 1; i < args.m_len; i++) \
-                    out.m_d.d = out.m_d.d op args.m_data[i].to_dbl(); \
-            else \
+                    o = o op args.m_data[i].to_dbl(); \
+            } else { \
+                int64_t &o = out.m_d.i; \
                 for (size_t i = 1; i < args.m_len; i++) \
-                    out.m_d.i = out.m_d.i op args.m_data[i].to_int(); \
+                    o = o op args.m_data[i].to_int(); \
+            } \
         }
 
 #define NO_ARG_NIL if (args.m_len <= 0) { out = Atom(); return; }

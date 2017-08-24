@@ -76,7 +76,10 @@ void AtomVec::init(uint8_t current_gc_color, size_t len)
     m_gc_color = current_gc_color;
 
     for (size_t i = 0; i < m_len; i++)
-        m_data[i].clear();
+    {
+        m_data[i].m_type = T_NIL;
+        m_data[i].m_d.i  = 0;
+    }
 }
 //---------------------------------------------------------------------------
 

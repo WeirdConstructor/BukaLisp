@@ -3,16 +3,26 @@
 )
 ;----------------------------------------------------------------------------
 
+(define inc-env-offs (lambda (out-idx) [(@0 out-idx) (+ 1 (@1 out-idx))]))
+;----------------------------------------------------------------------------
+
 (define make-code-pad-object
   (lambda (static-data-pad)
     (let ((self { code:       []
                   debug-info: {} }))
       (define push-op
-        (lambda (op-desc)
-          (@!op-desc
-           ($debug-info: self)
-           ($debug-pos: static-data-pad))
-          (push! ($code: self) op-desc)))
+        (lambda (op-code o a b)
+          (let ((op-desc [op-code
+                           (if (list? o) (@0 o) o)
+                           (if (list? o) (@1 o) 0)
+                           (if (list? a) (@0 a) a)
+                           (if (list? a) (@1 a) 0)
+                           (if (list? b) (@0 b) b)
+                           (if (list? b) (@1 b) 0)]))
+            (@!op-desc
+              ($debug-info: self)
+              ($debug-pos: static-data-pad))
+            (push! ($code: self) op-desc))))
 
       ($define! self (append-code-pad code-pad)
         (let ((code ($code: self)))
@@ -35,79 +45,82 @@
           m))
 
       ($define! self (op-nop)
-        (push-op [NOP: 0 0]))
+        (push-op NOP: 0 0 0))
 
       ($define! self (op-push-env size)
-        (push-op [PUSH_ENV: 0 size]))
+        (push-op PUSH_ENV: 0 size 0))
 
       ($define! self (op-pop-env)
-        (push-op [POP_ENV: 0 0]))
+        (push-op POP_ENV: 0 0 0))
 
       ($define! self (op-dump-env-stack)
-        (push-op [DUMP_ENV_STACK: 0 0]))
+        (push-op DUMP_ENV_STACK: 0 0 0))
 
       ($define! self (op-set-return idx)
-        (push-op [SET_RETURN: 0 idx]))
+        (push-op SET_RETURN: idx 0 0))
 
       ($define! self (op-return idx)
-        (push-op [RETURN: 0 idx]))
+        (push-op RETURN: idx 0 0))
 
-      ($define! self (op-mov out-idx in-idx)
-        (push-op [MOV: out-idx in-idx]))
+      ($define! self (op-mov out-idx in-idx o)
+        (push-op MOV: out-idx in-idx (if (nil? o) 0 o)))
 
       ($define! self (op-mov-from out-idx env-idx in-idx)
-        (push-op [MOV_FROM: out-idx env-idx in-idx]))
+        (push-op MOV_FROM: out-idx env-idx in-idx))
 
       ($define! self (op-mov-to out-idx env-idx in-idx)
-        (push-op [MOV_TO: out-idx env-idx in-idx]))
+        (push-op MOV_TO: out-idx env-idx in-idx))
 
       ($define! self (op-load-prim out-idx prim-nr)
-        (push-op [LOAD_PRIM: out-idx prim-nr]))
+        (push-op LOAD_PRIM: out-idx prim-nr 0))
 
       ($define! self (op-load-nil out-idx)
-        (push-op [LOAD_NIL: out-idx 0]))
+        (push-op LOAD_NIL: out-idx 0 0))
 
       ($define! self (op-new-vec out-idx len)
-        (push-op [NEW_VEC: out-idx len]))
+        (push-op NEW_VEC: out-idx len 0))
 
       ($define! self (op-new-map out-idx)
-        (push-op [NEW_MAP: out-idx 0]))
+        (push-op NEW_MAP: out-idx 0 0))
 
       ($define! self (op-set-vec vec-idx idx src-idx)
-        (push-op [SET_VEC: vec-idx idx src-idx]))
+        (push-op SET_VEC: vec-idx idx src-idx))
 
       ($define! self (op-cset-vec vec-idx idx src-idx)
-        (push-op [CSET_VEC: vec-idx idx src-idx]))
+        (push-op CSET_VEC: vec-idx idx src-idx))
 
       ($define! self (op-call out-idx func-idx argvec-idx)
-        (push-op [CALL: out-idx func-idx argvec-idx]))
+        (push-op CALL: out-idx func-idx argvec-idx))
 
       ($define! self (op-new-closure out-idx in-idx)
-        (push-op [NEW_CLOSURE: out-idx in-idx]))
+        (push-op NEW_CLOSURE: out-idx in-idx 0))
 
       ($define! self (op-pack-va out-idx env-pos-idx)
-        (push-op [PACK_VA: out-idx env-pos-idx]))
+        (push-op PACK_VA: out-idx env-pos-idx 0))
 
       ($define! self (op-br jmp-offs)
-        (push-op [BR: jmp-offs 0]))
+        (push-op BR: jmp-offs 0 0))
 
       ($define! self (op-brif jmp-offs val-idx)
-        (push-op [BRIF: jmp-offs val-idx]))
+        (push-op BRIF: jmp-offs val-idx 0))
 
       ($define! self (op-brnif jmp-offs val-idx)
-        (push-op [BRNIF: jmp-offs val-idx]))
+        (push-op BRNIF: jmp-offs val-idx 0))
 
       ($define! self (op-ge out-idx a-idx b-idx)
-        (push-op [GE: out-idx a-idx b-idx]))
+        (push-op GE: out-idx a-idx b-idx))
+
+      ($define! self (op-add out-idx a-idx b-idx)
+        (push-op ADD: out-idx a-idx b-idx))
 
       ($define! self (op-inc val-idx incrementor-idx)
-        (push-op [INC: val-idx incrementor-idx]))
+        (push-op INC: val-idx incrementor-idx 0))
 
       ($define! self (op-load static out-idx)
         ; TODO: optimize static data loading by storing their
         ;       positions in a map
         (let ((idx (.add-static-data static-data-pad static)))
-          (push-op [LOAD_STATIC: out-idx idx]))))))
+          (push-op MOV: out-idx [idx -1] 0))))))
 ;----------------------------------------------------------------------------
 
 (define make-static-data-pad
@@ -233,9 +246,7 @@
                   (case (@0 (@1 var))
                     ((var:)
                      (let ((var-idx (@1 (@1 var))))
-                       (if (> (@0 var) 0)
-                         (.op-mov-from code-pad out-idx (@0 var) var-idx)
-                         (.op-mov      code-pad out-idx var-idx))))
+                       (.op-mov      code-pad out-idx [var-idx (@0 var)])))
                     ((prim:)
                      (.op-load-prim code-pad out-idx (@1 (@1 var))))
                     ((syntax:)
@@ -328,16 +339,17 @@
           (pop! free-tmp-pos-list)
           (let ((new-pos (@0 env-pos)))
             (@!0 env-pos (+ new-pos 1))
-            new-pos))))
+            [new-pos 0]))))
 
     ($define! self (new-pos)
       (let ((env-pos (last ($env-pos-stack: self)))
             (new-pos (@0 env-pos)))
         (@!0 env-pos (+ 1 new-pos))
-        new-pos))
+        [new-pos 0]))
 
     ($define! self (recycle-tmp-pos pos)
-      (push! (@1 (last ($env-pos-stack: self))) pos))
+      (push! (@1 (last ($env-pos-stack: self)))
+             (if (list? pos) (@0 pos) pos)))
 
     ($define! self (define-var sym var-type)
       (let ((cur-env (last ($env-stack: self))))
@@ -393,13 +405,13 @@
         (if dot-var
           (if (eqv? (type dot-var) 'exact)
             (.error self "After a '.' only one symbol can follow" parameters)
-            (.define-var self var [var: (set! dot-var (.new-pos self))]))
+            (.define-var self var [var: (@0 (set! dot-var (.new-pos self)))]))
           (begin
             (if (eqv? var '.)
               (set! dot-var #t)
-              (.define-var self var [var: (.new-pos self)])))))
+              (.define-var self var [var: (@0 (.new-pos self))])))))
       (when dot-var
-        (unless (eqv? (type dot-var) 'exact)
+        (unless (list? dot-var)
           (.error self "'.' must follow a symbol" parameters)))
       (let ((ret-val-pos     (.new-tmp-pos self))
             (lambda-code-pad (.make-code-pad self)))
@@ -451,6 +463,17 @@
       ;         (.compile self (@2 atom) code-pad bind-idx)
       ;         (.op-mov code-pad out-idx bind-idx))
 
+;      (set-env-syntax new-env '+
+;       (lambda (atom self code-pad out-idx)
+;         (let ((a-idx (.new-tmp-pos self))
+;               (b-idx (.new-tmp-pos self)))
+;           (.compile self (@1 atom) code-pad a-idx)
+;           (.compile self (@2 atom) code-pad b-idx)
+;           (.op-add code-pad out-idx a-idx b-idx)
+;           (.recycle-tmp-pos self a-idx)
+;           (.recycle-tmp-pos self b-idx))))
+;;           (.compile-block self (drop atom 1) code-pad out-idx)))
+
       (set-env-syntax new-env 'begin
        (lambda (atom self code-pad out-idx)
          (.compile-block self (drop atom 1) code-pad out-idx)))
@@ -478,16 +501,13 @@
              (set! env-size (+ env-size 1)))
            (.push-env    self)
            (.op-push-env code-pad env-size)
-           (let ((transmit-pos (.new-tmp-pos self)))
-             (do-each (bind-pair (@1 atom))
-               (let ((var-pos (.new-pos self)))
-                 (.define-var self (@0 bind-pair) [var: var-pos])
-                 (.compile    self (@1 bind-pair) code-pad var-pos)))
-             (.compile-block   self (drop atom 2) code-pad transmit-pos)
-             (.op-mov-to       code-pad out-idx 1 transmit-pos)
-             (.recycle-tmp-pos self transmit-pos)
-             (.op-pop-env      code-pad)
-             (.pop-env         self)))))
+           (do-each (bind-pair (@1 atom))
+             (let ((var-pos (.new-pos self)))
+               (.define-var self (@0 bind-pair) [var: (@0 var-pos)])
+               (.compile    self (@1 bind-pair) code-pad var-pos)))
+           (.compile-block   self (drop atom 2) code-pad (inc-env-offs out-idx))
+           (.op-pop-env      code-pad)
+           (.pop-env         self))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'set!
@@ -500,13 +520,8 @@
            (when (nil? var)
              (.error self "Undefined variable" atom))
            (.compile self (@2 atom) code-pad out-idx)
-           (if (eqv? (@0 (@1 var)) var:)
-             (if (> (@0 var) 0)
-               (.op-mov-to code-pad (@1 (@1 var)) (@0 var) out-idx)
-               (.op-mov    code-pad (@1 (@1 var)) out-idx)))
-           (let ((bind-idx (.new-pos self)))
-             (.define-var self (@1 atom) [var: bind-idx])
-             (.op-mov     code-pad bind-idx out-idx)))))
+           (when (eqv? (@0 (@1 var)) var:)
+             (.op-mov code-pad [(@1 (@1 var)) (@0 var)] out-idx [9 9])))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'define
@@ -518,7 +533,7 @@
              (unless (eqv? 3 (length atom))
                (.error self "'define' needs 2 arguments" atom))
              (let ((bind-idx (.new-pos self)))
-               (.define-var self (@1 atom) [var: bind-idx])
+               (.define-var self (@1 atom) [var: (@0 bind-idx)])
                (.compile    self (@2 atom) code-pad bind-idx)
                (.op-mov     code-pad out-idx bind-idx)))
            (if (list? (@1 atom))
@@ -531,7 +546,7 @@
                (let ((bind-idx      (.new-pos self))
                      (var-name      (@0 (@1 atom)))
                      (lambda-params (drop (@1 atom) 1)))
-                 (.define-var     self var-name [var: bind-idx])
+                 (.define-var     self var-name [var: (@0 bind-idx)])
                  (.compile-lambda self lambda-params (drop atom 2) code-pad bind-idx)
                  (.op-mov         code-pad out-idx bind-idx)))
              (.error self "Can only define symbols as variable" atom)))))
@@ -614,6 +629,7 @@
          (unless (symbol? (@0 (@1 atom)))
            (.error self "first part of the iteration definition of \
                          'for' needs to be a symbol" atom))
+         (.push-env   self)
          (let ((i-def         (@1 atom))
                (iter-name     (@0 i-def))
                (start-val     (@1 i-def))
@@ -625,7 +641,6 @@
                (cond-idx      (.new-pos self))
                (tmp-out-idx   (.new-pos self))
                (body-pad      (.make-code-pad self)))
-           (.push-env   self)
            (.op-push-env code-pad 5)
            ; prepare values:
            (.compile    self start-val code-pad iter-idx)
@@ -636,8 +651,8 @@
            (.define-var self (@0 (@1 atom)) [var: iter-idx])
            ; execute block and iteration step:
            (.compile-block self (drop atom 2) body-pad tmp-out-idx)
-           (.op-inc body-pad iter-idx ival-idx)
            (.op-ge  body-pad cond-idx iter-idx end-idx)
+           (.op-inc body-pad iter-idx ival-idx)
            (.append-code-pad code-pad body-pad)
            (.op-brnif        code-pad
                              (- 0 (+ 1 (.count-ops body-pad)))
@@ -708,7 +723,7 @@
 
     (.push-root-env compiler root-env)
     (let ((code-pad    (.make-code-pad compiler))
-          (ret-val-pos 0))
+          (ret-val-pos [0 0]))
       ; TODO: we need to calculate the actual sized pad we need in future!
       (do-each (top-level-atom data)
 ;        (displayln (str "Compile TLA: [" top-level-atom "]"))

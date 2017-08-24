@@ -23,12 +23,13 @@ class VMException : public std::exception
 //    X(PUSH_RNG_ENV,   8)
 //    X(PUSH_VEC_ENV,   9)
 
+//    X(LOAD_STATIC,    4) 
+
 #define OP_CODE_DEF(X) \
     X(NOP,            0) \
     X(MOV,            1) \
     X(MOV_FROM,       2) \
     X(MOV_TO,         3) \
-    X(LOAD_STATIC,    4) \
     X(LOAD_PRIM,      5) \
     X(LOAD_NIL,       6) \
     X(NEW_VEC,        7) \
@@ -70,17 +71,21 @@ OP_CODE_DEF(X)
 
 struct INST
 {
-    uint8_t  op;
-    int32_t  o;
+    int32_t o;
+    int32_t oe;
+    int32_t a;
+    int32_t b;
+    int32_t ae;
+    int32_t be;
     union {
-        struct {
-            uint16_t a;
-            uint16_t b;
-        } l;
-        struct {
-            uint32_t a;
-        } x;
-    } _;
+        double  d;
+        int64_t i;
+    } va;
+    union {
+        double  d;
+        int64_t i;
+    } vb;
+    uint32_t  op;
 
     void to_string(std::ostream &ss)
     {
@@ -88,15 +93,21 @@ struct INST
 #       define X(name, code)    case code: op_name = #name; break;
         switch (op) { OP_CODE_DEF(X) }
 #       undef X
-        ss << "#" << op_name << ": (" << o << ", [" << _.l.a << ":" << _.l.b << "](" << _.x.a << "))";
+        while (op_name.size() < 14)
+           op_name = " " + op_name;
+        ss << "#" << op_name << ": (" << o << "/" << oe << ", [" << a << "/" << ae << ":" << b << "/" << be << "](" << va.i << ";" << vb.i << "))";
     }
 
     INST() { clear(); }
     void clear()
     {
-        op    = 0;
-        o     = 0;
-        _.x.a = 0;
+        op = 0;
+        o  = 0;
+        oe = 0;
+        a  = 0;
+        b  = 0;
+        va.i = 0;
+        vb.i = 0;
     }
 };
 //---------------------------------------------------------------------------
@@ -205,13 +216,15 @@ class VM : public lilvm::ExternalGCRoot
         VM               *m_vm;
         lilvm::AtomVec   *m_root_stack;
         lilvm::AtomVec   *m_prim_table;
+        bool              m_trace;
 
     public:
         VM(Runtime *rt)
             : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt),
               m_pc(nullptr),
               m_prog(nullptr),
-              m_vm(this)
+              m_vm(this),
+              m_trace(false)
         {
             m_rt->m_gc.add_external_root(this);
             m_root_stack = rt->m_gc.allocate_vector(10);
@@ -221,6 +234,8 @@ class VM : public lilvm::ExternalGCRoot
 
             init_prims();
         }
+
+        void set_trace(bool t) { m_trace = t; }
 
         void error(const std::string &msg)
         {

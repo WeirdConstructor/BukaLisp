@@ -443,6 +443,10 @@ class GC
         {
             if (!vec) return;
 
+            // Vector was put back on free list:
+            if (vec->m_gc_color == GC_COLOR_FREE)
+                return;
+
             if (vec->m_gc_color == m_current_color)
                 return;
 
@@ -539,37 +543,7 @@ class GC
                     m_vectors,
                     m_num_alive_vectors,
                     m_current_color,
-                    [this](AtomVec *cur)
-                    {
-//                        std::cout << "SWEEP VEC " << cur << std::endl;
-
-                        if (cur->m_alloc >= GC_BIG_VEC_LEN)
-                        {
-                            delete cur;
-                        }
-                        else if (cur->m_alloc >= GC_MEDIUM_VEC_LEN)
-                        {
-                            // FIXME: We need to limit the number of medium sized
-                            //        vectors. or else small vectors will just
-                            //        end up here. the problem is, that then
-                            //        new small vectors will be allocated.
-                            cur->m_gc_next   = m_medium_vectors;
-                            cur->m_gc_color  = GC_COLOR_FREE;
-                            cur->m_len       = 0;
-                            m_medium_vectors = cur;
-                        }
-                        else if (cur->m_alloc >= GC_SMALL_VEC_LEN)
-                        {
-                            cur->m_gc_next  = m_small_vectors;
-                            cur->m_gc_color = GC_COLOR_FREE;
-                            cur->m_len      = 0;
-                            m_small_vectors = cur;
-                        }
-                        else
-                        {
-                            delete cur;
-                        }
-                    });
+                    [this](AtomVec *cur) { give_back_vector(cur); });
         }
 
         Sym *allocate_sym()
@@ -618,6 +592,35 @@ class GC
         }
 
         void add_permanent(Sym *sym) { m_perm_syms.push_back(sym); }
+
+        void give_back_vector(AtomVec *cur, bool dec = false)
+        {
+//          std::cout << "SWEEP VEC " << cur << std::endl;
+            if (cur->m_alloc >= GC_BIG_VEC_LEN)
+            {
+                delete cur;
+            }
+            else if (cur->m_alloc > GC_SMALL_VEC_LEN)
+            {
+                // FIXME: We need to limit the number of medium sized
+                //        vectors. or else small vectors will just
+                //        end up here. the problem is, that then
+                //        new small vectors will be allocated.
+                cur->m_gc_next   = m_medium_vectors;
+                cur->m_gc_color  = GC_COLOR_FREE;
+                cur->m_len       = 0;
+                m_medium_vectors = cur;
+            }
+            else // (cur->m_alloc >= GC_SMALL_VEC_LEN)
+            {
+                cur->m_gc_next  = m_small_vectors;
+                cur->m_gc_color = GC_COLOR_FREE;
+                cur->m_len      = 0;
+                m_small_vectors = cur;
+            }
+            if (dec)
+                m_num_new_vectors--;
+        }
 
         void reg_userdata(UserData *ud)
         {

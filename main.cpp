@@ -932,6 +932,7 @@ int main(int argc, char *argv[])
         bool i_trace    = false;
         bool i_force_gc = false;
         bool i_ppt      = false;
+        bool i_trace_vm = false;
 
         for (int i = 1; i < argc; i++)
         {
@@ -944,6 +945,8 @@ int main(int argc, char *argv[])
                 i_force_gc = true;
             else if (arg == "-t")
                 i_trace = true;
+            else if (arg == "-T")
+                i_trace_vm = true;
             else if (arg == "-P")
                 i_ppt = true;
             else if (arg[0] == '-')
@@ -1002,6 +1005,7 @@ int main(int argc, char *argv[])
                 bukalisp::Runtime rt;
                 bukalisp::VM vm(&rt);
                 bukalisp::Interpreter i(&rt, &vm);
+                vm.set_trace(i_trace_vm);
                 i.set_trace(i_trace);
                 i.set_force_always_gc(i_force_gc);
                 Atom r = i.eval(input_file_path, slurp_str(input_file_path));
@@ -1018,6 +1022,7 @@ int main(int argc, char *argv[])
             bukalisp::Runtime rt;
             bukalisp::VM vm(&rt);
             bukalisp::Interpreter i(&rt, &vm);
+            vm.set_trace(i_trace_vm);
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
 
@@ -1040,6 +1045,9 @@ int main(int argc, char *argv[])
             bukalisp::Runtime rt;
             bukalisp::VM vm(&rt);
             bukalisp::Interpreter i(&rt, &vm);
+            vm.set_trace(i_trace_vm);
+            i.set_trace(i_trace);
+            i.set_force_always_gc(i_force_gc);
 
             std::string line;
             while (std::getline(std::cin, line))
