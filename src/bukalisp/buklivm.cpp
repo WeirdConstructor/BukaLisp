@@ -1,5 +1,6 @@
 #include "buklivm.h"
 #include "atom_printer.h"
+#include "util.h"
 #include <chrono>
 
 using namespace lilvm;

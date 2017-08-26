@@ -408,6 +408,18 @@ START_PRIM()
     out = Atom(T_STR, m_rt->m_gc.new_symbol(A0.to_write_str()));
 END_PRIM(write-str);
 
+START_PRIM()
+    REQ_EQ_ARGC(bkl-slurp-file, 1);
+    if (   A0.m_type != T_STR
+        && A0.m_type != T_SYM
+        && A0.m_type != T_KW)
+    {
+        error("'bkl-slurp-file' requires a string, symbol "
+              "or keyword as first argument.", A0);
+    }
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(slurp_str(A0.m_d.sym->m_str)));
+END_PRIM(bkl-slurp-file)
+
 #if IN_INTERPRETER
 
 START_PRIM()

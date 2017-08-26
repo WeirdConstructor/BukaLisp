@@ -1,5 +1,5 @@
 (define primitive-table
-'{<= 6 symbol? 11 + 0 * 1 / 2 - 3 < 4 first 37 exact? 14 list 8 append 40 keyword? 12 > 5 >= 7 eqv? 9 map? 19 not 10 nil? 13 inexact? 15 string? 16 boolean? 17 write-str 41 @! 22 list? 18 pop! 26 procedure? 20 @ 21 type 23 display 30 length 24 push! 25 make-vm-prog 27 str-join 35 run-vm-prog 28 error 29 newline 31 eval 42 displayln 32 atom-id 33 str 34 last 36 take 38 drop 39 invoke-compiler 43}
+'{<= 6 symbol? 11 + 0 * 1 / 2 - 3 < 4 first 37 exact? 14 list 8 append 40 keyword? 12 > 5 >= 7 eqv? 9 map? 19 not 10 nil? 13 inexact? 15 string? 16 bkl-slurp-file 42 boolean? 17 write-str 41 @! 22 list? 18 pop! 26 procedure? 20 @ 21 type 23 display 30 length 24 push! 25 make-vm-prog 27 str-join 35 run-vm-prog 28 error 29 newline 31 eval 43 displayln 32 atom-id 33 str 34 last 36 take 38 drop 39 invoke-compiler 44}
 )
 ;----------------------------------------------------------------------------
 

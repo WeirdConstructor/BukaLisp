@@ -209,6 +209,8 @@
 (T '(append [1 2 3] 1 a: { x: 12 } [5 5 5]) '(1 2 3 1 a: x: 12 5 5 5))
 (T '(append [1 2 3]) '(1 2 3))
 
+(T '(bkl-slurp-file "foo.txt") "xxx\n")
+
 ; Test let TODO: Moar!
 (T '(let ((x 10)) x) 10)
 
@@ -684,6 +686,7 @@
           (aid3 (atom-id (type nil))))
       [(eqv? aid aid2) (eqv? aid aid3)])
    '(#t #t))
+
 
 (displayln "ALL OK")
 ::
