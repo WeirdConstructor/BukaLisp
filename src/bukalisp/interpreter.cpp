@@ -53,6 +53,7 @@ void Interpreter::init()
     DEF_SYNTAX($!);
     DEF_SYNTAX($);
     DEF_SYNTAX(displayln-time);
+    DEF_SYNTAX(include);
 
     AtomVec *av_prim_tbl = m_rt->m_gc.allocate_vector(0);
     m_cache->set(1, Atom(T_VEC, av_prim_tbl));
@@ -722,6 +723,27 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
 }
 //---------------------------------------------------------------------------
 
+Atom Interpreter::eval_include(Atom e, AtomVec *av)
+{
+    if (av->m_len == 1)
+        error("'include' needs exactly one argument", e);
+
+    if (   av->m_data[1].m_type != T_STR
+        && av->m_data[1].m_type != T_KW
+        && av->m_data[1].m_type != T_SYM)
+    {
+        error("'include' first argument needs to be either a string, "
+              "symbol or keyword.", e);
+    }
+
+    std::string libpath  = ".\\bukalisplib\\";
+    std::string filepath = libpath + av->m_data[1].m_d.sym->m_str + ".bkl";
+
+    std::string code = slurp_str(filepath);
+    return eval(filepath, code);
+}
+//---------------------------------------------------------------------------
+
 void Interpreter::set_debug_pos(Atom &a)
 {
     if (!m_debug_pos_map)
@@ -814,6 +836,7 @@ Atom Interpreter::eval(Atom e)
                 else if (s == "$")        ret = eval_field_get(e, av);
                 else if (s == "$!")       ret = eval_field_set(e, av);
                 else if (s == "$define!") ret = eval_meth_def(e, av);
+                else if (s == "include")  ret = eval_include(e, av);
                 else if (s == "displayln-time")
                 {
                     if (av->m_len != 2)
@@ -908,7 +931,7 @@ lilvm::Atom Interpreter::get_compiler_func()
             bukalisp_lib_path = ".\\bukalisplib";
 
         std::string compiler_path =
-            std::string(bukalisp_lib_path) + "\\" + "compiler.lal";
+            std::string(bukalisp_lib_path) + "\\" + "compiler.bkl";
 
         try
         {

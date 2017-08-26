@@ -179,6 +179,7 @@ class Interpreter : public lilvm::ExternalGCRoot
         lilvm::Atom eval_field_set(lilvm::Atom e, lilvm::AtomVec *av);
         lilvm::Atom eval_field_get(lilvm::Atom e, lilvm::AtomVec *av);
         lilvm::Atom eval_case(lilvm::Atom e, lilvm::AtomVec *av);
+        lilvm::Atom eval_include(lilvm::Atom e, lilvm::AtomVec *av);
 };
 //---------------------------------------------------------------------------
 
