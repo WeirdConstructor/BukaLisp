@@ -6,42 +6,9 @@
 (define inc-env-offs (lambda (out-idx) [(@0 out-idx) (+ 1 (@1 out-idx))]))
 ;----------------------------------------------------------------------------
 
+(include prog-frame)
 (include code-pad)
 
-;----------------------------------------------------------------------------
-
-(define make-static-data-pad
- (lambda (debug-info)
-   (let ((self { pad: []
-                 stack: []
-                 debug-pos: nil
-                 debug-info: debug-info }))
-
-     ($define! self (push-static-data-frame)
-       (push! ($stack: self) ($pad: self))
-       ($!pad: self []))
-
-     ($define! self (pop-static-data-frame)
-       ($!pad: self (pop! ($stack: self))))
-
-     ($define! self (set-debug-pos atom)
-       (let ((info (@(atom-id atom) debug-info)))
-         (unless (nil? info)
-           ($!debug-pos: self info))))
-
-     ($define! self (add-static-data data)
-       (push! ($pad: self) data)
-       (- (length ($pad: self)) 1))
-
-     ($define! self (make-code-pad)
-        (make-code-pad-object self))
-
-     ($define! self (to-vm-prog code-pad)
-        (make-vm-prog [($pad:  self)
-                       (.to-vm-prog-code       code-pad)
-                       (.to-vm-prog-debug-info code-pad)]))
-
-     self)))
 ;----------------------------------------------------------------------------
 
 (define dispatch
@@ -203,7 +170,7 @@
     ($!macro-compiler: self [])
 
     ($define! self (clone-compiler)
-      (let ((cpad (make-static-data-pad ($debug-info: self))))
+      (let ((cpad (make-prog-frame ($debug-info: self))))
         (hook-compiler-methods cpad)
         (.copy-env-from cpad self)
         cpad))
@@ -283,7 +250,7 @@
         (.recycle-tmp-pos self func-idx)))
 
     ($define! self (compile-lambda parameters body code-pad out-idx)
-      (.push-static-data-frame self)
+      (.push-prog-frame self)
       (.push-env self)
       (define dot-var  #f)
       (do-each (var parameters)
@@ -308,7 +275,7 @@
         (.op-return     lambda-code-pad ret-val-pos)
         (let ((new-prog (.to-vm-prog self lambda-code-pad)))
           (.pop-env               self)
-          (.pop-static-data-frame self)
+          (.pop-prog-frame        self)
           (.op-load               code-pad new-prog out-idx)
           (.op-new-closure        code-pad out-idx out-idx))))
 
@@ -571,7 +538,7 @@
          ;                 VM-programs and the whole thingie is tied to that.
          ;
          ; => Compiler macro using a one-time-clone of this compiler to generate a completely separate
-         ;    PROG with it's own static data table. store the PROG in the env under macro:
+         ;    PROG with it's own prog frame. store the PROG in the env under macro:
          ;      - as we copy the macros too, we are able to expand macros inside
          ;        these compiled macros.
          ;      - Is lambda definition possible? => yes, they are accumulated inside the
@@ -595,7 +562,7 @@
 ;----------------------------------------------------------------------------
 
 (lambda (name data debug-info only-compile root-env)
-  (let ((compiler (make-static-data-pad debug-info)))
+  (let ((compiler (make-prog-frame debug-info)))
     (hook-compiler-methods compiler)
     ; TODO: Transfer (@0 root-env) as init-env to compiler!
 
@@ -627,7 +594,7 @@
 ;          (displayln-time (run-vm-prog prog (@1 root-env))))))))
 ;----------------------------------------------------------------------------
 
-;  (let ((x (make-static-data-pad)))
+;  (let ((x (make-prog-frame)))
 ;    (displayln X: (.add-static-data x "xxx"))
 ;    (displayln X: (.add-static-data x "xxx"))
 ;    (displayln X: (.add-static-data x "xxx")))

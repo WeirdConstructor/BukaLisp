@@ -1,0 +1,32 @@
+(define make-prog-frame
+ (lambda (debug-info)
+   (let ((self { pad: []
+                 stack: []
+                 debug-pos: nil
+                 debug-info: debug-info }))
+
+     ($define! self (push-prog-frame)
+       (push! ($stack: self) ($pad: self))
+       ($!pad: self []))
+
+     ($define! self (pop-prog-frame)
+       ($!pad: self (pop! ($stack: self))))
+
+     ($define! self (set-debug-pos atom)
+       (let ((info (@(atom-id atom) debug-info)))
+         (unless (nil? info)
+           ($!debug-pos: self info))))
+
+     ($define! self (add-static-data data)
+       (push! ($pad: self) data)
+       (- (length ($pad: self)) 1))
+
+     ($define! self (make-code-pad)
+        (make-code-pad-object self))
+
+     ($define! self (to-vm-prog code-pad)
+        (make-vm-prog [($pad:  self)
+                       (.to-vm-prog-code       code-pad)
+                       (.to-vm-prog-debug-info code-pad)]))
+
+     self)))
