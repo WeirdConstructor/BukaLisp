@@ -17,9 +17,9 @@
          (unless (nil? info)
            ($!debug-pos: self info))))
 
-     ($define! self (add-static-data data)
+     ($define! self (store-static-data data)
        (push! ($pad: self) data)
-       (- (length ($pad: self)) 1))
+       [(- (length ($pad: self)) 1) -1])
 
      ($define! self (make-code-pad)
         (make-code-pad-object self))

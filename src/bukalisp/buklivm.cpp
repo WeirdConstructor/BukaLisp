@@ -240,11 +240,17 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
         else \
             (out_ptr) = &(v.m_data[P_##reg]); \
     } \
-    else \
+    else if (PE_##reg == -1) \
     { \
         if (P_##reg >= (int32_t) data_len) \
             error("static data address out of range", Atom(T_INT, P_##reg)); \
         (out_ptr) = &(data[P_##reg]); \
+    } \
+    else if (PE_##reg == -2) \
+    { \
+        if (P_##reg >= (int32_t) m_prim_table->m_len) \
+            error("primitive address out of range", Atom(T_INT, P_##reg)); \
+        (out_ptr) = &(m_prim_table->m_data[P_##reg]); \
     } \
 } while (0)
 
@@ -353,7 +359,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 {
                     E_GET(tmp, B);
                     vec.m_d.vec->set(P_A, *tmp);
-                    tmp->clear();
                 }
                 else if (vec.m_type == T_MAP)
                 {
@@ -361,8 +366,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     E_GET(key, A);
                     E_GET(tmp, B);
                     vec.m_d.map->set(*key, *tmp);
-                    key->clear();
-                    tmp->clear();
                 }
                 else
                     error("Can CSET_VEC on vector and map", vec);
@@ -370,17 +373,17 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
-            case OP_LOAD_PRIM:
-            {
-                size_t p_nr = P_A;
-                Atom prim =
-                    p_nr < m_prim_table->m_len
-                    ? m_prim_table->m_data[p_nr]
-                    : Atom();
-                E_SET(O, prim);
-                break;
-            }
-
+//            case OP_LOAD_PRIM:
+//            {
+//                size_t p_nr = P_A;
+//                Atom prim =
+//                    p_nr < m_prim_table->m_len
+//                    ? m_prim_table->m_data[p_nr]
+//                    : Atom();
+//                E_SET(O, prim);
+//                break;
+//            }
+//
             case OP_LOAD_NIL:
             {
                 E_SET(O, Atom());
@@ -490,8 +493,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                     if (m_trace) cout << "CALL=> " << ret.to_write_str() << endl;
 
 //                    m_rt->m_gc.give_back_vector(argv.m_d.vec, true);
-                    func.clear();
-                    argv.clear();
                 }
                 else if (func.m_type == T_CLOS)
                 {
@@ -528,9 +529,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
                     env_stack = func.m_d.vec->m_data[1].m_d.vec;
                     env_stack->push(Atom(T_VEC, cur_env = argv.m_d.vec));
-
-                    func.clear();
-                    argv.clear();
                 }
                 else
                     error("CALL does not support that function type yet", func);
