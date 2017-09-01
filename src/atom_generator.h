@@ -1,8 +1,11 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
 #pragma once
 
 #include <memory>
 #include <vector>
-#include "bukalisp/parser.h"
+#include "parser.h"
 #include "atom.h"
 #include "atom_printer.h"
 
@@ -24,16 +27,16 @@ class BukLiVMException : public std::exception
 class AtomGenerator : public bukalisp::SEX_Builder
 {
     private:
-        lilvm::GC                       *m_gc;
-        lilvm::AtomMap                  *m_debug_map;
+        GC                       *m_gc;
+        AtomMap                  *m_debug_map;
 
-        lilvm::Atom                      m_root;
+        Atom                      m_root;
 
-        typedef std::function<void(lilvm::Atom &a)>  AddFunc;
-        std::vector<std::pair<lilvm::Atom, AddFunc>> m_add_stack;
+        typedef std::function<void(Atom &a)>  AddFunc;
+        std::vector<std::pair<Atom, AddFunc>> m_add_stack;
 
     public:
-        AtomGenerator(lilvm::GC *gc)
+        AtomGenerator(GC *gc)
             : m_gc(gc)
         {
         }
@@ -42,14 +45,14 @@ class AtomGenerator : public bukalisp::SEX_Builder
         void start()
         {
             m_add_stack.push_back(
-                std::pair<lilvm::Atom, AddFunc>(
-                    m_root, [this](lilvm::Atom &a) { m_root = a; }));
+                std::pair<Atom, AddFunc>(
+                    m_root, [this](Atom &a) { m_root = a; }));
         }
 
-        lilvm::Atom &root() { return m_root; }
+        Atom &root() { return m_root; }
 
         void clear_debug_info() { m_debug_map = nullptr; }
-        lilvm::AtomMap *debug_info() { return m_debug_map; }
+        AtomMap *debug_info() { return m_debug_map; }
 
         void add_debug_info(int64_t id, const std::string &input_name, size_t line)
         {
@@ -57,21 +60,21 @@ class AtomGenerator : public bukalisp::SEX_Builder
                 m_debug_map = m_gc->allocate_map();
             std::string info = input_name + ":" + std::to_string(line);
             m_debug_map->set(
-                lilvm::Atom(lilvm::T_INT, id),
-                lilvm::Atom(lilvm::T_STR, m_gc->new_symbol(info)));
+                Atom(T_INT, id),
+                Atom(T_STR, m_gc->new_symbol(info)));
         }
 
         virtual void start_list()
         {
-            lilvm::AtomVec *new_vec = m_gc->allocate_vector(0);
-            lilvm::Atom a(lilvm::T_VEC);
+            AtomVec *new_vec = m_gc->allocate_vector(0);
+            Atom a(T_VEC);
             a.m_d.vec = new_vec;
             add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
 
             m_add_stack.push_back(
-                std::pair<lilvm::Atom, AddFunc>(
+                std::pair<Atom, AddFunc>(
                     a,
-                    [new_vec](lilvm::Atom &a) { new_vec->push(a); }));
+                    [new_vec](Atom &a) { new_vec->push(a); }));
         }
 
         virtual void end_list()
@@ -83,18 +86,18 @@ class AtomGenerator : public bukalisp::SEX_Builder
 
         virtual void start_map()
         {
-            lilvm::AtomMap *new_map = m_gc->allocate_map();
-            lilvm::Atom a(lilvm::T_MAP);
+            AtomMap *new_map = m_gc->allocate_map();
+            Atom a(T_MAP);
             a.m_d.map = new_map;
             add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
 
-            std::shared_ptr<std::pair<bool, lilvm::Atom>> key_data
-                = std::make_shared<std::pair<bool, lilvm::Atom>>(true, lilvm::Atom());
+            std::shared_ptr<std::pair<bool, Atom>> key_data
+                = std::make_shared<std::pair<bool, Atom>>(true, Atom());
 
             m_add_stack.push_back(
-                std::pair<lilvm::Atom, AddFunc>(
+                std::pair<Atom, AddFunc>(
                     a,
-                    [=](lilvm::Atom &a)
+                    [=](Atom &a)
                     {
                         if (key_data->first)
                         {
@@ -120,55 +123,55 @@ class AtomGenerator : public bukalisp::SEX_Builder
             add(add_pair.first);
         }
 
-        void add(lilvm::Atom &a)
+        void add(Atom &a)
         {
             m_add_stack.back().second(a);
         }
 
         virtual void atom_string(const std::string &str)
         {
-            lilvm::Atom a(lilvm::T_STR);
+            Atom a(T_STR);
             a.m_d.sym = m_gc->new_symbol(str);
             add(a);
         }
 
         virtual void atom_symbol(const std::string &symstr)
         {
-            lilvm::Atom a(lilvm::T_SYM);
+            Atom a(T_SYM);
             a.m_d.sym = m_gc->new_symbol(symstr);
             add(a);
         }
 
         virtual void atom_keyword(const std::string &symstr)
         {
-            lilvm::Atom a(lilvm::T_KW);
+            Atom a(T_KW);
             a.m_d.sym = m_gc->new_symbol(symstr);
             add(a);
         }
 
         virtual void atom_int(int64_t i)
         {
-            lilvm::Atom a(lilvm::T_INT);
+            Atom a(T_INT);
             a.m_d.i = i;
             add(a);
         }
 
         virtual void atom_dbl(double d)
         {
-            lilvm::Atom a(lilvm::T_DBL);
+            Atom a(T_DBL);
             a.m_d.d = d;
             add(a);
         }
 
         virtual void atom_nil()
         {
-            lilvm::Atom a(lilvm::T_NIL);
+            Atom a(T_NIL);
             add(a);
         }
 
         virtual void atom_bool(bool b)
         {
-            lilvm::Atom a(lilvm::T_BOOL);
+            Atom a(T_BOOL);
             a.m_d.b = b;
             add(a);
         }
@@ -176,3 +179,26 @@ class AtomGenerator : public bukalisp::SEX_Builder
 //---------------------------------------------------------------------------
 
 }
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

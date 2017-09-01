@@ -3,40 +3,16 @@
 
 #pragma once
 
-#include <iostream>
-#include <string>
-
-namespace bukalisp
-{
-//---------------------------------------------------------------------------
-class GC;
-
-class UserData
-{
-    public:
-        uint8_t   m_gc_color;
-        UserData *m_gc_next;
-
-        UserData()
-            : m_gc_color(), m_gc_next(nullptr)
-        {
-//            std::cout << "NEW USERDATA" << this << std::endl;
-        }
-
-        virtual std::string type() { return "unknown"; }
-
-        virtual std::string as_string()
-        {
-            return std::string("#<userdata:unknown>");
-        }
-        virtual void mark(GC *gc, uint8_t clr) { m_gc_color = clr; }
-
-        virtual ~UserData()
-        {
-        }
-};
-//---------------------------------------------------------------------------
-
+inline std::string str_replace(std::string input, const std::string& search,
+                          const std::string& replace) {
+    size_t pos = 0;
+    while((pos = input.find(search, pos))
+          != std::string::npos)
+    {
+         input.replace(pos, search.length(), replace);
+         pos += replace.length();
+    }
+    return input;
 }
 
 /******************************************************************************

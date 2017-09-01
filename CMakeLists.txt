@@ -1,27 +1,26 @@
 cmake_minimum_required(VERSION 2.6)
-project(LALRT)
+project(BukaLISP)
 cmake_policy(SET CMP0020 NEW)
 cmake_policy(SET CMP0008 OLD)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-add_library(lilvm_lib STATIC
+add_library(bukalisp_lib STATIC
     external/endian.cpp
     external/JSON.cpp
     src/atom_printer.cpp
     src/atom.cpp
-    src/bukalisp/interpreter.cpp
-    src/bukalisp/buklivm.cpp
-    src/bukalisp/util.cpp
-#    src/lilvm.cpp
+    src/interpreter.cpp
+    src/buklivm.cpp
+    src/util.cpp
 )
 
-add_executable(lilvm main.cpp)
-TARGET_LINK_LIBRARIES(lilvm_lib)
-target_link_libraries(lilvm lilvm_lib)
+add_executable(bklisp main.cpp)
+TARGET_LINK_LIBRARIES(bukalisp_lib)
+target_link_libraries(bklisp bukalisp_lib)
 include_directories(src/ external/)
 
-set_target_properties(lilvm PROPERTIES
+set_target_properties(bklisp PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG ${PROJECT_SOURCE_DIR}
     RUNTIME_OUTPUT_DIRECTORY_RELEASE ${PROJECT_SOURCE_DIR}
 )

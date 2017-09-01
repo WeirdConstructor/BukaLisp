@@ -3,38 +3,59 @@
 
 #pragma once
 
-#include <iostream>
-#include <string>
+#include "atom.h"
+#include "atom_generator.h"
+#include "parser.h"
 
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
-class GC;
 
-class UserData
+struct Runtime
 {
-    public:
-        uint8_t   m_gc_color;
-        UserData *m_gc_next;
+    GC             m_gc;
+    AtomGenerator  m_ag;
+    Tokenizer      m_tok;
+    Parser         m_par;
 
-        UserData()
-            : m_gc_color(), m_gc_next(nullptr)
+    Runtime()
+        : m_ag(&m_gc),
+          m_par(m_tok, &m_ag)
+    {
+    }
+
+    Atom read(const std::string &input_name, const std::string &input, AtomMap *&debug_map_output)
+    {
+        m_ag.clear_debug_info();
+        m_par.reset();
+        m_tok.reset();
+        m_tok.tokenize(input_name, input);
+        // m_tok.dump_tokens();
+        AtomVec *elems = m_gc.allocate_vector(0);
+        while (!m_par.is_eof())
         {
-//            std::cout << "NEW USERDATA" << this << std::endl;
+            m_ag.start();
+            if (!m_par.parse())
+            {
+                // TODO: Throw an exception!
+                std::cerr << "ERROR while parsing " << input_name << std::endl;
+                return Atom();
+            }
+            if (!m_par.is_eof())
+                elems->push(m_ag.root());
         }
+        debug_map_output = m_ag.debug_info();
+        m_ag.clear_debug_info();
+        return Atom(T_VEC, elems);
+    }
 
-        virtual std::string type() { return "unknown"; }
+    size_t pot_alive_vecs() { return m_gc.count_potentially_alive_vectors(); }
+    size_t pot_alive_maps() { return m_gc.count_potentially_alive_maps(); }
+    size_t pot_alive_syms() { return m_gc.count_potentially_alive_syms(); }
 
-        virtual std::string as_string()
-        {
-            return std::string("#<userdata:unknown>");
-        }
-        virtual void mark(GC *gc, uint8_t clr) { m_gc_color = clr; }
-
-        virtual ~UserData()
-        {
-        }
+    void collect() { m_gc.collect(); }
 };
+
 //---------------------------------------------------------------------------
 
 }

@@ -1,9 +1,11 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
 #include "buklivm.h"
 #include "atom_printer.h"
 #include "util.h"
 #include <chrono>
 
-using namespace lilvm;
 using namespace std;
 
 namespace bukalisp
@@ -72,7 +74,7 @@ void parse_op_desc(INST &instr, Atom &desc)
 }
 //---------------------------------------------------------------------------
 
-lilvm::Atom make_prog(lilvm::Atom prog_info)
+Atom make_prog(Atom prog_info)
 {
     if (prog_info.m_type != T_VEC)
         return Atom();
@@ -131,7 +133,7 @@ void VM::init_prims()
 }
 //---------------------------------------------------------------------------
 
-lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
+Atom VM::eval(Atom at_ud, AtomVec *args)
 {
     using namespace std::chrono;
 
@@ -153,16 +155,10 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
     Atom *data      = m_prog->data_array();
     size_t data_len = m_prog->data_array_len();
 
-    // TODO: To be recusively usabe, we need to save:
-    //       - cont_stack
-    //       - env_stack
-    //       - m_pc
-    //       - m_prog
-
     AtomVec *env_stack = m_rt->m_gc.allocate_vector(10);
     AtomVecPush avpvenvst(m_root_stack, Atom(T_VEC, env_stack));
 
-    AtomVec *cont_stack = m_rt->m_gc.allocate_vector(10);
+    AtomVec *cont_stack = m_rt->m_gc.allocate_vector(0);
     AtomVecPush avpvcontst(m_root_stack, Atom(T_VEC, cont_stack));
 
     AtomVec *cur_env = args;
@@ -183,20 +179,19 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 #define PE_B ((PC.be))
 #define PE_O ((PC.oe))
 
-
 #define E_SET_D_PTR(env_idx, idx, val_ptr) do { \
     if ((env_idx) == 0) \
     { \
-        if ((idx) >= cur_env->m_len) \
+        if (((size_t) idx) >= cur_env->m_len) \
             cur_env->check_size((idx)); \
         val_ptr = &(cur_env->m_data[(idx)]); \
     } \
     else if ((env_idx) > 0) \
     { \
-        if ((env_idx) >= env_stack->m_len) \
+        if (((size_t) env_idx) >= env_stack->m_len) \
             error("out of env stack range (" #env_idx ")", Atom(T_INT, (env_idx))); \
         AtomVec &v = *(env_stack->m_data[env_stack->m_len - ((env_idx) + 1)].m_d.vec); \
-        if ((idx) >= v.m_len) \
+        if (((size_t) idx) >= v.m_len) \
             v.check_size((idx)); \
         val_ptr = &(v.m_data[(idx)]); \
     } \
@@ -278,7 +273,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
             cout << "}" << endl;
         }
 
-
         switch (m_pc->op)
         {
             case OP_DUMP_ENV_STACK:
@@ -300,41 +294,6 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 E_SET(O, *tmp);
                 break;
             }
-
-//            case OP_MOV_FROM:
-//            {
-//                E_
-//                size_t env_idx = P_A;
-//                if (env_idx >= env_stack->m_len)
-//                {
-//                    cout << "VM-ERROR: MOVX src env-idx out of range"
-//                         << env_idx << endl;
-//                    return Atom();
-//                }
-//                AtomVec &src_env =
-//                    *(env_stack->m_data[env_stack->m_len - (env_idx + 1)].m_d.vec);
-//
-//                size_t idx = P_B;
-//                SET_O(cur_env, idx < src_env.m_len ? src_env.m_data[idx] : Atom());
-//                break;
-//            }
-//
-//            case OP_MOV_TO:
-//            {
-//                size_t env_idx = P_A;
-//                if (env_idx >= env_stack->m_len)
-//                {
-//                    cout << "VM-ERROR: MOVY dst env-idx out of range"
-//                         << env_idx << endl;
-//                    return Atom();
-//                }
-//                AtomVec *dst_env =
-//                    env_stack->m_data[env_stack->m_len - (env_idx + 1)].m_d.vec;
-//
-//                size_t idx = P_B;
-//                SET_O(dst_env, idx < cur_env->m_len ? cur_env->m_data[idx] : Atom());
-//                break;
-//            }
 
             case OP_NEW_VEC:
             {
@@ -373,52 +332,12 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
-//            case OP_LOAD_PRIM:
-//            {
-//                size_t p_nr = P_A;
-//                Atom prim =
-//                    p_nr < m_prim_table->m_len
-//                    ? m_prim_table->m_data[p_nr]
-//                    : Atom();
-//                E_SET(O, prim);
-//                break;
-//            }
-//
             case OP_LOAD_NIL:
             {
                 E_SET(O, Atom());
                 break;
             }
 
-//            case OP_PUSH_VEC_ENV:
-//            {
-//                size_t idx = P_A;
-//                if (idx >= cur_env->m_len)
-//                    error("Bad vector index for PUSH_VEC_ENV",
-//                          Atom(T_INT, idx));
-//                Atom vec = cur_env->m_data[idx];
-//                if (vec.m_type != T_VEC)
-//                    error("Can't push non vector as env in PUSH_VEC_ENV", vec);
-//                env_stack->push(vec);
-//                break;
-//            }
-//
-//            case OP_PUSH_RNG_ENV:
-//            {
-//                size_t from = P_A;
-//                size_t to   = P_B;
-//                if (from >= cur_env->m_len)
-//                    error("Bad env from idx", Atom(T_INT, from));
-//                if (to >= cur_env->m_len)
-//                    error("Bad env to idx", Atom(T_INT, to));
-//
-//                AtomVec *av = m_rt->m_gc.allocate_vector(to - from);
-//                for (size_t i = from; i < to; i++)
-//                    av->m_data[i - from] = cur_env->m_data[i];
-//                env_stack->push(Atom(T_VEC, av));
-//                break;
-//            }
-//
             case OP_PUSH_ENV:
             {
                 alloc = true;
@@ -486,11 +405,11 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
                 if (func.m_type == T_PRIM)
                 {
-                    Atom ret;
-                    (*func.m_d.func)(*(argv.m_d.vec), ret);
+                    Atom *ot;
+                    E_SET_D_PTR(PE_O, P_O, ot);
+                    (*func.m_d.func)(*(argv.m_d.vec), *ot);
 //                    cout << "argv: " << argv.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
-                    E_SET(O, ret);
-                    if (m_trace) cout << "CALL=> " << ret.to_write_str() << endl;
+                    if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
 
 //                    m_rt->m_gc.give_back_vector(argv.m_d.vec, true);
                 }
@@ -558,11 +477,13 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
                 env_stack->pop();
 
-                Atom proc    = cont.m_d.vec->m_data[0];
-                Atom envs    = cont.m_d.vec->m_data[1];
-                Atom pc      = cont.m_d.vec->m_data[2];
-                int32_t oidx = (int32_t) cont.m_d.vec->m_data[3].m_d.i;
-                int32_t eidx = (int32_t) cont.m_d.vec->m_data[4].m_d.i;
+                Atom *cv = cont.m_d.vec->m_data;
+
+                Atom proc    = cv[0];
+                Atom envs    = cv[1];
+                Atom pc      = cv[2];
+                int32_t oidx = (int32_t) cv[3].m_d.i;
+                int32_t eidx = (int32_t) cv[4].m_d.i;
 
                 // save current function for gc:
                 cont_stack->push(proc);
@@ -639,7 +560,105 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 break;
             }
 
-            case OP_ADD:
+            case OP_NOT:
+            {
+                E_GET(tmp, A);
+                Atom o(T_BOOL);
+                o.m_d.b = tmp->is_false();
+                E_SET(O, o);
+                break;
+            }
+
+            case OP_EQ:
+            {
+                E_GET(tmp, A);
+                Atom &a = *tmp;
+                E_GET(tmp, B);
+                Atom &b = *tmp;
+
+                Atom o(T_BOOL);
+                if (a.m_type == T_DBL)
+                    o.m_d.b = std::fabs(a.to_dbl() - b.to_dbl())
+                              < std::numeric_limits<double>::epsilon();
+                else
+                    o.m_d.b = a.to_int() == b.to_int();
+                E_SET(O, o);
+                break;
+            }
+
+            case OP_NEQ:
+            {
+                E_GET(tmp, A);
+                Atom &a = *tmp;
+                E_GET(tmp, B);
+                Atom &b = *tmp;
+
+                Atom o(T_BOOL);
+                if (a.m_type == T_DBL)
+                    o.m_d.b = std::fabs(a.to_dbl() - b.to_dbl())
+                              >= std::numeric_limits<double>::epsilon();
+                else
+                    o.m_d.b = a.to_int() != b.to_int();
+                E_SET(O, o);
+                break;
+            }
+
+#define     DEFINE_NUM_OP_BOOL(opname, oper)              \
+            case OP_##opname:                             \
+            {                                             \
+                E_GET(tmp, A);                            \
+                Atom &a = *tmp;                           \
+                E_GET(tmp, B);                            \
+                Atom &b = *tmp;                           \
+                                                          \
+                Atom o(T_BOOL);                           \
+                if (a.m_type == T_DBL)                    \
+                    o.m_d.b = a.to_dbl() oper b.to_dbl(); \
+                else                                      \
+                    o.m_d.b = a.to_int() oper b.to_int(); \
+                E_SET(O, o);                              \
+                break;                                    \
+            }
+
+#define     DEFINE_NUM_OP_NUM(opname, oper, neutr)                   \
+            case OP_##opname:                                        \
+            {                                                        \
+                E_GET(tmp, A);                                       \
+                Atom &a = *tmp;                                      \
+                E_GET(tmp, B);                                       \
+                Atom &b = *tmp;                                      \
+                                                                     \
+                Atom *ot;                                            \
+                E_SET_D_PTR(PE_O, P_O, ot);                          \
+                Atom &o = *ot;                                       \
+                o.m_type = a.m_type;                                 \
+                if (a.m_type == T_DBL)                               \
+                    o.m_d.d = a.to_dbl() oper b.to_dbl();            \
+                else if (a.m_type == T_NIL)                          \
+                {                                                    \
+                    o.m_type = b.m_type;                             \
+                    if (b.m_type == T_DBL)                           \
+                    {                                                \
+                        o.m_d.d = (double) neutr;                    \
+                        o.m_d.d = ((double) neutr) oper b.to_dbl();  \
+                    }                                                \
+                    else                                             \
+                    {                                                \
+                        o.m_d.i = (int64_t) neutr;                   \
+                        o.m_d.i = ((int64_t) neutr) oper b.to_int(); \
+                    }                                                \
+                }                                                    \
+                else                                                 \
+                    o.m_d.i = a.to_int() oper b.to_int();            \
+                break;                                               \
+            }
+
+            DEFINE_NUM_OP_NUM(ADD, +, 0)
+            DEFINE_NUM_OP_NUM(SUB, -, 0)
+            DEFINE_NUM_OP_NUM(MUL, *, 1)
+            DEFINE_NUM_OP_NUM(DIV, /, 1)
+
+            case OP_MOD:
             {
                 E_GET(tmp, A);
                 Atom &a = *tmp;
@@ -649,28 +668,18 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
                 Atom *ot;
                 E_SET_D_PTR(PE_O, P_O, ot);
                 Atom &o = *ot;
-                if (o.m_type == T_DBL)
-                    o.m_d.d = a.to_dbl() + b.to_dbl();
-                else
-                    o.m_d.i = a.to_int() + b.to_int();
-                break;
-            }
-
-            case OP_GE:
-            {
-                E_GET(tmp, A);
-                Atom &a = *tmp;
-                E_GET(tmp, B);
-                Atom &b = *tmp;
-
-                Atom o(T_BOOL);
+                o.m_type = a.m_type;
                 if (a.m_type == T_DBL)
-                    o.m_d.b = a.to_dbl() >= b.to_dbl();
+                    o.m_d.d = (double) (((int64_t) a.to_dbl()) % ((int64_t) b.to_dbl()));
                 else
-                    o.m_d.b = a.to_int() >= b.to_int();
-                E_SET(O, o);
+                    o.m_d.i = a.to_int() % b.to_int();
                 break;
             }
+
+            DEFINE_NUM_OP_BOOL(GE, >=)
+            DEFINE_NUM_OP_BOOL(LE, <=)
+            DEFINE_NUM_OP_BOOL(LT, <)
+            DEFINE_NUM_OP_BOOL(GT, >)
 
             default:
                 throw VMException("Unknown VM opcode: " + to_string(m_pc->op));
@@ -680,6 +689,7 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
         if (alloc)
         {
             m_rt->m_gc.collect_maybe();
+            alloc = false;
         }
     }
 
@@ -703,3 +713,26 @@ lilvm::Atom VM::eval(Atom at_ud, AtomVec *args)
 
 
 }
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

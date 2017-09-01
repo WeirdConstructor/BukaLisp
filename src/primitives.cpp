@@ -1,3 +1,6 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
 #define BIN_OP_LOOPS(op) \
         if (args.m_len > 1) { \
             if (out.m_type == T_DBL) { \
@@ -28,12 +31,24 @@ END_PRIM(*);
 START_PRIM()
     NO_ARG_NIL;
     out = args.m_data[0];
+    if (args.m_len == 1)
+    {
+        if (out.m_type == T_DBL) out.m_d.d = 1.0 / out.m_d.d;
+        else                     out.m_d.i = 1 / out.m_d.i;
+        return;
+    }
     BIN_OP_LOOPS(/)
 END_PRIM(/);
 
 START_PRIM()
     NO_ARG_NIL;
     out = args.m_data[0];
+    if (args.m_len == 1)
+    {
+        if (out.m_type == T_DBL) out.m_d.d *= -1.0;
+        else                     out.m_d.i *= -1;
+        return;
+    }
     BIN_OP_LOOPS(-)
 END_PRIM(-);
 
@@ -41,25 +56,35 @@ END_PRIM(-);
 #define REQ_EQ_ARGC(prim, cnt)    if (args.m_len != cnt) error("Wrong number of arguments to " #prim ", expected " #cnt);
 #define BIN_CMP_OP_NUM(op) \
     out = Atom(T_BOOL); \
-    if (args.m_data[0].m_type == T_DBL) \
-        out.m_d.b = args.m_data[0].m_d.d op args.m_data[1].m_d.d; \
-    else \
-        out.m_d.b = args.m_data[0].m_d.i op args.m_data[1].m_d.i;
+    Atom last = args.m_data[0]; \
+    for (size_t i = 1; i < args.m_len; i++) \
+    { \
+        if (last.m_type == T_DBL) \
+            out.m_d.b = last.m_d.d op args.m_data[i].m_d.d; \
+        else \
+            out.m_d.b = last.m_d.i op args.m_data[i].m_d.i; \
+        if (!out.m_d.b) return; \
+        last = args.m_data[i]; \
+    }
 
 START_PRIM()
-    REQ_EQ_ARGC(<, 2);
+    REQ_GT_ARGC(=, 2);
+    BIN_CMP_OP_NUM(==);
+END_PRIM(=);
+START_PRIM()
+    REQ_GT_ARGC(<, 2);
     BIN_CMP_OP_NUM(<);
 END_PRIM(<);
 START_PRIM()
-    REQ_EQ_ARGC(>, 2);
+    REQ_GT_ARGC(>, 2);
     BIN_CMP_OP_NUM(>);
 END_PRIM(>);
 START_PRIM()
-    REQ_EQ_ARGC(<=, 2);
+    REQ_GT_ARGC(<=, 2);
     BIN_CMP_OP_NUM(<=);
 END_PRIM(<=);
 START_PRIM()
-    REQ_EQ_ARGC(>=, 2);
+    REQ_GT_ARGC(>=, 2);
     BIN_CMP_OP_NUM(>=);
 END_PRIM(>=);
 
@@ -330,7 +355,10 @@ START_PRIM()
         error("Can't 'last' on a non-list", A0);
     AtomVec *avl = A0.m_d.vec;
     if (avl->m_len <= 0)
+    {
+        out = Atom();
         return;
+    }
     out = avl->m_data[avl->m_len - 1];
 END_PRIM(last)
 
@@ -357,7 +385,7 @@ END_PRIM(take)
 START_PRIM()
     REQ_EQ_ARGC(drop, 2);
     if (A0.m_type != T_VEC)
-        error("Can't 'take' on a non-list", A0);
+        error("Can't 'drop' on a non-list", A0);
     size_t di  = (size_t) A1.to_int();
     size_t len = (size_t) A0.m_d.vec->m_len;
     if (len < di)
@@ -448,3 +476,26 @@ START_PRIM()
 END_PRIM(invoke-compiler)
 
 #endif
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

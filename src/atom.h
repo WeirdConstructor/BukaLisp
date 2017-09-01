@@ -1,3 +1,6 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
 #pragma once
 
 #include <iostream>
@@ -7,7 +10,7 @@
 #include <unordered_map>
 #include "atom_userdata.h"
 
-namespace lilvm
+namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
@@ -401,6 +404,9 @@ class GC
 #define GC_MEDIUM_VEC_LEN    100
 #define GC_BIG_VEC_LEN       200
 
+        std::vector<AtomVec *> m_gc_vec_stack;
+        std::vector<AtomMap *> m_gc_map_stack;
+
         AtomVec     *m_small_vectors;
         AtomVec     *m_medium_vectors;
         size_t       m_num_small_vectors;
@@ -488,14 +494,37 @@ class GC
             for (auto &sym : m_perm_syms)
                 sym->m_gc_color = m_current_color;
 
+            m_gc_vec_stack.clear();
+            m_gc_map_stack.clear();
+
             for (auto &ext_root : m_ext_roots)
             {
 //                std::cout << "EXT ROOT: " << ext_root << std::endl;
                 for (size_t i = 0; i < ext_root->gc_root_count(); i++)
                 {
-                    AtomVec *av = ext_root->gc_root_get(i);
+                    m_gc_vec_stack.push_back(ext_root->gc_root_get(i));
 //                    std::cout << "EXT ROOT AV: " << av << ">" << Atom(T_VEC, av).to_write_str( << std::endl;
-                    mark_vector(av);
+                }
+            }
+
+            // We use an explicit stack, to prevent C++ stack overflow
+            // when marking.
+            while (!(   m_gc_vec_stack.empty()
+                     && m_gc_map_stack.empty()))
+            {
+                if (!m_gc_vec_stack.empty())
+                {
+                    AtomVec *vec = m_gc_vec_stack.back();
+                    m_gc_vec_stack.pop_back();
+
+                    mark_vector(vec);
+                }
+                else // m_gc_map_stack
+                {
+                    AtomMap *map = m_gc_map_stack.back();
+                    m_gc_map_stack.pop_back();
+
+                    mark_map(map);
                 }
             }
         }
@@ -600,7 +629,7 @@ class GC
             {
                 delete cur;
             }
-            else if (cur->m_alloc > GC_SMALL_VEC_LEN)
+            else if (cur->m_alloc > GC_MEDIUM_VEC_LEN)
             {
                 // FIXME: We need to limit the number of medium sized
                 //        vectors. or else small vectors will just
@@ -611,13 +640,20 @@ class GC
                 cur->m_len       = 0;
                 m_medium_vectors = cur;
             }
-            else // (cur->m_alloc >= GC_SMALL_VEC_LEN)
+            else if (cur->m_alloc >= GC_SMALL_VEC_LEN)
             {
                 cur->m_gc_next  = m_small_vectors;
                 cur->m_gc_color = GC_COLOR_FREE;
                 cur->m_len      = 0;
                 m_small_vectors = cur;
             }
+            else
+            {
+                std::cerr << "WARNING: Got a smaller than 10 vector to delete!"
+                          << std::endl;
+                delete cur;
+            }
+
             if (dec)
                 m_num_new_vectors--;
         }
@@ -635,12 +671,12 @@ class GC
             switch (at.m_type)
             {
                 case T_MAP:
-                    mark_map((AtomMap *) at.m_d.map);
+                    m_gc_map_stack.push_back((AtomMap *) at.m_d.map);
                     break;
 
                 case T_CLOS:
                 case T_VEC:
-                    mark_vector((AtomVec *) at.m_d.vec);
+                    m_gc_vec_stack.push_back((AtomVec *) at.m_d.vec);
                     break;
 
                 case T_UD:
@@ -845,3 +881,26 @@ class GC
 //---------------------------------------------------------------------------
 
 }
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

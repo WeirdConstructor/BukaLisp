@@ -1,9 +1,0 @@
-[
-    ["#DEBUG_SYM", "LOAD, PUSH_ENV, ADD"],
-    ["PUSH_ENV", 3],
-    ["LOAD_I", 0, 10],
-    ["LOAD_D", 1, 13.23],
-    ["ADD",  2, 0, 1],
-    ["DBG_DUMP_ENVSTACK"],
-    ["RETURN", 2]
-]

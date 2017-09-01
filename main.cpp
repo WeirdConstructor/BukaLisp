@@ -1,3 +1,6 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
 #include <cstdio>
 #include <fstream>
 #include <chrono>
@@ -6,17 +9,17 @@
 #include <memory>
 #include <cstdlib>
 #include "utf8buffer.h"
-#include "bukalisp/parser.h"
-#include "bukalisp/atom_generator.h"
-#include "bukalisp/interpreter.h"
-#include "bukalisp/buklivm.h"
+#include "parser.h"
+#include "atom_generator.h"
+#include "interpreter.h"
+#include "buklivm.h"
 #include "atom.h"
 #include "atom_printer.h"
-#include "bukalisp/util.h"
+#include "util.h"
 
 //---------------------------------------------------------------------------
 
-using namespace lilvm;
+using namespace bukalisp;
 using namespace std;
 
 //---------------------------------------------------------------------------
@@ -88,26 +91,26 @@ void test_gc1()
 }
 //---------------------------------------------------------------------------
 
-class Reader : public lilvm::ExternalGCRoot
+class Reader : public ExternalGCRoot
 {
     private:
-        GC                          m_gc;
-        bukalisp::AtomGenerator     m_ag;
-        bukalisp::Tokenizer         m_tok;
-        bukalisp::Parser            m_par;
-        AtomMap                    *m_debug_info;
+        GC                m_gc;
+        AtomGenerator     m_ag;
+        Tokenizer         m_tok;
+        Parser            m_par;
+        AtomMap          *m_debug_info;
 
-        AtomVec                    *m_root_set;
+        AtomVec          *m_root_set;
 
     public:
         Reader()
-            : lilvm::ExternalGCRoot(&m_gc),
+            : ExternalGCRoot(&m_gc),
               m_ag(&m_gc),
               m_par(m_tok, &m_ag)
         {
             m_root_set = m_gc.allocate_vector(0);
 
-            lilvm::ExternalGCRoot::init();
+            ExternalGCRoot::init();
         }
 
         virtual size_t gc_root_count() { return 1; }
@@ -329,18 +332,18 @@ void test_atom_debug_info()
 
 #define TEST_EVAL(expr, b) \
     r = i.eval(std::string(__FILE__ ":") + std::to_string(__LINE__), expr); \
-    if (lilvm::write_atom(r) != (b)) \
+    if (bukalisp::write_atom(r) != (b)) \
         throw bukalisp::BukLiVMException( \
             std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
             #expr " not eq: " \
-            + lilvm::write_atom(r) + " != " + (b));
+            + bukalisp::write_atom(r) + " != " + (b));
 
 //---------------------------------------------------------------------------
 
 void test_ieval_atoms()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
 
     Atom r = i.eval("testatoms", "123");
     TEST_EQ(r.m_type, T_INT, "is int");
@@ -380,8 +383,8 @@ void test_ieval_atoms()
 
 void test_ieval_vars()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
 
     Atom r =
         i.eval(
@@ -399,8 +402,8 @@ void test_ieval_vars()
 
 void test_ieval_basic_stuff()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     // maps
@@ -421,8 +424,8 @@ void test_ieval_basic_stuff()
 
 void test_ieval_proc()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
 //    i.set_force_always_gc(true);
 //    i.set_trace(true);
     Atom r;
@@ -590,8 +593,8 @@ void test_ieval_proc()
 
 void test_ieval_let()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     TEST_EVAL("(begin (define x 20) (+ (let ((x 10)) x) x))",               "30");
@@ -610,8 +613,8 @@ void test_ieval_let()
 
 void test_ieval_cond()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     TEST_EVAL("(if #t 123 345)", "123");
@@ -734,8 +737,8 @@ void test_ieval_cond()
 
 void test_ieval_lambda()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     TEST_EVAL("((lambda () 10))",                               "10");
@@ -754,8 +757,8 @@ void test_ieval_lambda()
 
 void test_ieval_index_procs()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     TEST_EVAL("(@0 [1 2 3])",       "1");
@@ -782,8 +785,8 @@ void test_ieval_index_procs()
 
 void test_ieval_loops()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     TEST_EVAL(
@@ -861,8 +864,8 @@ void test_ieval_loops()
 
 void test_ieval_objs()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     TEST_EVAL("(let ((obj { x: (lambda (a) (+ a 10)) }))"
@@ -896,8 +899,8 @@ void test_ieval_objs()
 
 void test_ieval_comments()
 {
-    bukalisp::Runtime rt;
-    bukalisp::Interpreter i(&rt);
+    Runtime rt;
+    Interpreter i(&rt);
     Atom r;
 
     TEST_EVAL("(begin (define x 10) #;(set! x 20) x)",              "10");
@@ -993,18 +996,18 @@ int main(int argc, char *argv[])
         }
         else if (i_ppt)
         {
-            bukalisp::Runtime rt;
-            bukalisp::VM vm(&rt);
-            bukalisp::Interpreter i(&rt, &vm);
+            Runtime rt;
+            VM vm(&rt);
+            Interpreter i(&rt, &vm);
             i.print_primitive_table();
         }
         else if (interpret && !input_file_path.empty())
         {
             try
             {
-                bukalisp::Runtime rt;
-                bukalisp::VM vm(&rt);
-                bukalisp::Interpreter i(&rt, &vm);
+                Runtime rt;
+                VM vm(&rt);
+                Interpreter i(&rt, &vm);
                 vm.set_trace(i_trace_vm);
                 i.set_trace(i_trace);
                 i.set_force_always_gc(i_force_gc);
@@ -1019,9 +1022,9 @@ int main(int argc, char *argv[])
         }
         else if (!input_file_path.empty())
         {
-            bukalisp::Runtime rt;
-            bukalisp::VM vm(&rt);
-            bukalisp::Interpreter i(&rt, &vm);
+            Runtime rt;
+            VM vm(&rt);
+            Interpreter i(&rt, &vm);
             vm.set_trace(i_trace_vm);
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
@@ -1042,9 +1045,9 @@ int main(int argc, char *argv[])
         }
         else
         {
-            bukalisp::Runtime rt;
-            bukalisp::VM vm(&rt);
-            bukalisp::Interpreter i(&rt, &vm);
+            Runtime rt;
+            VM vm(&rt);
+            Interpreter i(&rt, &vm);
             vm.set_trace(i_trace_vm);
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
@@ -1073,3 +1076,26 @@ int main(int argc, char *argv[])
     }
 }
 //---------------------------------------------------------------------------
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

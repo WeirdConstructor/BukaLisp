@@ -1,0 +1,10 @@
+(define VM-EVAL
+  (lambda (code expected env)
+    (when (nil? env) (set! env [{} []]))
+    (invoke-compiler [code] code #f env)))
+
+(VM-EVAL '(begin
+            (define x 0)
+            (for (i 1 10000000)
+              (set! x (+ x 1))))
+   10000000)

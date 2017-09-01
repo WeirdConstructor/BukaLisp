@@ -1,3 +1,6 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
 #pragma once
 
 #include "atom.h"
@@ -49,12 +52,14 @@ class VMException : public std::exception
     X(SUB,          101) \
     X(MUL,          102) \
     X(DIV,          103) \
-    X(LT,           104) \
-    X(GT,           105) \
-    X(LE,           106) \
-    X(GE,           107) \
-    X(EQ,           108) \
-    X(NOT,          109) \
+    X(MOD,          104) \
+    X(LT,           105) \
+    X(GT,           106) \
+    X(LE,           107) \
+    X(GE,           108) \
+    X(EQ,           109) \
+    X(NEQ,          110) \
+    X(NOT,          111) \
     X(PACK_VA,      200) \
     X(RETURN,       250) \
     X(END,          254)
@@ -112,14 +117,14 @@ struct INST
 };
 //---------------------------------------------------------------------------
 
-class PROG : public lilvm::UserData
+class PROG : public UserData
 {
     public:
-        lilvm::Atom     m_debug_info_map;
-        lilvm::Atom    *m_atom_data;
-        size_t          m_atom_data_len;
-        INST           *m_instructions;
-        size_t          m_instructions_len;
+        Atom     m_debug_info_map;
+        Atom    *m_atom_data;
+        size_t   m_atom_data_len;
+        INST    *m_instructions;
+        size_t   m_instructions_len;
 
     public:
         PROG()
@@ -130,7 +135,7 @@ class PROG : public lilvm::UserData
         PROG(size_t atom_data_len, size_t instr_len)
         {
             m_atom_data_len    = atom_data_len;
-            m_atom_data        = new lilvm::Atom[atom_data_len + 1];
+            m_atom_data        = new Atom[atom_data_len + 1];
             m_instructions_len = instr_len;
             m_instructions     = new INST[instr_len + 1];
             m_instructions[instr_len].op = OP_END;
@@ -138,15 +143,15 @@ class PROG : public lilvm::UserData
         }
 
         size_t data_array_len()   { return m_atom_data_len; }
-        lilvm::Atom *data_array() { return m_atom_data; }
+        Atom *data_array()        { return m_atom_data; }
 
-        void set_data_from(lilvm::AtomVec *av)
+        void set_data_from(AtomVec *av)
         {
             for (size_t i = 0; i < av->m_len && i < m_atom_data_len; i++)
                 m_atom_data[i] = av->m_data[i];
         }
 
-        void set_debug_info(lilvm::Atom &a)
+        void set_debug_info(Atom &a)
         {
             m_debug_info_map = a;
         }
@@ -161,9 +166,9 @@ class PROG : public lilvm::UserData
         virtual std::string type() { return "VM-PROG"; }
         virtual std::string as_string();
 
-        virtual void mark(lilvm::GC *gc, uint8_t clr)
+        virtual void mark(GC *gc, uint8_t clr)
         {
-            lilvm::UserData::mark(gc, clr);
+            UserData::mark(gc, clr);
             for (size_t i = 0; i < m_atom_data_len; i++)
                 gc->mark_atom(m_atom_data[i]);
             gc->mark_atom(m_debug_info_map);
@@ -178,7 +183,7 @@ class PROG : public lilvm::UserData
 };
 //---------------------------------------------------------------------------
 
-lilvm::Atom make_prog(lilvm::Atom prog_info);
+Atom make_prog(Atom prog_info);
 //---------------------------------------------------------------------------
 
 class VMProgStateGuard
@@ -207,20 +212,20 @@ class VMProgStateGuard
 };
 //---------------------------------------------------------------------------
 
-class VM : public lilvm::ExternalGCRoot
+class VM : public ExternalGCRoot
 {
     private:
-        Runtime          *m_rt;
-        INST             *m_pc;
-        PROG             *m_prog;
-        VM               *m_vm;
-        lilvm::AtomVec   *m_root_stack;
-        lilvm::AtomVec   *m_prim_table;
-        bool              m_trace;
+        Runtime   *m_rt;
+        INST      *m_pc;
+        PROG      *m_prog;
+        VM        *m_vm;
+        AtomVec   *m_root_stack;
+        AtomVec   *m_prim_table;
+        bool       m_trace;
 
     public:
         VM(Runtime *rt)
-            : lilvm::ExternalGCRoot(&(rt->m_gc)), m_rt(rt),
+            : ExternalGCRoot(&(rt->m_gc)), m_rt(rt),
               m_pc(nullptr),
               m_prog(nullptr),
               m_vm(this),
@@ -240,12 +245,12 @@ class VM : public lilvm::ExternalGCRoot
         void error(const std::string &msg)
         {
             INST *start_pc = &(m_prog->m_instructions[0]);
-            lilvm::Atom a(lilvm::T_INT, m_pc - start_pc);
-            lilvm::Atom info = m_prog->m_debug_info_map.at(a);
+            Atom a(T_INT, m_pc - start_pc);
+            Atom info = m_prog->m_debug_info_map.at(a);
             throw VMException("(@" + info.to_display_str() + "): " + msg);
         }
 
-        void error(const std::string &msg, lilvm::Atom &err_atom)
+        void error(const std::string &msg, Atom &err_atom)
         {
             error(msg + ", atom: " + err_atom.to_write_str());
         }
@@ -254,7 +259,7 @@ class VM : public lilvm::ExternalGCRoot
 
         virtual size_t gc_root_count() { return 2; }
 
-        virtual lilvm::AtomVec *gc_root_get(size_t idx)
+        virtual AtomVec *gc_root_get(size_t idx)
         {
             switch (idx)
             {
@@ -268,8 +273,31 @@ class VM : public lilvm::ExternalGCRoot
             m_rt->m_gc.remove_external_root(this);
         }
 
-        lilvm::Atom eval(lilvm::Atom at_ud, lilvm::AtomVec *args = nullptr);
+        Atom eval(Atom at_ud, AtomVec *args = nullptr);
 };
 //---------------------------------------------------------------------------
 
 };
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

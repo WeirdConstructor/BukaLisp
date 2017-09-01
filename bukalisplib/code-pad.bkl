@@ -102,8 +102,32 @@
       ($define! self (op-ge out-idx a-idx b-idx)
         (push-op GE: out-idx a-idx b-idx))
 
+      ($define! self (op-eq out-idx a-idx b-idx)
+        (push-op EQ: out-idx a-idx b-idx))
+
       ($define! self (op-add out-idx a-idx b-idx)
         (push-op ADD: out-idx a-idx b-idx))
+
+      ($define! self (op-sub out-idx a-idx b-idx)
+        (push-op SUB: out-idx a-idx b-idx))
+
+      ($define! self (op-mul out-idx a-idx b-idx)
+        (push-op MUL: out-idx a-idx b-idx))
+
+      ($define! self (op-div out-idx a-idx b-idx)
+        (push-op DIV: out-idx a-idx b-idx))
+
+      ($define! self (op-mod out-idx a-idx b-idx)
+        (push-op MOD: out-idx a-idx b-idx))
+
+      ($define! self (op-gt out-idx a-idx b-idx)
+        (push-op GT: out-idx a-idx b-idx))
+
+      ($define! self (op-lt out-idx a-idx b-idx)
+        (push-op LT: out-idx a-idx b-idx))
+
+      ($define! self (op-le out-idx a-idx b-idx)
+        (push-op LE: out-idx a-idx b-idx))
 
       ($define! self (op-inc val-idx incrementor-idx)
         (push-op INC: val-idx incrementor-idx 0))

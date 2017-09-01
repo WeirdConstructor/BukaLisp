@@ -1,10 +1,12 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
 #include "interpreter.h"
 #include "buklivm.h"
 #include <chrono>
 #include "util.h"
 
 using namespace std;
-using namespace lilvm;
 
 namespace bukalisp
 {
@@ -648,6 +650,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
     }
 
     AtomVecPush avp(m_root_stack, Atom(T_VEC, av));
+    AtomVecPush avp_func(m_root_stack, func);
 
     if (func.m_type == T_PRIM)
     {
@@ -890,10 +893,10 @@ Atom Interpreter::eval(Atom e)
 }
 //---------------------------------------------------------------------------
 
-lilvm::Atom Interpreter::call_compiler(
-    lilvm::Atom prog,
-    lilvm::AtomMap *debug_info_map,
-    lilvm::AtomVec *root_env,
+Atom Interpreter::call_compiler(
+    Atom prog,
+    AtomMap *debug_info_map,
+    AtomVec *root_env,
     const std::string &input_name,
     bool only_compile)
 {
@@ -920,7 +923,7 @@ lilvm::Atom Interpreter::call_compiler(
 }
 //---------------------------------------------------------------------------
 
-lilvm::Atom Interpreter::get_compiler_func()
+Atom Interpreter::get_compiler_func()
 {
     Atom compiler_func = m_cache->at(0);
 
@@ -956,10 +959,10 @@ lilvm::Atom Interpreter::get_compiler_func()
 }
 //---------------------------------------------------------------------------
 
-lilvm::Atom Interpreter::call_compiler(
+Atom Interpreter::call_compiler(
     const std::string &code_name,
     const std::string &code,
-    lilvm::AtomVec *root_env,
+    AtomVec *root_env,
     bool only_compile)
 {
     Atom compiler_func = get_compiler_func();
@@ -981,3 +984,26 @@ lilvm::Atom Interpreter::call_compiler(
 //---------------------------------------------------------------------------
 
 }
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

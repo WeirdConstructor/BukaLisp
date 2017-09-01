@@ -1,9 +1,20 @@
 (define primitive-table
-'{<= 6 symbol? 11 + 0 * 1 / 2 - 3 < 4 first 37 exact? 14 list 8 append 40 keyword? 12 > 5 >= 7 eqv? 9 map? 19 not 10 nil? 13 inexact? 15 string? 16 bkl-slurp-file 42 boolean? 17 write-str 41 @! 22 list? 18 pop! 26 procedure? 20 @ 21 type 23 display 30 length 24 push! 25 make-vm-prog 27 str-join 35 run-vm-prog 28 error 29 newline 31 eval 43 displayln 32 atom-id 33 str 34 last 36 take 38 drop 39 invoke-compiler 44}
+'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 < 5 append 41 keyword? 13 > 6 >= 8 first 38 exact? 15 list 9 eqv? 10 map? 20 not 11 nil? 14 inexact? 16 string? 17 bkl-slurp-file 43 boolean? 18 write-str 42 @! 23 list? 19 pop! 27 procedure? 21 @ 22 type 24 display 31 length 25 push! 26 make-vm-prog 28 str-join 36 run-vm-prog 29 error 30 newline 32 eval 44 displayln 33 atom-id 34 str 35 last 37 take 39 drop 40 invoke-compiler 45}
 )
 ;----------------------------------------------------------------------------
 
-(define inc-env-offs (lambda (out-idx) [(@0 out-idx) (+ 1 (@1 out-idx))]))
+(define inc-env-offs
+ (lambda (out-adr)
+   [(@0 out-adr)
+    (+ 1 (@1 out-adr))
+    (@2 out-adr)]))
+;----------------------------------------------------------------------------
+
+(define dec-env-offs
+ (lambda (out-adr)
+   [(@0 out-adr)
+    (- (@1 out-adr) 1)
+    (@2 out-adr)]))
 ;----------------------------------------------------------------------------
 
 (include prog-frame)
@@ -50,22 +61,23 @@
                   (do-each (k v atom)
                     (.set-debug-pos self atom)
                     (let ((k-adr (.compile-quote self k code-pad))
-                          (v-adr (.compile-quote self v code-pad))
-                      (.op-cset-vec code-pad ret-adr k-adr v-adr))
+                          (v-adr (.compile-quote self v code-pad)))
+                      (.op-cset-vec code-pad ret-adr k-adr v-adr)
                       (.recycle-pos self k-adr)
                       (.recycle-pos self v-adr)))
                   ret-adr))
 
    'list      (lambda (atom self code-pad)
-                (let ((tmp-idx (.new-tmp-pos self))
+                (let ((vec-adr (.new-tmp-pos self))
                       (i 0))
-                  (.op-new-vec code-pad out-idx (length atom))
+                  (.op-new-vec code-pad vec-adr (length atom))
                   (do-each (a atom)
                     (.set-debug-pos self atom)
-                    (.compile-quote self a code-pad tmp-idx)
-                    (.op-cset-vec code-pad out-idx i tmp-idx)
-                    (set! i (+ i 1)))
-                  (.recycle-tmp-pos self tmp-idx)))})
+                    (let ((val-adr (.compile-quote self a code-pad)))
+                      (.op-cset-vec code-pad vec-adr i val-adr)
+                      (.recycle-pos self val-adr)
+                      (set! i (+ i 1))))
+                  vec-adr))})
 ;----------------------------------------------------------------------------
 
 (define compile-expr-dispatch-map
@@ -89,8 +101,8 @@
                   (do-each (k v atom)
                     (.set-debug-pos self atom)
                     (let ((k-adr (.compile self k code-pad))
-                          (v-adr (.compile self v code-pad))
-                      (.op-cset-vec code-pad ret-adr k-adr v-adr))
+                          (v-adr (.compile self v code-pad)))
+                      (.op-cset-vec code-pad ret-adr k-adr v-adr)
                       (.recycle-pos self k-adr)
                       (.recycle-pos self v-adr)))
                   ret-adr))
@@ -101,7 +113,7 @@
                     (.error self "Undefined variable" atom))
                   (case (@0 (@1 var))
                     ((var:)
-                     [var-idx (@0 var)])
+                     [(@1 (@1 var)) (@0 var)])
                     ((prim:)
                      [(@1 (@1 var)) -2])
                     ((syntax:)
@@ -123,11 +135,7 @@
                        ((prim:)
                         (.compile-func-apply self atom code-pad))
                        ((syntax:)
-                        (if (nil? (@2 (@1 var)))
-                          ((@1 (@1 var)) atom self code-pad)
-                          ; TODO: Instead of preferring the primitive,
-                          ;       use the compiler func instead here!
-                          (.compile-func-apply self atom code-pad)))
+                        ((@1 (@1 var)) atom self code-pad))
                        ((var:)
                         (.compile-func-apply self atom code-pad))
                        (else
@@ -138,7 +146,7 @@
                     (.error self "Invalid atom type at start of list" atom))))})
 ;                (do-each (a atom)
 ;                  (displayln DO-LIST_ITEM: a)
-;                  (.compile-quote self a code-pad out-idx)))})
+;                  (.compile-quote self a code-pad)))})
 ;----------------------------------------------------------------------------
 
 (define recursive-lookup
@@ -154,9 +162,9 @@
         [lvl-idx var-type]))))
 ;----------------------------------------------------------------------------
 
-;(define make-prim-syntax
-;  (lambda (compiler symbol compiler-func prim-nr)
-;    (.define-var compiler symbol [syntax: compiler-func prim-nr])))
+(define set-env-syntax-prim
+  (lambda (env symbol compiler-func prim-nr)
+    (@!symbol env [syntax: compiler-func prim-nr])))
 ;----------------------------------------------------------------------------
 
 (define set-env-syntax
@@ -207,7 +215,14 @@
         (push! (@1 (last ($env-pos-stack: self)))
           (if (list? pos)
             (@0 pos)
-            pos))))
+            pos)))
+      pos)
+
+    ($define! self (adr-in-cur-env? adr)
+      (eqv? (@1 adr) 0))
+
+    ($define! self (adr-in-env? adr)
+      (>= (@1 adr) 0))
 
     ($define! self (define-var sym var-type)
       (let ((cur-env (last ($env-stack: self))))
@@ -237,68 +252,71 @@
             (argvec-adr     (.new-tmp-pos self))
             (argc           (- (length atom) 1)))
         (.op-new-vec code-pad argvec-adr argc)
-        (for (i 1 argc)
-          (.set-debug-pos self atom)
-          (let ((arg-adr (.compile self (@i atom) code-pad)))
-            (.op-cset-vec code-pad argvec-adr (- i 1) arg-adr)
-            (.recycle-pos self arg-adr)))
+        (when (> argc 0)
+          (for (i 1 argc)
+            (.set-debug-pos self atom)
+            (let ((arg-adr (.compile self (@i atom) code-pad)))
+              (.op-cset-vec code-pad argvec-adr (- i 1) arg-adr)
+              (.recycle-pos self arg-adr))))
         (let ((ret-adr (.new-tmp-pos self)))
           (.op-call code-pad ret-adr func-adr argvec-adr)
           (.recycle-pos self argvec-adr)
           ret-adr)))
 
-;
-;
-;
-;      (let ((end-idx    (- (length atom) 1))
-;            (func-idx   (.new-tmp-pos self))
-;            (argvec-idx (.new-tmp-pos self))
-;            (arg-idxes []))
-;        (.compile self (@0 atom) code-pad func-idx)
-;        (when (> end-idx 0)
-;          (for (i 1 end-idx)
-;            (let ((arg-idx (.new-tmp-pos self)))
-;              (push! arg-idxes arg-idx)
-;              (.set-debug-pos self atom)
-;              (.compile       self (@i atom) code-pad arg-idx))))
-;        (.op-new-vec code-pad argvec-idx (- (length atom) 1))
-;        (when (> end-idx 0)
-;          (for (i 0 (- end-idx 1))
-;            (.op-cset-vec     code-pad argvec-idx i (@i arg-idxes))
-;            (.recycle-tmp-pos self (@i arg-idxes))))
-;        ;       (.op-dump-env-stack code-pad)
-;        (.op-call         code-pad out-idx func-idx argvec-idx)
-;        (.recycle-tmp-pos self func-idx)))
-
-    ($define! self (compile-lambda parameters body code-pad out-idx)
+    ($define! self (compile-lambda parameters body code-pad)
       (.push-prog-frame self)
       (.push-env self)
-      (define dot-var  #f)
+      (define dot-var-adr  #f)
       (do-each (var parameters)
         (unless (symbol? var)
           (.error self "Can't use non symbol in lambda parameter list" var))
-        (if dot-var
-          (if (eqv? (type dot-var) 'exact)
+        (if dot-var-adr
+          (if (eqv? (type dot-var-adr) 'exact)
             (.error self "After a '.' only one symbol can follow" parameters)
-            (.define-var self var [var: (@0 (set! dot-var (.new-pos self)))]))
+            (.define-var self var [var: (@0 (set! dot-var-adr (.new-pos self)))]))
           (begin
             (if (eqv? var '.)
-              (set! dot-var #t)
+              (set! dot-var-adr #t)
               (.define-var self var [var: (@0 (.new-pos self))])))))
-      (when dot-var
-        (unless (list? dot-var)
+      (when dot-var-adr
+        (unless (list? dot-var-adr)
           (.error self "'.' must follow a symbol" parameters)))
-      (let ((ret-val-pos     (.new-tmp-pos self))
-            (lambda-code-pad (.make-code-pad self)))
-        (when dot-var
-          (.op-pack-va lambda-code-pad dot-var dot-var))
-        (.compile-block self body lambda-code-pad ret-val-pos)
-        (.op-return     lambda-code-pad ret-val-pos)
-        (let ((new-prog (.to-vm-prog self lambda-code-pad)))
-          (.pop-env               self)
-          (.pop-prog-frame        self)
-          (.op-load               code-pad new-prog out-idx)
-          (.op-new-closure        code-pad out-idx out-idx))))
+      (let ((lambda-code-pad (.make-code-pad self)))
+        (when dot-var-adr
+          (.op-pack-va lambda-code-pad dot-var-adr dot-var-adr))
+        (let ((body-res-adr (.compile-block self body lambda-code-pad)))
+          (.op-return lambda-code-pad body-res-adr)
+          (let ((new-prog (.to-vm-prog self lambda-code-pad)))
+            (.pop-env               self)
+            (.pop-prog-frame        self)
+            (let ((ret-adr (.new-tmp-pos self)))
+              (.op-new-closure
+                code-pad
+                ret-adr
+                (.store-static-data self new-prog))
+              ret-adr)))))
+
+    ($define! self (compile-one-branch-condition
+                    code-pad
+                    compile-as-block?
+                    negated?
+                    branch-atom
+                    condition-atom)
+       (let ((branch-pad     (.make-code-pad self))
+             (branch-ret-adr (if compile-as-block?
+                               (.compile-block self branch-atom branch-pad)
+                               (.compile       self branch-atom branch-pad)))
+             (cond-adr       (.compile self condition-atom code-pad))
+             (cond-ret-adr   (.new-tmp-pos self)))
+         (.op-load-nil     code-pad cond-ret-adr)
+         (.op-mov          branch-pad cond-ret-adr branch-ret-adr)
+         (if negated?
+           (.op-brif  code-pad (.count-ops branch-pad) cond-adr)
+           (.op-brnif code-pad (.count-ops branch-pad) cond-adr))
+         (.append-code-pad code-pad branch-pad)
+         (.recycle-pos self cond-adr)
+         (.recycle-pos self branch-ret-adr)
+         cond-ret-adr))
 
     ($define! self (compile-block block code-pad)
       (let ((ret-adr nil))
@@ -324,18 +342,113 @@
 
     ($define! self (make-base-env)
       (define new-env {})
-      ;    (make-prim-syntax self '+
-      ;     (lambda (atom self code-pad out-idx) 0)
-      ;     0)
 
       (do-each (k v primitive-table)
         (@!k new-env [prim: v]))
       ;----------------------------------------------------------------------------
 
-      ;       (unless (< 2 (length atom))
-      ;         (.error self "'+' needs 3 arguments" atom))
-      ;       (unless (symbol? (@1 atom))
-      ;         (.error self "Can only define symbols as variable" atom))
+      (define make-bin-op-syntax
+        (lambda (op-sym op-func only-supports-2-args?)
+          (set-env-syntax-prim
+           new-env op-sym
+           (lambda (atom self code-pad)
+             (when (< (length atom) 2)
+               (.error self (str "'" op-sym "' needs at least 1 arguments") atom))
+             (define out-adr (.new-tmp-pos self))
+             (if (eqv? (length atom) 2)
+               (begin
+                 (define a-adr (.new-tmp-pos self))
+                 (define b-adr (.compile self (@1 atom) code-pad))
+                 (.op-load-nil code-pad a-adr)
+                 (op-func code-pad out-adr a-adr b-adr)
+                 (.recycle-pos self a-adr)
+                 (.recycle-pos self b-adr))
+               (if (eqv? (length atom) 3)
+                 (begin
+                   (define a-adr (.compile self (@1 atom) code-pad))
+                   (define b-adr (.compile self (@2 atom) code-pad))
+                   (op-func code-pad out-adr a-adr b-adr)
+                   (.recycle-pos self a-adr)
+                   (.recycle-pos self b-adr))
+                 (begin
+                   (if only-supports-2-args?
+                     (begin
+                        (.recycle-pos self out-adr)
+                        (set! out-adr (.compile-func-apply self atom code-pad)))
+                     (begin
+                       (define recycle-addrs [])
+                       (define add-recylcle
+                         (lambda (a)
+                           (push! recycle-addrs a)
+                           a))
+                       (.op-mov code-pad out-adr (add-recylcle
+                                                   (.compile self (@1 atom) code-pad)))
+                       (do-each (v (drop atom 2))
+                         (op-func code-pad
+                                  out-adr
+                                  out-adr
+                                  (add-recylcle (.compile self v code-pad))))
+                       (do-each (r-adr recycle-addrs)
+                         (.recycle-pos self r-adr)))))))
+             out-adr)
+           (@op-sym primitive-table))))
+
+
+      (make-bin-op-syntax
+       '+
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-add code-pad out-adr a-adr b-adr)))
+
+      (make-bin-op-syntax
+       '-
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-sub code-pad out-adr a-adr b-adr)))
+
+      (make-bin-op-syntax
+       '*
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-mul code-pad out-adr a-adr b-adr)))
+
+      (make-bin-op-syntax
+       '/
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-div code-pad out-adr a-adr b-adr)))
+
+      (make-bin-op-syntax
+       '%
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-mod code-pad out-adr a-adr b-adr)))
+
+      (make-bin-op-syntax
+       '=
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-eq code-pad out-adr a-adr b-adr))
+       #t)
+
+      (make-bin-op-syntax
+       '>
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-gt code-pad out-adr a-adr b-adr))
+       #t)
+
+      (make-bin-op-syntax
+       '<
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-lt code-pad out-adr a-adr b-adr))
+       #t)
+
+      (make-bin-op-syntax
+       '>=
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-ge code-pad out-adr a-adr b-adr))
+       #t)
+
+      (make-bin-op-syntax
+       '<=
+       (lambda (code-pad out-adr a-adr b-adr)
+         (.op-le code-pad out-adr a-adr b-adr))
+       #t)
+;
       ;
       ;       (let ((bind-idx (.new-pos self)))
       ;         (.define-var self (@1 atom) [var: bind-idx])
@@ -343,15 +456,6 @@
       ;         (.op-mov code-pad out-idx bind-idx))
 
 ;      (set-env-syntax new-env '+
-;       (lambda (atom self code-pad out-idx)
-;         (let ((a-idx (.new-tmp-pos self))
-;               (b-idx (.new-tmp-pos self)))
-;           (.compile self (@1 atom) code-pad a-idx)
-;           (.compile self (@2 atom) code-pad b-idx)
-;           (.op-add code-pad out-idx a-idx b-idx)
-;           (.recycle-tmp-pos self a-idx)
-;           (.recycle-tmp-pos self b-idx))))
-;;           (.compile-block self (drop atom 1) code-pad out-idx)))
 
       (set-env-syntax new-env 'begin
        (lambda (atom self code-pad)
@@ -359,12 +463,12 @@
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'lambda
-       (lambda (atom self code-pad out-idx)
-         (.compile-lambda self (@1 atom) (drop atom 2) code-pad out-idx)))
+       (lambda (atom self code-pad)
+         (.compile-lambda self (@1 atom) (drop atom 2) code-pad)))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'let
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (> (length atom) 1)
            (.error self "'let' needs at least 1 argument (the binding list)" atom))
          (unless (eqv? (type (@1 atom)) 'list)
@@ -378,19 +482,34 @@
              (unless (eqv? (type (@0 bind-pair)) 'symbol)
                (.error self "'let' binding pair must contain a symbol as first element" bind-pair))
              (set! env-size (+ env-size 1)))
-           (.push-env    self)
-           (.op-push-env code-pad env-size)
-           (do-each (bind-pair (@1 atom))
-             (let ((var-pos (.new-pos self)))
-               (.define-var self (@0 bind-pair) [var: (@0 var-pos)])
-               (.compile    self (@1 bind-pair) code-pad var-pos)))
-           (.compile-block   self (drop atom 2) code-pad (inc-env-offs out-idx))
-           (.op-pop-env      code-pad)
-           (.pop-env         self))))
+           (let ((out-adr (inc-env-offs (.new-tmp-pos self))))
+             (.push-env    self)
+             (.op-push-env code-pad env-size)
+             (do-each (bind-pair (@1 atom))
+               (let ((var-adr (.new-pos self)))
+                 (.define-var self (@0 bind-pair) [var: (@0 var-adr)])
+                 (let ((val-adr (.compile self (@1 bind-pair) code-pad)))
+                   (.op-mov code-pad var-adr val-adr)
+                   (.recycle-pos self val-adr))))
+             (let ((ret-adr (.compile-block self (drop atom 2) code-pad)))
+               ; Now optimize returning non-local-variables from the environment:
+               (if (.adr-in-cur-env? self ret-adr)
+                 (begin
+                   (.op-mov code-pad out-adr ret-adr)
+                   (.recycle-pos self ret-adr)
+                   (set! out-adr (dec-env-offs out-adr)))
+                 (begin
+                   (set! out-adr ret-adr)
+                   (.recycle-pos self out-adr)
+                   (when (.adr-in-env? self out-adr)
+                     (set! out-adr (dec-env-offs out-adr)))))
+               (.op-pop-env code-pad)
+               (.pop-env self)
+               out-adr)))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'set!
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (eqv? 3 (length atom))
            (.error self "'set!' needs 2 arguments" atom))
          (unless (symbol? (@1 atom))
@@ -398,23 +517,28 @@
          (let ((var (.lookup self (@1 atom))))
            (when (nil? var)
              (.error self "Undefined variable" atom))
-           (.compile self (@2 atom) code-pad out-idx)
-           (when (eqv? (@0 (@1 var)) var:)
-             (.op-mov code-pad [(@1 (@1 var)) (@0 var)] out-idx [9 9])))))
+           (let ((var-adr [(@1 (@1 var)) (@0 var)])
+                 (val-adr (.compile self (@2 atom) code-pad)))
+             (when (eqv? (@0 (@1 var)) var:)
+               (.op-mov code-pad var-adr val-adr)
+               (.recycle-pos self val-adr)
+               var-adr)))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'define
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (> (length atom) 2)
            (.error self "'define' needs at least 2 arguments" atom))
          (if (symbol? (@1 atom))
            (begin
              (unless (eqv? 3 (length atom))
                (.error self "'define' needs 2 arguments" atom))
-             (let ((bind-idx (.new-pos self)))
-               (.define-var self (@1 atom) [var: (@0 bind-idx)])
-               (.compile    self (@2 atom) code-pad bind-idx)
-               (.op-mov     code-pad out-idx bind-idx)))
+             (let ((bind-adr (.new-pos self)))
+               (.define-var self (@1 atom) [var: (@0 bind-adr)])
+               (let ((val-adr (.compile    self (@2 atom) code-pad)))
+                 (.op-mov code-pad bind-adr val-adr)
+                 (.recycle-pos self val-adr))
+               bind-adr))
            (if (list? (@1 atom))
              (begin
                (do-each (v (@1 atom))
@@ -422,79 +546,67 @@
                    (.error self
                            "'define' parameter list must only contain symbols"
                            v)))
-               (let ((bind-idx      (.new-pos self))
+               (let ((bind-adr      (.new-pos self))
                      (var-name      (@0 (@1 atom)))
                      (lambda-params (drop (@1 atom) 1)))
-                 (.define-var     self var-name [var: (@0 bind-idx)])
-                 (.compile-lambda self lambda-params (drop atom 2) code-pad bind-idx)
-                 (.op-mov         code-pad out-idx bind-idx)))
+                 (.define-var self var-name [var: (@0 bind-adr)])
+                 (let ((lambda-adr (.compile-lambda self
+                                                    lambda-params
+                                                    (drop atom 2)
+                                                    code-pad)))
+                   (.op-mov code-pad bind-adr lambda-adr)
+                   (.recycle-pos self lambda-adr))
+                 bind-adr))
              (.error self "Can only define symbols as variable" atom)))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'return
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (eqv? (length atom) 2)
            (.error self "'return' needs exactly 1 argument" atom))
-         (.compile self (@1 atom) code-pad out-idx)
-         (.op-return code-pad out-idx)))
+         (.op-return code-pad (.compile self (@1 atom) code-pad))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'if
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (> (length atom) 2)
            (.error self "'if needs at least 2 arguments" atom))
          (if (eqv? (length atom) 4)
-           (let ((true-pad   (.make-code-pad self))
-                 (false-pad  (.make-code-pad self))
-                 (cond-idx   (.new-tmp-pos   self)))
-             (.compile self (@2 atom) true-pad  out-idx)
-             (.compile self (@3 atom) false-pad out-idx)
-             (.compile self (@1 atom) code-pad cond-idx)
-             (.op-brnif               code-pad (+ 1 (.count-ops true-pad)) cond-idx)
+           (let ((true-pad      (.make-code-pad self))
+                 (false-pad     (.make-code-pad self))
+                 (cond-adr      (.compile self (@1 atom) code-pad))
+                 (true-ret-adr  (.compile self (@2 atom) true-pad))
+                 (false-ret-adr (.compile self (@3 atom) false-pad))
+                 (cond-ret-adr  (.new-tmp-pos self)))
+             (.op-mov true-pad  cond-ret-adr true-ret-adr)
+             (.op-mov false-pad cond-ret-adr false-ret-adr)
+             (.op-brnif               code-pad (+ 1 (.count-ops true-pad)) cond-adr)
              (.append-code-pad        code-pad true-pad)
              (.op-br                  code-pad (.count-ops false-pad))
              (.append-code-pad        code-pad false-pad)
-             (.recycle-tmp-pos self cond-idx))
-           (let ((true-pad (.make-code-pad self))
-                 (cond-idx (.new-tmp-pos   self)))
-             (.compile self (@2 atom) true-pad out-idx)
-             (.compile self (@1 atom) code-pad cond-idx)
-             (.op-load-nil            code-pad out-idx)
-             (.op-brnif               code-pad (.count-ops true-pad) cond-idx)
-             (.append-code-pad        code-pad true-pad)
-             (.recycle-tmp-pos self cond-idx)))))
+             (.recycle-pos self true-ret-adr)
+             (.recycle-pos self false-ret-adr)
+             (.recycle-pos self cond-adr)
+             cond-ret-adr)
+           (.compile-one-branch-condition self code-pad #f #f (@2 atom) (@1 atom)))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'when
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (> (length atom) 2)
            (.error self "'when' needs at least 1 argument" atom))
-         (let ((branch-pad (.make-code-pad self))
-               (cond-idx   (.new-tmp-pos   self)))
-           (.compile-block self (drop atom 2) branch-pad out-idx)
-           (.compile self (@1 atom) code-pad cond-idx)
-           (.op-load-nil            code-pad out-idx)
-           (.op-brnif               code-pad (.count-ops branch-pad) cond-idx)
-           (.append-code-pad        code-pad branch-pad)
-           (.recycle-tmp-pos self cond-idx))))
+         (.compile-one-branch-condition self code-pad #t #f (drop atom 2) (@1 atom))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'unless
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (> (length atom) 2)
-           (.error self "'when' needs at least 1 argument" atom))
-         (let ((branch-pad (.make-code-pad self))
-               (cond-idx   (.new-tmp-pos   self)))
-           (.compile-block self (drop atom 2) branch-pad out-idx)
-           (.compile self (@1 atom) code-pad cond-idx)
-           (.op-load-nil            code-pad out-idx)
-           (.op-brif                code-pad (.count-ops branch-pad) cond-idx)
-           (.append-code-pad        code-pad branch-pad)
-           (.recycle-tmp-pos self cond-idx))))
+           (.error self "'unless needs at least 1 argument" atom))
+         (.compile-one-branch-condition self code-pad #t #t (drop atom 2) (@1 atom))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'for
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (> (length atom) 2)
            (.error self "'for' needs at least 1 argument" atom))
          (unless (list? (@1 atom))
@@ -502,48 +614,48 @@
          (unless (> (length (@1 atom)) 2)
            (.error self "first part of the iteration definition of \
                          'for' needs to contain at least 3 elements" atom))
-         (when (> (length (@1 atom)) 3)
+         (when (> (length (@1 atom)) 4)
            (.error self "first part of the iteration definition of \
                          'for' contains too many elements (only 3 or 4 allowed)" atom))
          (unless (symbol? (@0 (@1 atom)))
            (.error self "first part of the iteration definition of \
                          'for' needs to be a symbol" atom))
-         (.push-env   self)
+         (define for-ret-adr (inc-env-offs (.new-tmp-pos self)))
+         (.push-env self)
+         (.op-push-env code-pad 5) ; at least 5 temporaries for the loop
          (let ((i-def         (@1 atom))
                (iter-name     (@0 i-def))
                (start-val     (@1 i-def))
                (end-val       (@2 i-def))
                (iter-val      (@3 i-def))
-               (iter-idx      (.new-pos self))
-               (end-idx       (.new-pos self))
-               (ival-idx      (.new-pos self))
-               (cond-idx      (.new-pos self))
-               (tmp-out-idx   (.new-pos self))
+
+               (start-val-adr (.compile self start-val code-pad))
+               (end-val-adr   (.compile self end-val   code-pad))
+               (iter-val-adr  (if (nil? iter-val)
+                                (.store-static-data self 1)
+                                (.compile self iter-val code-pad)))
+               (iter-adr      (.new-pos self))
+               (body-ret-adr  (.new-pos self))
+               (cond-res-adr  (.new-pos self))
                (body-pad      (.make-code-pad self)))
-           (.op-push-env code-pad 5)
-           ; prepare values:
-           (.compile    self start-val code-pad iter-idx)
-           (.compile    self end-val   code-pad end-idx)
-           (if (nil? iter-val)
-             (.op-load                code-pad 1 ival-idx)
-             (.compile self iter-val  code-pad ival-idx))
-           (.define-var self (@0 (@1 atom)) [var: iter-idx])
-           ; execute block and iteration step:
-           (.compile-block self (drop atom 2) body-pad tmp-out-idx)
-           (.op-ge  body-pad cond-idx iter-idx end-idx)
-           (.op-inc body-pad iter-idx ival-idx)
+           (.define-var self iter-name [var: (@0 iter-adr)])
+           (.op-mov code-pad iter-adr start-val-adr)
+           (set! body-ret-adr (.compile-block self (drop atom 2) body-pad))
+           (.op-eq  body-pad cond-res-adr iter-adr end-val-adr)
+           (.op-inc body-pad iter-adr iter-val-adr)
            (.append-code-pad code-pad body-pad)
            (.op-brnif        code-pad
                              (- 0 (+ 1 (.count-ops body-pad)))
-                             cond-idx)
+                             cond-res-adr)
            ; cleanup:
-           (.op-mov-to  code-pad out-idx 1 tmp-out-idx)
+           (.op-mov code-pad for-ret-adr body-ret-adr)
            (.op-pop-env code-pad)
-           (.pop-env    self))))
+           (.pop-env self)
+           (dec-env-offs for-ret-adr))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'define-macro
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (> (length atom) 2)
            (.error self "'define-macro' needs at least 2 arguments" atom))
          (define params (@1 atom))
@@ -579,17 +691,16 @@
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'quote
-       (lambda (atom self code-pad out-idx)
+       (lambda (atom self code-pad)
          (unless (eqv? 2 (length atom))
            (.error self "'quote' needs exactly 1 argument" atom))
-         (.compile-quote self (@1 atom) code-pad out-idx)))
+         (.compile-quote self (@1 atom) code-pad)))
       new-env)))
 ;----------------------------------------------------------------------------
 
 (lambda (name data debug-info only-compile root-env)
   (let ((compiler (make-prog-frame debug-info)))
     (hook-compiler-methods compiler)
-    ; TODO: Transfer (@0 root-env) as init-env to compiler!
 
     (unless (not (nil? root-env))
       (error "compiler needs root environment"))
@@ -616,7 +727,7 @@
       (.recycle-pos compiler ret-adr)
 ;      (displayln PAD: ($pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
-        (displayln prog)
+;        (displayln prog)
         (if only-compile
           prog
           (run-vm-prog prog (@1 root-env)))))))
