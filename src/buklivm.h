@@ -218,34 +218,30 @@ class VMProgStateGuard
 };
 //---------------------------------------------------------------------------
 
-class VM : public ExternalGCRoot
+class VM
 {
     private:
         INST      *m_pc;
         PROG      *m_prog;
         VM        *m_vm;
-        AtomVec   *m_root_stack;
-        AtomVec   *m_prim_table;
-        AtomMap   *m_modules;
+        GC_ROOT_MEMBER_VEC(m_prim_table);
+        GC_ROOT_MEMBER_MAP(m_modules);
         bool       m_trace;
 
     public:
         Runtime   *m_rt;
 
         VM(Runtime *rt)
-            : ExternalGCRoot(&(rt->m_gc)), m_rt(rt),
+            : m_rt(rt),
               m_pc(nullptr),
               m_prog(nullptr),
               m_vm(this),
-              m_trace(false)
+              m_trace(false),
+              GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_prim_table),
+              GC_ROOT_MEMBER_INITALIZE_MAP(rt->m_gc, m_modules)
         {
-            m_rt->m_gc.add_external_root(this);
-            m_root_stack = rt->m_gc.allocate_vector(10);
             m_prim_table = rt->m_gc.allocate_vector(0);
             m_modules    = rt->m_gc.allocate_map();
-
-            m_root_stack->m_len = 0;
-            m_root_stack->push(Atom(T_MAP, m_modules));
 
             init_prims();
         }
@@ -270,17 +266,6 @@ class VM : public ExternalGCRoot
         }
 
         void init_prims();
-
-        virtual size_t gc_root_count() { return 2; }
-
-        virtual AtomVec *gc_root_get(size_t idx)
-        {
-            switch (idx)
-            {
-                case 0:  return m_root_stack;
-                default: return m_prim_table;
-            }
-        }
 
         void run_module_destructors()
         {
@@ -308,8 +293,7 @@ class VM : public ExternalGCRoot
                 }
                 else if (destr_func.m_type == T_PRIM)
                 {
-                    AtomVec *args = m_rt->m_gc.allocate_vector(0);
-                    AtomVecPush(m_root_stack, Atom(T_VEC, args));
+                    GC_ROOT_VEC(m_rt->m_gc, args) = m_rt->m_gc.allocate_vector(0);
                     Atom ret;
                     (*destr_func.m_d.func)(*args, ret);
                 }
@@ -330,8 +314,6 @@ class VM : public ExternalGCRoot
                 if (m_prim_table->at(i).m_type == T_PRIM)
                     delete m_prim_table->at(i).m_d.func;
             }
-
-            m_rt->m_gc.remove_external_root(this);
         }
 
         Atom eval(Atom at_ud, AtomVec *args = nullptr);

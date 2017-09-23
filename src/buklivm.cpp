@@ -156,8 +156,7 @@ void VM::load_module(BukaLISPModule *m)
 
     if (init_func.m_type == T_PRIM)
     {
-        AtomVec *args = m_rt->m_gc.allocate_vector(0);
-        AtomVecPush(m_root_stack, Atom(T_VEC, args));
+        GC_ROOT_VEC(m_rt->m_gc, args) = m_rt->m_gc.allocate_vector(0);
         Atom ret;
         (*init_func.m_d.func)(*args, ret);
     }
@@ -199,11 +198,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
     Atom *data      = m_prog->data_array();
     size_t data_len = m_prog->data_array_len();
 
-    AtomVec *env_stack = m_rt->m_gc.allocate_vector(10);
-    AtomVecPush avpvenvst(m_root_stack, Atom(T_VEC, env_stack));
-
-    AtomVec *cont_stack = m_rt->m_gc.allocate_vector(0);
-    AtomVecPush avpvcontst(m_root_stack, Atom(T_VEC, cont_stack));
+    GC_ROOT_VEC(m_rt->m_gc, env_stack)  = m_rt->m_gc.allocate_vector(10);
+    GC_ROOT_VEC(m_rt->m_gc, cont_stack) = m_rt->m_gc.allocate_vector(0);
 
     AtomVec *cur_env = args;
     env_stack->m_len = 0;
@@ -223,12 +219,11 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 #define PE_B ((PC.be))
 #define PE_O ((PC.oe))
 
-#define E_SET_D_PTR(env_idx, idx, val_ptr) do { \
+#define E_SET_CHECK_REALLOC_D(env_idx, idx) do { \
     if ((env_idx) == 0) \
     { \
         if (((size_t) idx) >= cur_env->m_len) \
             cur_env->check_size((idx)); \
-        val_ptr = &(cur_env->m_data[(idx)]); \
     } \
     else if ((env_idx) > 0) \
     { \
@@ -237,6 +232,19 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
         AtomVec &v = *(env_stack->m_data[env_stack->m_len - ((env_idx) + 1)].m_d.vec); \
         if (((size_t) idx) >= v.m_len) \
             v.check_size((idx)); \
+    } \
+} while (0)
+#define E_SET_CHECK_REALLOC(env_idx_reg, idx_reg) \
+    E_SET_CHECK_REALLOC_D(PE_##env_idx_reg, P_##idx_reg)
+
+#define E_SET_D_PTR(env_idx, idx, val_ptr) do { \
+    if ((env_idx) == 0) \
+    { \
+        val_ptr = &(cur_env->m_data[(idx)]); \
+    } \
+    else if ((env_idx) > 0) \
+    { \
+        AtomVec &v = *(env_stack->m_data[env_stack->m_len - ((env_idx) + 1)].m_d.vec); \
         val_ptr = &(v.m_data[(idx)]); \
     } \
 } while (0)
@@ -244,17 +252,11 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 #define E_SET_D(env_idx, idx, val) do { \
     if ((env_idx) == 0) \
     { \
-        if ((idx) >= (int32_t) cur_env->m_len) \
-            cur_env->check_size((idx)); \
         cur_env->m_data[(idx)] = (val); \
     } \
     else if ((env_idx) > 0) \
     { \
-        if ((env_idx) >= (int32_t) env_stack->m_len) \
-            error("out of env stack range (" #env_idx ")", Atom(T_INT, (env_idx))); \
         AtomVec &v = *(env_stack->m_data[env_stack->m_len - ((env_idx) + 1)].m_d.vec); \
-        if ((idx) >= (int32_t) v.m_len) \
-            v.check_size((idx)); \
         v.m_data[(idx)] = (val); \
     } \
 } while (0)
@@ -334,6 +336,7 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_MOV:
             {
+                E_SET_CHECK_REALLOC(O, O);
                 E_GET(tmp, A);
                 E_SET(O, *tmp);
                 break;
@@ -341,6 +344,7 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_NEW_VEC:
             {
+                E_SET_CHECK_REALLOC(O, O);
                 alloc = true;
                 E_SET(O, Atom(T_VEC, m_rt->m_gc.allocate_vector(P_A)));
                 break;
@@ -348,6 +352,7 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_NEW_MAP:
             {
+                E_SET_CHECK_REALLOC(O, O);
                 alloc = true;
                 E_SET(O, Atom(T_MAP, m_rt->m_gc.allocate_map()));
                 break;
@@ -378,6 +383,7 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_LOAD_NIL:
             {
+                E_SET_CHECK_REALLOC(O, O);
                 E_SET(O, Atom());
                 break;
             }
@@ -400,6 +406,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_NEW_CLOSURE:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 alloc = true;
 
                 E_GET(tmp, A);
@@ -420,6 +428,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_PACK_VA:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 size_t pack_idx = P_A;
                 if (pack_idx < cur_env->m_len)
                 {
@@ -439,6 +449,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_CALL:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 E_GET(tmp, A);
                 Atom &func = *tmp;
                 E_GET(tmp, B);
@@ -501,14 +513,14 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_RETURN:
             {
-                Atom *tmp;
-                E_GET(tmp, O);
+                Atom *tmp = nullptr;
 
                 cont_stack->pop(); // the current function can be discarded
                 // retrieve the continuation:
                 Atom *c = cont_stack->last();
                 if (!c || c->m_type == T_NIL)
                 {
+                    E_GET(tmp, O);
                     ret = *tmp;
                     m_pc = &(m_prog->m_instructions[m_prog->m_instructions_len - 2]);
                     break;
@@ -538,6 +550,9 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
                 env_stack = envs.m_d.vec;
                 cur_env   = env_stack->last()->m_d.vec;
+
+                E_SET_CHECK_REALLOC_D(eidx, oidx);
+                E_GET(tmp, O);
                 E_SET_D(eidx, oidx, *tmp);
                 if (m_trace) cout << "RETURN=> " << tmp->to_write_str() << endl;
 
@@ -588,6 +603,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_INC:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 size_t idx_o = P_O;
                 if (idx_o >= cur_env->m_len)
                     cur_env->set(idx_o, Atom(T_INT));
@@ -606,6 +623,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_NOT:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 E_GET(tmp, A);
                 Atom o(T_BOOL);
                 o.m_d.b = tmp->is_false();
@@ -615,6 +634,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_EQ:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 E_GET(tmp, A);
                 Atom &a = *tmp;
                 E_GET(tmp, B);
@@ -632,6 +653,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_NEQ:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 E_GET(tmp, A);
                 Atom &a = *tmp;
                 E_GET(tmp, B);
@@ -650,6 +673,7 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 #define     DEFINE_NUM_OP_BOOL(opname, oper)              \
             case OP_##opname:                             \
             {                                             \
+                E_SET_CHECK_REALLOC(O, O); \
                 E_GET(tmp, A);                            \
                 Atom &a = *tmp;                           \
                 E_GET(tmp, B);                            \
@@ -667,6 +691,7 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 #define     DEFINE_NUM_OP_NUM(opname, oper, neutr)                   \
             case OP_##opname:                                        \
             {                                                        \
+                E_SET_CHECK_REALLOC(O, O);      \
                 E_GET(tmp, A);                                       \
                 Atom &a = *tmp;                                      \
                 E_GET(tmp, B);                                       \
@@ -704,6 +729,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_MOD:
             {
+                E_SET_CHECK_REALLOC(O, O);
+
                 E_GET(tmp, A);
                 Atom &a = *tmp;
                 E_GET(tmp, B);

@@ -380,6 +380,9 @@ class GCRootRefPool;
 #define GC_ROOT(gc, name) \
     bukalisp::GCRootRefPool::GCRootRef gc_ref_##name((gc).get_root_ref_pool()); \
     Atom &name = *(gc_ref_##name.m_ref); name
+#define GC_ROOT_VEC(gc, name) \
+    bukalisp::GCRootRefPool::GCRootRef gc_ref_##name(T_VEC, (gc).get_root_ref_pool()); \
+    AtomVec *&name = gc_ref_##name.m_ref->m_d.vec; name
 
 #define GC_ROOT_MEMBER(name) \
     bukalisp::GCRootRefPool::GCRootRef gc_ref_##name; \
@@ -493,21 +496,6 @@ class GCRootRefPool
 };
 //---------------------------------------------------------------------------
 
-class GC;
-
-class ExternalGCRoot
-{
-    private:
-        GC      *m_gc;
-    public:
-        ExternalGCRoot(GC *gc);
-        void init();
-        virtual ~ExternalGCRoot();
-        virtual size_t gc_root_count() = 0;
-        virtual AtomVec *gc_root_get(size_t idx) = 0;
-};
-//---------------------------------------------------------------------------
-
 typedef std::unordered_map<std::string, Sym *> StrSymMap;
 
 class GC
@@ -522,7 +510,6 @@ class GC
         uint8_t  m_current_color;
 
         std::vector<Sym *>              m_perm_syms;
-        std::vector<ExternalGCRoot *>   m_ext_roots;
         StrSymMap                       m_symtbl;
 
 #define GC_SMALL_VEC_LEN     10
@@ -621,18 +608,6 @@ class GC
 
             m_gc_vec_stack.clear();
             m_gc_map_stack.clear();
-
-            for (auto &ext_root : m_ext_roots)
-            {
-//                std::cout << "EXT ROOT: " << ext_root << std::endl;
-                for (size_t i = 0; i < ext_root->gc_root_count(); i++)
-                {
-                    m_gc_vec_stack.push_back(ext_root->gc_root_get(i));
-//                    std::cout << "EXT ROOT AV: " << av << ">" << Atom(T_VEC, av).to_write_str( << std::endl;
-                }
-            }
-
-//            std::cout << "ROOT POOL: " << Atom(T_VEC, m_root_pool.get_pool()).to_write_str() << std::endl;
 
             m_gc_vec_stack.push_back(m_root_pool.get_pool());
 
@@ -741,19 +716,6 @@ class GC
         GCRootRefPool &get_root_ref_pool()
         {
             return m_root_pool;
-        }
-
-        void add_external_root(ExternalGCRoot *gcr) { m_ext_roots.push_back(gcr); }
-        void remove_external_root(ExternalGCRoot *gcr)
-        {
-            std::vector<ExternalGCRoot *> new_ext_roots;
-            for (auto &e : m_ext_roots)
-            {
-                if (e != gcr)
-                    new_ext_roots.push_back(e);
-            }
-
-            m_ext_roots = new_ext_roots;
         }
 
         void add_permanent(Sym *sym) { m_perm_syms.push_back(sym); }

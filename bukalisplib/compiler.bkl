@@ -21,6 +21,17 @@
 (include code-pad)
 
 ;----------------------------------------------------------------------------
+(define find-max-number-in-values
+  (lambda (min-nr the-map fetch_func)
+    (define max-nr min-nr)
+    (define cur min-nr)
+    (do-each (k v the-map)
+      (set! cur (fetch_func k v the-map))
+      (when (< max-nr cur)
+        (set! max-nr cur)))
+    max-nr))
+
+;----------------------------------------------------------------------------
 
 (define dispatch
  (lambda (key m arg)
@@ -334,11 +345,13 @@
 
     ($define! self (push-root-env root-env)
       (push! ($env-stack: self) (@0 root-env))
-      (let ((new-pos (length (@1 root-env))))
-        ; reserve space for the return value of top-level expressions:
-        (when (eqv? new-pos 0)
-          (set! new-pos 1))
-        (push! ($env-pos-stack: self) [new-pos []])))
+      (define max-pos
+       (find-max-number-in-values -1 (@0 root-env) (lambda (k v)
+                                                     (if (eqv? var: (@0 v))
+                                                       (@1 v)
+                                                       -1))))
+      (set! max-pos (+ 1 max-pos))
+      (push! ($env-pos-stack: self) [max-pos []]))
 
     ($define! self (make-base-env)
       (define new-env {})
@@ -533,9 +546,15 @@
            (begin
              (unless (eqv? 3 (length atom))
                (.error self "'define' needs 2 arguments" atom))
-             (let ((bind-adr (.new-pos self)))
+             (let ((var (.lookup self (@1 atom)))
+                   (bind-adr nil))
+               (if (nil? var)
+                 (set! bind-adr (.new-pos self))
+                 (if (eqv? var: (@0 (@1 var)))
+                   (set! bind-adr [(@1 (@1 var)) (@0 var)])
+                   (set! bind-adr (.new-pos self))))
                (.define-var self (@1 atom) [var: (@0 bind-adr)])
-               (let ((val-adr (.compile    self (@2 atom) code-pad)))
+               (let ((val-adr (.compile self (@2 atom) code-pad)))
                  (.op-mov code-pad bind-adr val-adr)
                  (.recycle-pos self val-adr))
                bind-adr))
@@ -709,7 +728,9 @@
     (when (eqv? 0 (length (@0 root-env)))
       (@!0 root-env (.make-base-env compiler)))
     (when (nil? (@1 root-env))
-      (@!1 root-env []))
+      (@!1 root-env [nil]))
+
+;    (displayln (str "ROOTENV: " root-env))
 
     (.push-root-env compiler root-env)
     (let ((code-pad    (.make-code-pad compiler))

@@ -196,24 +196,6 @@ Atom AtomMap::at(const Atom &k, bool &defined)
 }
 //---------------------------------------------------------------------------
 
-ExternalGCRoot::ExternalGCRoot(GC *gc)
-    : m_gc(gc)
-{
-}
-//---------------------------------------------------------------------------
-
-void ExternalGCRoot::init()
-{
-    m_gc->add_external_root(this);
-}
-//---------------------------------------------------------------------------
-
-ExternalGCRoot::~ExternalGCRoot()
-{
-    m_gc->remove_external_root(this);
-}
-//---------------------------------------------------------------------------
-
 GCRootRefPool::GCRootRef::~GCRootRef()
 {
     m_pool.unreg(m_idx);

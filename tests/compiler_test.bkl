@@ -23,6 +23,7 @@
   (T '(begin 1) 1 my-env)
   ($!l (@0 my-env) [var: (length (@1 my-env))])
   (push! (@1 my-env) 12)
+  (displayln my-env)
   (T '(begin
         (define k 10)
         ((lambda () l)))
@@ -622,6 +623,11 @@
         (+ (* b c) 10))
       (x 2.5 10))
    35)
+(T '(begin (define x 10) (define x 20) x) 20)
+(T '(begin (define x 10) (define y 20) (define x 21) [x y]) '(21 20))
+(T '(begin (define x 10) (define y 20) (define x y) x) 20)
+(T '(begin (define if 10) if) 10)
+
 
 ; Test varargs
 (T '((lambda (. x) x))              [])

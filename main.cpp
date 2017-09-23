@@ -94,7 +94,7 @@ void test_gc1()
 }
 //---------------------------------------------------------------------------
 
-class Reader : public ExternalGCRoot
+class Reader
 {
     private:
         GC                m_gc;
@@ -103,21 +103,16 @@ class Reader : public ExternalGCRoot
         Parser            m_par;
         AtomMap          *m_debug_info;
 
-        AtomVec          *m_root_set;
+        GC_ROOT_MEMBER_VEC(m_root_set);
 
     public:
         Reader()
-            : ExternalGCRoot(&m_gc),
-              m_ag(&m_gc),
-              m_par(m_tok, &m_ag)
+            : m_ag(&m_gc),
+              m_par(m_tok, &m_ag),
+              GC_ROOT_MEMBER_INITALIZE_VEC(m_gc, m_root_set)
         {
             m_root_set = m_gc.allocate_vector(0);
-
-            ExternalGCRoot::init();
         }
-
-        virtual size_t gc_root_count() { return 1; }
-        virtual AtomVec *gc_root_get(size_t i) { return m_root_set; }
 
         std::string debug_info(Atom &a)
         {
@@ -250,10 +245,10 @@ void test_maps()
     tc.make_always_alive(m.at(tc.a_kw("b")));
 
     TEST_EQ(tc.pot_alive_maps(), 3, "alive map count");
-    TEST_EQ(tc.pot_alive_vecs(), 4, "alive vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 5, "alive vec count");
     tc.collect();
     TEST_EQ(tc.pot_alive_maps(), 2, "alive map count after gc");
-    TEST_EQ(tc.pot_alive_vecs(), 3, "alive vec count after gc");
+    TEST_EQ(tc.pot_alive_vecs(), 4, "alive vec count after gc");
 }
 //---------------------------------------------------------------------------
 
@@ -1045,18 +1040,46 @@ int main(int argc, char *argv[])
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
 
+            GC_ROOT_VEC(rt.m_gc, root_env) = rt.m_gc.allocate_vector(0);
+
             try
             {
                 Atom r =
                     i.call_compiler(
                         input_file_path,
                         slurp_str(input_file_path),
+                        root_env,
                         false);
                 cout << r.to_write_str() << endl;
             }
             catch (std::exception &e)
             {
                 cerr << "Exception: " << e.what() << endl;
+            }
+        }
+        else if (interpret)
+        {
+            Runtime rt;
+            VM vm(&rt);
+            load_vm_modules(vm);
+            Interpreter i(&rt, &vm);
+            vm.set_trace(i_trace_vm);
+            i.set_trace(i_trace);
+            i.set_force_always_gc(i_force_gc);
+            input_file_path = "<stdin>";
+
+            std::string line;
+            while (std::getline(std::cin, line))
+            {
+                try
+                {
+                    Atom r = i.eval(input_file_path, line);
+                    cout << "> " << write_atom(r) << endl;
+                }
+                catch (std::exception &e)
+                {
+                    cerr << "Exception: " << e.what() << endl;
+                }
             }
         }
         else
@@ -1068,13 +1091,20 @@ int main(int argc, char *argv[])
             vm.set_trace(i_trace_vm);
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
+            input_file_path = "<stdin>";
+
+            GC_ROOT_VEC(rt.m_gc, root_env) = rt.m_gc.allocate_vector(0);
 
             std::string line;
             while (std::getline(std::cin, line))
             {
                 try
                 {
-                    Atom r = i.eval(input_file_path, line);
+                    if (line.size() > 0 && line[0] == '@')
+                        line = slurp_str(line.substr(1, line.size()));
+
+                    Atom r =
+                        i.call_compiler(input_file_path, line, root_env, false);
                     cout << "> " << write_atom(r) << endl;
                 }
                 catch (std::exception &e)

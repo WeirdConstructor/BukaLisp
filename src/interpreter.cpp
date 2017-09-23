@@ -15,12 +15,8 @@ namespace bukalisp
 
 void Interpreter::init()
 {
-    ExternalGCRoot::init();
-
     m_env_stack  = m_rt->m_gc.allocate_vector(0);
-    m_cache      = m_rt->m_gc.allocate_vector(0);
-
-//    std::cout << "ENVSTKROOT=" << m_env_stack << ", ROOTSTKROOT=" << m_root_stack << std::endl;
+    m_prim_table = m_rt->m_gc.allocate_vector(0);
 
     AtomMap *root_env = m_rt->m_gc.allocate_map();
     m_env_stack->push(Atom(T_MAP, root_env));
@@ -57,16 +53,16 @@ void Interpreter::init()
     DEF_SYNTAX(displayln-time);
     DEF_SYNTAX(include);
 
-    AtomVec *av_prim_tbl = m_rt->m_gc.allocate_vector(0);
-    m_cache->set(1, Atom(T_VEC, av_prim_tbl));
-
 #define START_PRIM() \
     tmp = Atom(T_PRIM); \
     tmp.m_d.func = new Atom::PrimFunc; \
     m_primitives.push_back(tmp.m_d.func); \
     (*tmp.m_d.func) = [this](AtomVec &args, Atom &out) {
 
-#define END_PRIM(name) }; av_prim_tbl->push(Atom(T_SYM, m_rt->m_gc.new_symbol(#name))); root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
+#define END_PRIM(name) \
+    }; \
+    m_prim_table->push(Atom(T_SYM, m_rt->m_gc.new_symbol(#name))); \
+    root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
 
 #define IN_INTERPRETER 1
     #include "primitives.cpp"
@@ -79,11 +75,10 @@ void Interpreter::init()
 
 void Interpreter::print_primitive_table()
 {
-    AtomVec *ppt = m_cache->at(1).m_d.vec;
     AtomMap *m = m_rt->m_gc.allocate_map();
-    for (size_t i = 0; i < ppt->m_len; i++)
+    for (size_t i = 0; i < m_prim_table->m_len; i++)
     {
-        m->set(ppt->m_data[i], Atom(T_INT, i));
+        m->set(m_prim_table->m_data[i], Atom(T_INT, i));
     }
     cout << Atom(T_MAP, m).to_write_str() << endl;
 }
@@ -628,8 +623,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
 
     if (eval_args)
     {
-        AtomVec *ev_av = m_rt->m_gc.allocate_vector(av->m_len - 1);
-        GC_ROOT(m_rt->m_gc, ev_av_r) = Atom(T_VEC, ev_av);
+        GC_ROOT_VEC(m_rt->m_gc, ev_av) = m_rt->m_gc.allocate_vector(av->m_len - 1);
 
         for (size_t i = 1 + arg_offs; i < av->m_len; i++)
         {
@@ -659,8 +653,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
         Atom lambda_form = func.m_d.vec->m_data[1];
         Atom debug_pos   = func.m_d.vec->m_data[2];
 
-        AtomVec *old_env = m_env_stack;
-        GC_ROOT(m_rt->m_gc, old_env_r) = Atom(T_VEC, old_env);
+        GC_ROOT_VEC(m_rt->m_gc, old_env) = m_env_stack;
 
         m_env_stack = env.m_d.vec;
 
@@ -911,37 +904,33 @@ Atom Interpreter::call_compiler(
 
 Atom Interpreter::get_compiler_func()
 {
-    Atom compiler_func = m_cache->at(0);
+    if (m_compiler_func.m_type != T_NIL)
+        return m_compiler_func;
 
-    if (compiler_func.m_type == T_NIL)
+    const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
+    if (bukalisp_lib_path == NULL)
+        bukalisp_lib_path = ".\\bukalisplib";
+
+    std::string compiler_path =
+        std::string(bukalisp_lib_path) + "\\" + "compiler.bkl";
+
+    try
     {
-        const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
-        if (bukalisp_lib_path == NULL)
-            bukalisp_lib_path = ".\\bukalisplib";
-
-        std::string compiler_path =
-            std::string(bukalisp_lib_path) + "\\" + "compiler.bkl";
-
-        try
-        {
-            compiler_func = eval(compiler_path, slurp_str(compiler_path));
-        }
-        catch (std::exception &e)
-        {
-            throw InterpreterException(
-                "ERROR while compiling the compiler ["
-                + compiler_path + "] Exception: " + e.what());
-        }
-
-        if (compiler_func.m_type != T_CLOS)
-            throw InterpreterException(
-                "Compiler did not return a function! : "
-                + compiler_func.to_write_str());
-
-        m_cache->set(0, compiler_func);
+        m_compiler_func = eval(compiler_path, slurp_str(compiler_path));
+    }
+    catch (std::exception &e)
+    {
+        throw InterpreterException(
+            "ERROR while compiling the compiler ["
+            + compiler_path + "] Exception: " + e.what());
     }
 
-    return compiler_func;
+    if (m_compiler_func.m_type != T_CLOS)
+        throw InterpreterException(
+            "Compiler did not return a function! : "
+            + m_compiler_func.to_write_str());
+
+    return m_compiler_func;
 }
 //---------------------------------------------------------------------------
 
