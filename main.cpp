@@ -17,6 +17,8 @@
 #include "atom_printer.h"
 #include "util.h"
 
+#include <modules/util/utillib.h>
+
 //---------------------------------------------------------------------------
 
 using namespace bukalisp;
@@ -960,6 +962,12 @@ int main(int argc, char *argv[])
             else
                 input_file_path = argv[i];
         }
+
+//        using namespace VVal;
+//        VVal::VV v = init_utillib();
+//        cout << "MODS:" << v << endl;
+//        cout << v->_(1)->_("fromCsv")->type() << endl;
+//        cout << v->_(1)->_("fromCsv")->call(vv_list() << vv("1,2,3")) << endl;
 
         if (tests)
         {

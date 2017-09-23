@@ -23,19 +23,6 @@
 
 #pragma once
 
-namespace Lua
-{
-class Instance;
-};
+#include <modules/vval.h>
 
-namespace lal_rt
-{
-//---------------------------------------------------------------------------
-
-class LuaThread;
-
-void init_utillib(LuaThread *t, Lua::Instance &lua);
-
-//---------------------------------------------------------------------------
-
-} // namespace lal_rt
+VVal::VV init_utillib();

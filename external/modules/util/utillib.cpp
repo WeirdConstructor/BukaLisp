@@ -21,10 +21,9 @@
 * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ******************************************************************************/
 
-#include "rt/utillib.h"
-#include "rt/lua_thread.h"
-#include "rt/lua_thread_helper.h"
-#include "base/csv.h"
+#include "utillib.h"
+#include "csv.h"
+#include <modules/vval_util.h>
 #include <boost/locale/encoding.hpp>
 #if USE_STD_REGEX
 #   include <regex>
@@ -33,14 +32,9 @@
 #   include <boost/regex.hpp>
 #   define RE_PREFIX boost
 #endif
-#include "base/vval_util.h"
 
 using namespace VVal;
 using namespace std;
-
-namespace lal_rt
-{
-//---------------------------------------------------------------------------
 
 VV_CLOSURE_DOC(util_from_csv,
 "@util procedure (util-from-csv _csv-string_ _field-sep_ _row-sep_)\n"
@@ -130,7 +124,7 @@ VV_CLOSURE_DOC(util_to_utf8,
 //---------------------------------------------------------------------------
 
 VV_CLOSURE_DOC(util_from_utf8,
-"@util:rt-util procedure (util-from-utf8 _string_ _dest-encoding-name_)\n\n"
+"@util:bklisp-util procedure (util-from-utf8 _string_ _dest-encoding-name_)\n\n"
 "Decodes the UTF8 _string_ into the _dest-encoding-name_\n"
 "Returns the bytes of the result.\n"
 "See also `util-to-utf8`.\n"
@@ -460,17 +454,23 @@ VV_CLOSURE_DOC(util_re,
 }
 //---------------------------------------------------------------------------
 
-void init_utillib(LuaThread *t, Lua::Instance &lua)
+VVal::VV init_utillib()
 {
-    VV obj(vv_list() << vv_ptr(t, "LuaThread"));
+    VV reg(vv_list() << vv("util"));
+    VV mod(vv_map());
+    reg << mod;
 
-    LUA_REG(lua, "util", "fromCsv", obj, util_from_csv);
-    LUA_REG(lua, "util", "toCsv",   obj, util_to_csv);
-    LUA_REG(lua, "util", "toUtf8",  obj, util_to_utf8);
-    LUA_REG(lua, "util", "fromUtf8",obj, util_from_utf8);
-    LUA_REG(lua, "util", "toJson",  obj, util_to_json);
-    LUA_REG(lua, "util", "fromJson",obj, util_from_json);
-    LUA_REG(lua, "util", "re"      ,obj, util_re);
+#define SET_FUNC(functionName, closureName) \
+    mod->set(#functionName, VVC_NEW_##closureName())
+
+    SET_FUNC(fromCsv,  util_from_csv);
+    SET_FUNC(toCsv,    util_to_csv);
+    SET_FUNC(toUtf8,   util_to_utf8);
+    SET_FUNC(fromUtf8, util_from_utf8);
+    SET_FUNC(toJson,   util_to_json);
+    SET_FUNC(fromJson, util_from_json);
+    SET_FUNC(re      , util_re);
+
+    return reg;
 }
-
-} // namespace lal_rt
+//---------------------------------------------------------------------------

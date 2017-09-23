@@ -15,11 +15,11 @@ add_library(bukalisp_lib STATIC
     src/util.cpp
 )
 
-include(external/modules/modules.cmake)
-
 add_executable(bklisp main.cpp)
 
 target_link_libraries(bklisp bukalisp_lib)
+
+include(external/modules/modules.cmake)
 
 include_directories(src/ external/)
 

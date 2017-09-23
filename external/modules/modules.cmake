@@ -4,9 +4,9 @@ add_library(bklisp_module_support STATIC
     external/modules/vval.cpp
     external/modules/vval_util.cpp
 )
-add_library(bklisp_mod_sqlite STATIC
+#add_library(bklisp_mod_sqlite STATIC
 #    external/modules/sqlite.cpp
-)
+#)
 add_library(bklisp_mod_util STATIC
     external/modules/util/crc.cpp
     external/modules/util/csv.cpp
@@ -23,4 +23,4 @@ else()
     set(PLATFORM_LIBS_ADD -ldl)
 endif()
 target_link_libraries(bklisp_module_support ${PLATFORM_LIBS_ADD})
-target_link_libraries(bukalisp_lib bklisp_module_support)
+target_link_libraries(bukalisp_lib bklisp_module_support bklisp_mod_util ${Boost_LIBRARIES} ${BOOST_SUPPORT_LIBS} ${POCO_LIBRARIES})
