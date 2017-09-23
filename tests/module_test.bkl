@@ -16,14 +16,14 @@
 (T (lambda () ((@2 ($isInited test))))
    #t "module initialized");
 
-(T (*id x:)             "x"                     "identity keyword")
-(T (*id 'x)             "x"                     "identity symbol")
+(T (*id x:)             x:                      "identity keyword")
+(T (*id 'x)             'x                      "identity symbol")
 (T (*id "x")            "x"                     "identity string")
 (T (*id [1 2 3])        '(1 2 3)                "identity list")
-(T (*id [1 {2 2} 3])    '(1 {2 2} 3)            "identity nesting list")
-(T (*id {a: 1})         {'a 1}                  "identity map kw")
-(T (*id {'a 1})         {'a 1}                  "identity map sym")
-(T (*id {"a" 1})        {'a 1}                  "identity map str")
+(T (*id [1 {x2: 2} 3])  '(1 {x2: 2} 3)          "identity nesting list")
+(T (*id {a: 1})         {a: 1}                  "identity map kw")
+(T (*id {'a 1})         {a: 1}                  "identity map sym")
+(T (*id {"a" 1})        {a: 1}                  "identity map str")
 (T (*id #t)             #t                      "identity true")
 (T (*id #f)             #f                      "identity true")
 (T (*id #f)             #f                      "identity true")
@@ -52,5 +52,12 @@
         12 42)))
    [12 42]
    "calling function from module (lots of)")
+
+(T (lambda()
+     ((@2 ($call test))
+      +
+      12 42))
+   54
+   "calling primitive function from module")
 
 'ALL-OK

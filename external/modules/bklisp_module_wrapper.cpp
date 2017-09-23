@@ -32,10 +32,17 @@ Atom vv2atom(bukalisp::VM *vm, const VV &vv)
 {
 //    cout << "vv2atom: " << vv << endl;
 
+    if (vv->is_keyword())
+    {
+        return Atom(T_KW, vm->m_rt->m_gc.new_symbol(vv->s()));
+    }
+    else if (vv->is_symbol())
+    {
+        return Atom(T_SYM, vm->m_rt->m_gc.new_symbol(vv->s()));
+    }
     if (vv->is_string() || vv->is_bytes() || vv->is_datetime())
     {
-        Atom ret(T_STR, vm->m_rt->m_gc.new_symbol(vv->s()));
-        return ret;
+        return Atom(T_STR, vm->m_rt->m_gc.new_symbol(vv->s()));
     }
     else if (vv->is_undef())
         return Atom();
@@ -69,7 +76,7 @@ Atom vv2atom(bukalisp::VM *vm, const VV &vv)
         for (auto pv : *vv)
         {
             m.m_d.map->set(
-                Atom(T_SYM, vm->m_rt->m_gc.new_symbol(pv->_s(0))),
+                Atom(T_KW, vm->m_rt->m_gc.new_symbol(pv->_s(0))),
                 vv2atom(vm, pv->_(1)));
         }
         return m;
@@ -138,8 +145,8 @@ VV atom2vv(VM *vm, Atom &a)
         case T_DBL:     return vv(a.m_d.d);
         case T_BOOL:    return vv_bool(a.m_d.b);
         case T_STR:     return vv(a.m_d.sym->m_str);
-        case T_SYM:     return vv(a.m_d.sym->m_str);
-        case T_KW:      return vv(a.m_d.sym->m_str);
+        case T_SYM:     return vv_sym(a.m_d.sym->m_str);
+        case T_KW:      return vv_kw(a.m_d.sym->m_str);
         case T_SYNTAX:  return vv(a.to_write_str());
         case T_VEC:
         {

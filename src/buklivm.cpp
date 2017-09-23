@@ -176,7 +176,7 @@ AtomMap *VM::loaded_modules()
 }
 //---------------------------------------------------------------------------
 
-Atom VM::eval(Atom at_ud, AtomVec *args)
+Atom VM::eval(Atom callable, AtomVec *args)
 {
     using namespace std::chrono;
 
@@ -184,24 +184,24 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
     INST *pc   = nullptr;
 
     GC_ROOT_VEC(m_rt->m_gc, env_stack)  = nullptr;
-    GC_ROOT_VEC(m_rt->m_gc, cont_stack) = m_rt->m_gc.allocate_vector(0);
+    GC_ROOT_VEC(m_rt->m_gc, cont_stack) = nullptr;
 
-    if (at_ud.m_type == T_UD && at_ud.m_d.ud->type() == "VM-PROG")
+    if (callable.m_type == T_UD && callable.m_d.ud->type() == "VM-PROG")
     {
-        prog      = dynamic_cast<PROG*>(at_ud.m_d.ud);
+        prog      = dynamic_cast<PROG*>(callable.m_d.ud);
         pc        = &(prog->m_instructions[0]);
         env_stack = m_rt->m_gc.allocate_vector(10);
         env_stack->m_len = 0;
     }
-    else if (at_ud.m_type == T_CLOS)
+    else if (callable.m_type == T_CLOS)
     {
-        if (at_ud.m_d.vec->m_len == 2)
+        if (callable.m_d.vec->m_len == 2)
         {
-            prog = dynamic_cast<PROG*>(at_ud.m_d.vec->m_data[0].m_d.ud);
+            prog = dynamic_cast<PROG*>(callable.m_d.vec->m_data[0].m_d.ud);
             pc   = &(prog->m_instructions[0]);
-            env_stack = at_ud.m_d.vec->m_data[1].m_d.vec;
+            env_stack = callable.m_d.vec->m_data[1].m_d.vec;
         }
-        else if (at_ud.m_d.vec->m_len == 3)
+        else if (callable.m_d.vec->m_len == 3)
         {
             if (!m_interpreter_call)
             {
@@ -209,20 +209,26 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
                         "No interpreter?" << endl;
                 return Atom();
             }
-            return m_interpreter_call(at_ud, args);
+            return m_interpreter_call(callable, args);
         }
         else
         {
             cout << "VM-ERROR: Broken closure input to run-vm-prog! "
-                 << at_ud.to_write_str() << endl;
+                 << callable.to_write_str() << endl;
             return Atom();
         }
+    }
+    else if (callable.m_type == T_PRIM)
+    {
+        Atom ret;
+        (*callable.m_d.func)(*args, ret);
+        return ret;
     }
     else
     {
 //        error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
         cout << "VM-ERROR: Bad input type to run-vm-prog, expected VM-PROG or closure, got: "
-             << at_ud.to_write_str() << endl;
+             << callable.to_write_str() << endl;
         return Atom();
     }
 
@@ -236,9 +242,10 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
     AtomVec *cur_env = args;
     env_stack->push(Atom(T_VEC, cur_env));
 
-    cont_stack->push(at_ud);
+    cont_stack = m_rt->m_gc.allocate_vector(0);
+    cont_stack->push(callable);
 
-//    cout << "VM PROG: " << at_ud.to_write_str() << endl;
+//    cout << "VM PROG: " << callable.to_write_str() << endl;
 
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
@@ -394,20 +401,79 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
                 E_GET(tmp, O);
                 Atom &vec = *tmp;
 
+                E_GET(tmp, B);
                 if (vec.m_type == T_VEC)
                 {
-                    E_GET(tmp, B);
+                    // XXX: Attention, *tmp is taken as reference and assigned
+                    //      to a vector it is itself part of. In this case, the
+                    //      vector might get reallocated and the *tmp reference
+                    //      might be invalidated!
+                    //      However, as *tmp comes from the current environment
+                    //      frame, this should not happen, until we get
+                    //      direct access to the environment/frame vector.
                     vec.m_d.vec->set(P_A, *tmp);
                 }
                 else if (vec.m_type == T_MAP)
                 {
                     Atom *key;
                     E_GET(key, A);
-                    E_GET(tmp, B);
                     vec.m_d.map->set(*key, *tmp);
                 }
                 else
                     error("Can CSET_VEC on vector and map", vec);
+
+                break;
+            }
+
+            case OP_SET:
+            {
+                E_GET(tmp, O);
+                Atom &vec = *tmp;
+                Atom *key;
+                E_GET(key, A);
+
+                E_GET(tmp, B);
+                if (vec.m_type == T_VEC)
+                {
+                    // XXX: Attention, *tmp is taken as reference and assigned
+                    //      to a vector it is itself part of. In this case, the
+                    //      vector might get reallocated and the *tmp reference
+                    //      might be invalidated!
+                    //      However, as *tmp comes from the current environment
+                    //      frame, this should not happen, until we get
+                    //      direct access to the environment/frame vector.
+                    vec.m_d.vec->set((size_t) key->to_int(), *tmp);
+                }
+                else if (vec.m_type == T_MAP)
+                {
+                    vec.m_d.map->set(*key, *tmp);
+                }
+                else
+                    error("Can SET on vector and map", vec);
+
+                break;
+            }
+
+            case OP_GET:
+            {
+                E_SET_CHECK_REALLOC(O, O);
+
+                E_GET(tmp, A);
+                Atom &vec = *tmp;
+
+                Atom *key;
+                E_GET(key, B);
+
+                if (vec.m_type == T_VEC)
+                {
+                    E_SET(O, vec.m_d.vec->at((size_t) key->to_int()));
+                }
+                else if (vec.m_type == T_MAP)
+                {
+                    E_SET(O, vec.m_d.map->at(*key));
+                }
+                else
+                    error("Can GET on vector and map", vec);
 
                 break;
             }
@@ -705,6 +771,97 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
                 else
                     o.m_d.b = a.to_int() != b.to_int();
                 E_SET(O, o);
+                break;
+            }
+
+            case OP_ITER:
+            {
+                E_SET_CHECK_REALLOC(O, O);
+
+                E_GET(tmp, A);
+                Atom &vec = *tmp;
+
+                alloc = true;
+                Atom iter(T_VEC, m_rt->m_gc.allocate_vector(2));
+                if (vec.m_type == T_VEC)
+                {
+                    iter.m_d.vec->m_data[0] = Atom(T_INT, -1);
+                }
+                else if (vec.m_type == T_MAP)
+                {
+                    AtomMapIterator *mi = new AtomMapIterator(vec);
+                    Atom ud(T_UD);
+                    ud.m_d.ud = mi;
+                    iter.m_d.vec->m_data[0] = ud;
+                }
+                else
+                    error("Can't ITER on non map or non vector", vec);
+
+                iter.m_d.vec->m_data[1] = vec;
+                E_SET(O, iter);
+                break;
+            }
+
+            case OP_NEXT:
+            {
+                E_SET_CHECK_REALLOC(O, O);
+                E_SET_CHECK_REALLOC(A, A);
+
+                E_GET(tmp, B);
+                Atom &iter = *tmp;
+                if (iter.m_type != T_VEC && iter.m_d.vec->m_len < 2)
+                    error("Bad iterator found in NEXT", iter);
+
+                Atom *iter_elems = iter.m_d.vec->m_data;
+
+                if (iter_elems[0].m_type == T_INT)
+                {
+                    int64_t &i = iter_elems[0].m_d.i;
+                    i++;
+                    Atom b(T_BOOL);
+                    b.m_d.b = i >= iter_elems[1].m_d.vec->m_len;
+                    E_SET(O, b);
+                    if (!b.m_d.b)
+                    {
+                        E_SET(A, iter_elems[1].m_d.vec->at((size_t) i));
+                    }
+                }
+                else if (iter_elems[0].m_type == T_UD)
+                {
+                    AtomMapIterator *mi =
+                        dynamic_cast<AtomMapIterator *>(iter_elems[0].m_d.ud);
+                    mi->next();
+                    Atom b(T_BOOL);
+                    b.m_d.b = !mi->ok();
+                    E_SET(O, b);
+                    if (!b.m_d.b)
+                    {
+                        E_SET(A, mi->value());
+                    }
+                }
+                break;
+            }
+
+            case OP_IKEY:
+            {
+                E_SET_CHECK_REALLOC(O, O);
+                E_GET(tmp, B);
+                Atom &iter = *tmp;
+                if (iter.m_type != T_VEC && iter.m_d.vec->m_len < 2)
+                    error("Bad iterator found in NEXT", iter);
+
+                Atom *iter_elems = iter.m_d.vec->m_data;
+
+                if (iter_elems[0].m_type == T_INT)
+                {
+                    E_SET(O, iter_elems[0]);
+                }
+                else if (iter_elems[0].m_type == T_UD)
+                {
+                    AtomMapIterator *mi =
+                        dynamic_cast<AtomMapIterator *>(iter_elems[0].m_d.ud);
+                    E_SET(O, mi->key());
+                }
                 break;
             }
 

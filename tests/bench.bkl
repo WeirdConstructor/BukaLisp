@@ -1,5 +1,5 @@
 (displayln-time
-  (let ((x 100000) (cnt 0) (o 1))
+  (let ((x 1000000) (cnt 0) (o 1))
     (while (> x 0)
       (set! cnt (+ cnt o))
       (set! x (- x o))

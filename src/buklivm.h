@@ -54,6 +54,11 @@ class VMException : public std::exception
     X(BRIF,          18) \
     X(BR,            19) \
     X(INC,           20) \
+    X(SET,           21) \
+    X(GET,           22) \
+    X(ITER,          23) \
+    X(NEXT,          24) \
+    X(IKEY,          25) \
     X(ADD,          100) \
     X(SUB,          101) \
     X(MUL,          102) \

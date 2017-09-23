@@ -75,6 +75,8 @@ VV vv(int32_t v);
 VV vv(int16_t v);
 VV vv(double v);
 VV vv(const std::string &v);
+VV vv_kw(const std::string &v);
+VV vv_sym(const std::string &v);
 VV vv(const std::wstring &v);
 VV vv_list();
 VV vv_map();
@@ -222,6 +224,8 @@ class VariantValue
         virtual bool is_false()    const { return !this->b(); }
         virtual bool is_boolean()  const { return false; }
         virtual bool is_string()   const { return false; }
+        virtual bool is_keyword()  const { return false; }
+        virtual bool is_symbol()   const { return false; }
         virtual bool is_bytes()    const { return false; }
         virtual bool is_int()      const { return false; }
         virtual bool is_double()   const { return false; }
@@ -473,8 +477,11 @@ class StringValue : public VariantValue
 {
     protected:
         std::string m_str;
+        char        m_flag;
+
     public:
-        StringValue(const std::string &s) : m_str(s) { }
+        StringValue(const std::string &s) : m_str(s), m_flag('\0') { }
+        StringValue(const std::string &s, char f) : m_str(s), m_flag(f) { }
         virtual ~StringValue()
         {
 //            std::cout << "DESTRSTR[" << m_str << "]" << std::endl;
@@ -487,6 +494,8 @@ class StringValue : public VariantValue
 
         virtual bool is_undef()   const { return false; }
         virtual bool is_string()  const { return true; }
+        virtual bool is_keyword() const { return m_flag == 'k'; }
+        virtual bool is_symbol()  const { return m_flag == 'y'; }
 
         virtual char *s_buffer(size_t &len)
         {

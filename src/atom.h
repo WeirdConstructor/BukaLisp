@@ -992,6 +992,34 @@ class GC
 };
 //---------------------------------------------------------------------------
 
+class AtomMapIterator : public UserData
+{
+    public:
+        Atom                     m_map;
+        UnordAtomMap            &m_map_ref;
+        UnordAtomMap::iterator   m_iterator;
+        bool                     m_init;
+
+    public:
+        AtomMapIterator(Atom &map);
+
+        bool ok();
+        void next();
+
+        Atom key();
+        Atom value();
+
+        virtual std::string type()      { return "MAP-ITER"; }
+        virtual std::string as_string() { return "#<map-iterator>"; }
+
+        virtual void mark(GC *gc, uint8_t clr);
+
+        virtual ~AtomMapIterator()
+        {
+        }
+};
+//---------------------------------------------------------------------------
+
 #if WITH_MEM_POOL
 extern MemoryPool<Atom> g_atom_array_pool;
 #endif

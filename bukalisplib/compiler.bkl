@@ -253,6 +253,28 @@
       (pop! ($env-pos-stack: self))
       (pop! ($env-stack: self)))
 
+    ($define! self (compile-get obj key eval-key? code-pad)
+      (let ((out-adr (.new-tmp-pos self))
+            (key-adr (if eval-key?
+                       (.compile self key code-pad)
+                       (.store-static-data self key)))
+            (obj-adr (.compile self obj code-pad)))
+          (.op-get code-pad out-adr obj-adr key-adr)
+          (.recycle-pos self obj-adr)
+          (.recycle-pos self key-adr)
+          out-adr))
+
+    ($define! self (compile-set obj key eval-key? value code-pad)
+      (let ((key-adr (if eval-key?
+                       (.compile self key code-pad)
+                       (.store-static-data self key)))
+            (obj-adr (.compile self obj code-pad))
+            (val-adr (.compile self value code-pad)))
+          (.op-set code-pad obj-adr key-adr val-adr)
+          (.recycle-pos self obj-adr)
+          (.recycle-pos self key-adr)
+          val-adr))
+
     ($define! self (compile-func-apply atom code-pad)
       ; eval all items (func a b c) into temporary registers
       ; make new vec
@@ -654,14 +676,15 @@
                                 (.store-static-data self 1)
                                 (.compile self iter-val code-pad)))
                (iter-adr      (.new-pos self))
-               (body-ret-adr  (.new-pos self))
                (cond-res-adr  (.new-pos self))
                (body-pad      (.make-code-pad self)))
            (.define-var self iter-name [var: (@0 iter-adr)])
            (.op-mov code-pad iter-adr start-val-adr)
-           (set! body-ret-adr (.compile-block self (drop atom 2) body-pad))
+           (define body-ret-adr
+                   (.compile-block self (drop atom 2) body-pad))
            (.op-eq  body-pad cond-res-adr iter-adr end-val-adr)
            (.op-inc body-pad iter-adr iter-val-adr)
+           ; INCFOR iter-val-adr iter-adr
            (.append-code-pad code-pad body-pad)
            (.op-brnif        code-pad
                              (- 0 (+ 1 (.count-ops body-pad)))
@@ -714,6 +737,137 @@
          (unless (eqv? 2 (length atom))
            (.error self "'quote' needs exactly 1 argument" atom))
          (.compile-quote self (@1 atom) code-pad)))
+
+      (set-env-syntax new-env '$
+       (lambda (atom self code-pad)
+         (unless (eqv? (length atom) 3)
+           (.error self "'$' needs exactly 2 arguments" atom))
+         (.compile-get self
+                       (@2 atom)
+                       (@1 atom)
+                       (not
+                        (or (symbol?  (@1 atom))
+                            (keyword? (@1 atom))
+                            (string?  (@1 atom))))
+                       code-pad)))
+
+      (set-env-syntax new-env '$!
+       (lambda (atom self code-pad)
+         (unless (eqv? (length atom) 4)
+           (.error self "'$!' needs exactly 2 arguments" atom))
+         (.compile-set self
+                       (@2 atom)
+                       (@1 atom)
+                       (not
+                        (or (symbol?  (@1 atom))
+                            (keyword? (@1 atom))
+                            (string?  (@1 atom))))
+                       (@3 atom)
+                       code-pad)))
+
+      (set-env-syntax-prim new-env '@
+       (lambda (atom self code-pad)
+         (unless (eqv? (length atom) 3)
+           (.error self "'@' needs exactly 2 arguments" atom))
+         (.compile-get self (@2 atom) (@1 atom) #true code-pad))
+       (@'@ primitive-table))
+
+      (set-env-syntax-prim new-env '@!
+       (lambda (atom self code-pad)
+         (unless (eqv? (length atom) 4)
+           (.error self "'@!' needs exactly 3 arguments" atom))
+         (.compile-set self (@2 atom) (@1 atom) #true (@3 atom) code-pad))
+       (@'@! primitive-table))
+
+      (set-env-syntax new-env 'do-each
+       (lambda (atom self code-pad)
+         (unless (> (length atom) 2)
+           (.error self "'do-each' needs at least 2 arguments" atom))
+         (define iter-desc (@1 atom))
+         (unless (list? iter-desc)
+           (.error self
+                   (str "first argument to 'do-each' "
+                        "needs to be an iteration description list")
+                   atom))
+         (when (< (length iter-desc) 2)
+           (.error self
+                   "iteration description must be at least 2 elements long"
+                   iter-desc))
+         (when (> (length iter-desc) 3)
+           (.error self
+                   "iteration description too long (2 or 3 elements allowed)"
+                   iter-desc))
+         (unless (symbol? (@0 iter-desc))
+           (.error self
+                   "first element of iteration description must be a symbol"
+                   iter-desc));
+         (define obj-atom (@1 iter-desc))
+         (when (eqv? (length iter-desc) 3)
+           (define obj-atom (@2 iter-desc))
+           (unless (symbol? (@1 iter-desc))
+             (.error self
+                     "second element of iteration description must be a symbol"
+                     iter-desc)));
+         (define ret-adr (inc-env-offs (.new-tmp-pos self)))
+         (.push-env self)
+         (.op-push-env code-pad 5)
+         (let ((body-pad    (.make-code-pad self))
+               (map-adr     (.compile self obj-atom code-pad))
+               (ok-adr      (.new-pos self))
+               (val-adr     (.new-pos self))
+               (iter-adr    (.new-pos self))
+               (key-adr     nil)
+               (with-key?   (eqv? (length iter-desc) 3)))
+           ; initialization:
+           (.define-var self (@0 iter-desc) [var: (@0 val-adr)])
+           (when with-key?
+             (set! key-adr (.new-pos self))
+             (.define-var self (@1 iter-desc)
+                          [var: (@0 key-adr)]))
+           (define body-ret-adr
+                   (.compile-block self (drop atom 2) body-pad))
+           (.op-load-nil code-pad ret-adr)
+           ; start iteration:
+           (.op-iter     code-pad iter-adr map-adr)
+           (.op-next     code-pad ok-adr val-adr iter-adr)
+           (when with-key?
+             (.op-ikey code-pad key-adr iter-adr))
+           ; branch:
+           (define body-op-count (.count-ops body-pad))
+           (.op-br  code-pad (+ 2 body-op-count))
+           (.append-code-pad code-pad body-pad)
+           (.op-mov code-pad ret-adr body-ret-adr)
+           (.op-next  code-pad ok-adr val-adr iter-adr)
+           (when with-key?
+             (.op-ikey code-pad key-adr iter-adr))
+           (.op-brnif code-pad
+                      (- 0 (+ (if with-key? 7 3)
+                              body-op-count))
+                      ok-adr)
+           ; cleanup:
+           (.op-pop-env code-pad)
+           (.pop-env self)
+           (dec-env-offs ret-adr))))
+
+#|
+
+  map-reg <= NEW_MAP
+  ; iter-reg recieved vector with map (for keepalive) and iteration value:
+  ITER iter-reg map-reg
+  NEXT ok-reg val-reg iter-reg
+  BRNIF ok-reg after:
+  ; this one can be skipped for vectors, however, for vectors it should store the current index:
+  IKEY key-reg state-reg 
+  MOV k-reg key-reg
+  MOV v-reg val-reg
+  ...
+
+after:
+  PUSH_NIL ...
+  ...
+
+|#
+
       new-env)))
 ;----------------------------------------------------------------------------
 
@@ -748,7 +902,7 @@
       (.recycle-pos compiler ret-adr)
 ;      (displayln PAD: ($pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
-;        (displayln prog)
+        (displayln prog)
         (if only-compile
           prog
           (run-vm-prog prog (@1 root-env)))))))

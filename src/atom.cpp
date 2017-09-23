@@ -289,6 +289,41 @@ Atom GC::get_statistics()
 
     return Atom(T_VEC, v);
 }
+//---------------------------------------------------------------------------
+
+AtomMapIterator::AtomMapIterator(Atom &map)
+    : m_map(map),
+      m_init(true),
+      m_map_ref(map.m_d.map->m_map),
+      m_iterator(m_map_ref.begin())
+{
+}
+//---------------------------------------------------------------------------
+
+bool AtomMapIterator::ok()
+{
+    return m_iterator != m_map_ref.end();
+}
+//---------------------------------------------------------------------------
+
+void AtomMapIterator::next()
+{
+    if (m_init) { m_init = false; return; }
+    m_iterator++;
+}
+//---------------------------------------------------------------------------
+
+Atom AtomMapIterator::key()   { return m_iterator->first; }
+Atom AtomMapIterator::value() { return m_iterator->second; }
+//---------------------------------------------------------------------------
+
+void AtomMapIterator::mark(GC *gc, uint8_t clr)
+{
+    UserData::mark(gc, clr);
+    gc->mark_atom(m_map);
+}
+//---------------------------------------------------------------------------
+
 };
 
 /******************************************************************************

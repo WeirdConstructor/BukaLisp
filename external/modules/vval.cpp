@@ -44,7 +44,9 @@ VV vv(int64_t v)        { return VV(new IntegerValue(v)); }
 VV vv(int32_t v)        { return VV(new IntegerValue(v)); }
 VV vv(int16_t v)        { return VV(new IntegerValue(v)); }
 VV vv(double v)         { return VV(new DoubleValue(v)); }
-VV vv(const std::string &v)    { return VV(new StringValue(v)); }
+VV vv(const std::string &v)        { return VV(new StringValue(v)); }
+VV vv_kw(const std::string &v)     { return VV(new StringValue(v, 'k')); }
+VV vv_sym(const std::string &v)    { return VV(new StringValue(v, 'y')); }
 VV vv(const std::wstring &v)   { VV rv(new StringValue("")); rv->s_set(v); return rv; }
 VV vv_dt(std::time_t v)  { return VV(new DateTimeValue(v)); }
 VV vv_undef()            { return g_vv_undef; }
@@ -254,6 +256,14 @@ std::ostream &operator<<(std::ostream &out, const VV &vv)
         }
 
         out << "}";
+    }
+    else if (vv->is_keyword())
+    {
+        out << vv->s() << ":";
+    }
+    else if (vv->is_symbol())
+    {
+        out << vv->s();
     }
     else if (vv->is_string())
     {

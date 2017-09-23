@@ -132,6 +132,21 @@
       ($define! self (op-inc val-idx incrementor-idx)
         (push-op INC: val-idx incrementor-idx 0))
 
+      ($define! self (op-set obj-idx key-idx val-idx)
+        (push-op SET: obj-idx key-idx val-idx))
+
+      ($define! self (op-get out-idx obj-idx key-idx)
+        (push-op GET: out-idx obj-idx key-idx))
+
+      ($define! self (op-iter iter-idx vec-idx)
+        (push-op ITER: iter-idx vec-idx))
+
+      ($define! self (op-next ok-idx val-idx iter-idx)
+        (push-op NEXT: ok-idx val-idx iter-idx))
+
+      ($define! self (op-ikey key-idx iter-idx)
+        (push-op IKEY: key-idx iter-idx))
+
 ;      #;($define! self (op-load static out-idx)
 ;        ; TODO: optimize static data loading by storing their
 ;        ;       positions in a map
