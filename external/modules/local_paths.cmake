@@ -1,0 +1,6 @@
+set(BOOST_INCLUDEDIR C:/local/boost_1_61_0/boost)
+set(BOOST_LIBRARYDIR C:/local/boost_1_61_0/stage_static/lib)
+set(BOOST_ROOT       C:/local/boost_1_61_0)
+set(POCO_INCLUDE     C:/local/poco-1.7.4-all)
+set(POCO_LIB         C:/local/poco-1.7.4-all/lib)
+set(CMAKE_PREFIX_PATH "C:\\Qt\\Qt5.5.1\\5.5\\msvc2013\\")
