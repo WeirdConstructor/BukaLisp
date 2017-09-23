@@ -566,8 +566,6 @@ class ClosureValue : public VariantValue
         {
             VV vvRet;
 
-            std::cout << "CALL: " << vvArg << std::endl;
-
             if (vvArg) vvRet = m_vClsF(m_vvObj, vvArg);
             else       vvRet = m_vClsF(m_vvObj, g_vv_undef);
 

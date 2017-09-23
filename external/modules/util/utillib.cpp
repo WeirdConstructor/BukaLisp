@@ -454,23 +454,41 @@ VV_CLOSURE_DOC(util_re,
 }
 //---------------------------------------------------------------------------
 
-VVal::VV init_utillib()
+VV_CLOSURE(util_init)
+{
+    cout << "INIT UTIL LIB" << endl;
+    return vv_undef();
+}
+//---------------------------------------------------------------------------
+
+VV_CLOSURE(util_destroy)
+{
+    cout << "DESTROYED UTIL LIB" << endl;
+    return vv_undef();
+}
+//---------------------------------------------------------------------------
+
+BukaLISPModule init_utillib()
 {
     VV reg(vv_list() << vv("util"));
-    VV mod(vv_map());
+    VV obj(vv_map());
+    VV mod(vv_list());
     reg << mod;
 
 #define SET_FUNC(functionName, closureName) \
-    mod->set(#functionName, VVC_NEW_##closureName())
+    mod << (vv_list() << vv(#functionName) << VVC_NEW_##closureName(obj))
 
-    SET_FUNC(fromCsv,  util_from_csv);
-    SET_FUNC(toCsv,    util_to_csv);
-    SET_FUNC(toUtf8,   util_to_utf8);
-    SET_FUNC(fromUtf8, util_from_utf8);
-    SET_FUNC(toJson,   util_to_json);
-    SET_FUNC(fromJson, util_from_json);
-    SET_FUNC(re      , util_re);
+    SET_FUNC(__INIT__,    util_init);
+    SET_FUNC(__DESTROY__, util_destroy);
 
-    return reg;
+    SET_FUNC(fromCsv,     util_from_csv);
+    SET_FUNC(toCsv,       util_to_csv);
+    SET_FUNC(toUtf8,      util_to_utf8);
+    SET_FUNC(fromUtf8,    util_from_utf8);
+    SET_FUNC(toJson,      util_to_json);
+    SET_FUNC(fromJson,    util_from_json);
+    SET_FUNC(re      ,    util_re);
+
+    return BukaLISPModule(reg);
 }
 //---------------------------------------------------------------------------

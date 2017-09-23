@@ -8,6 +8,12 @@
 #include "atom_printer.h"
 #include "buklivm.h"
 
+//---------------------------------------------------------------------------
+
+class BukaLISPModule;
+
+//---------------------------------------------------------------------------
+
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
@@ -28,9 +34,11 @@ class Interpreter : public ExternalGCRoot
     private:
         Runtime        *m_rt;
         VM             *m_vm;
-        AtomVec        *m_env_stack;
-        AtomVec        *m_root_stack;
-        AtomVec        *m_cache;
+//        AtomVec        *m_env_stack;
+//        AtomVec        *m_cache;
+        GC_ROOT_MEMBER_VEC(m_env_stack);
+        GC_ROOT_MEMBER_VEC(m_cache);
+        AtomMap        *m_modules;
         AtomMap        *m_debug_pos_map;
         std::string     m_debug_pos;
         std::vector<Atom::PrimFunc *> m_primitives;
@@ -42,10 +50,14 @@ class Interpreter : public ExternalGCRoot
 
     public:
         Interpreter(Runtime *rt, VM *vm = nullptr)
-            : ExternalGCRoot(&(rt->m_gc)), m_rt(rt), m_env_stack(nullptr),
+            : ExternalGCRoot(&(rt->m_gc)), m_rt(rt),
               m_trace(false), m_vm(vm), m_debug_pos_map(nullptr),
-              m_force_always_gc(true), m_cache(nullptr)
+              m_force_always_gc(true), m_modules(nullptr),
+              GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_env_stack),
+              GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_cache)
         {
+            m_env_stack = nullptr;
+            m_cache = nullptr;
             init();
         }
 
@@ -53,19 +65,33 @@ class Interpreter : public ExternalGCRoot
         {
             for (auto p : m_primitives)
                 delete p;
+
+            std::cout << "KILl INTERPRET" << std::endl;
+            if (m_cache
+                && m_cache->m_len > 1
+                && m_cache->at(1).m_type == T_VEC)
+            {
+                AtomVec *ppt = m_cache->at(1).m_d.vec;
+                for (size_t i = 0; i < ppt->m_len; i++)
+                {
+                    if (ppt->m_data[i].m_type == T_PRIM)
+                        delete ppt->m_data[i].m_d.func;
+                }
+            }
+
+            m_rt->m_gc.remove_external_root(this);
         }
 
         void print_primitive_table();
 
-        AtomVec *root_stack() { return m_root_stack; }
-
-        virtual size_t gc_root_count() { return 3; }
+        virtual size_t gc_root_count() { return 0; }
         virtual AtomVec *gc_root_get(size_t i)
         {
-            if (i == 0)      return m_root_stack;
-            else if (i == 1) return m_env_stack;
-            else if (i == 2) return m_cache;
-            else             return nullptr;
+//            if (i == 0) return m_env_stack;
+//            else if (i == 1) return m_cache;
+//            if (i == 0) return m_cache;
+//            else             return nullptr;
+            return nullptr;
         }
 
         void init();
@@ -104,15 +130,13 @@ class Interpreter : public ExternalGCRoot
 
         Atom eval(const std::string &input_name, const std::string &input)
         {
-            Atom old_debug_info;
+            GC_ROOT(m_rt->m_gc, old_debug_info);
             if (m_debug_pos_map)
                 old_debug_info = Atom(T_MAP, m_debug_pos_map);
-            AtomVecPush avpm(m_root_stack, old_debug_info);
 
-            Atom prog = m_rt->read(input_name, input, m_debug_pos_map);
-            AtomVecPush avpm2(
-                m_root_stack, Atom(T_MAP, m_debug_pos_map));
-            AtomVecPush avp(m_root_stack, prog);
+            GC_ROOT(m_rt->m_gc, prog) = m_rt->read(input_name, input, m_debug_pos_map);
+            GC_ROOT(m_rt->m_gc, debug_pos_map_r) = Atom(T_MAP, m_debug_pos_map);
+
 //            std::cerr << "EVAL(" << write_atom(prog) << std::endl;
             Atom ret;
             try

@@ -8,6 +8,12 @@
 #include "runtime.h"
 #include <sstream>
 
+//---------------------------------------------------------------------------
+
+class BukaLISPModule;
+
+//---------------------------------------------------------------------------
+
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
@@ -215,15 +221,17 @@ class VMProgStateGuard
 class VM : public ExternalGCRoot
 {
     private:
-        Runtime   *m_rt;
         INST      *m_pc;
         PROG      *m_prog;
         VM        *m_vm;
         AtomVec   *m_root_stack;
         AtomVec   *m_prim_table;
+        AtomMap   *m_modules;
         bool       m_trace;
 
     public:
+        Runtime   *m_rt;
+
         VM(Runtime *rt)
             : ExternalGCRoot(&(rt->m_gc)), m_rt(rt),
               m_pc(nullptr),
@@ -234,11 +242,17 @@ class VM : public ExternalGCRoot
             m_rt->m_gc.add_external_root(this);
             m_root_stack = rt->m_gc.allocate_vector(10);
             m_prim_table = rt->m_gc.allocate_vector(0);
+            m_modules    = rt->m_gc.allocate_map();
 
             m_root_stack->m_len = 0;
+            m_root_stack->push(Atom(T_MAP, m_modules));
 
             init_prims();
         }
+
+        AtomMap *loaded_modules();
+
+        void load_module(BukaLISPModule *m);
 
         void set_trace(bool t) { m_trace = t; }
 
@@ -268,8 +282,55 @@ class VM : public ExternalGCRoot
             }
         }
 
+        void run_module_destructors()
+        {
+            AtomMap &m = *m_modules;
+            for (auto p : m.m_map)
+            {
+                Atom mod_funcs = p.second;
+                if (mod_funcs.m_type != T_MAP)
+                {
+                    throw VMException(
+                            "On destruction: In module '"
+                            + p.first.m_d.sym->m_str
+                            + "': bad function map");
+                }
+                Atom destr_func =
+                    mod_funcs.m_d.map->at(
+                        Atom(T_SYM, m_rt->m_gc.new_symbol("__DESTROY__")));
+                destr_func = destr_func.at(2);
+                if (destr_func.m_type != T_PRIM && destr_func.m_type != T_NIL)
+                {
+                    throw VMException(
+                            "On destruction: In module '"
+                            + p.first.m_d.sym->m_str
+                            + "': bad destroy function");
+                }
+                else if (destr_func.m_type == T_PRIM)
+                {
+                    AtomVec *args = m_rt->m_gc.allocate_vector(0);
+                    AtomVecPush(m_root_stack, Atom(T_VEC, args));
+                    Atom ret;
+                    (*destr_func.m_d.func)(*args, ret);
+                }
+
+                // Attention: Destruction of the primitive pointers
+                //            exported from the module happens in the
+                //            ~VM() destructor, because the primitive functions
+                //            are put into the m_prim_table!
+            }
+        }
+
         virtual ~VM()
         {
+            run_module_destructors();
+
+            for (size_t i = 0; i < m_prim_table->m_len; i++)
+            {
+                if (m_prim_table->at(i).m_type == T_PRIM)
+                    delete m_prim_table->at(i).m_d.func;
+            }
+
             m_rt->m_gc.remove_external_root(this);
         }
 

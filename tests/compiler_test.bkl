@@ -18,6 +18,31 @@
 
 ;----------------------------------------------------------------------------
 
+; test externally given environment executed inside VM:
+(let ((my-env []))
+  (T '(begin 1) 1 my-env)
+  ($!l (@0 my-env) [var: (length (@1 my-env))])
+  (push! (@1 my-env) 12)
+  (T '(begin
+        (define k 10)
+        ((lambda () l)))
+     12 my-env))
+
+; test recursive calling into VM:
+(let ((my-env [])
+      (func (invoke-compiler ['(displayln foo-out: (+ 10 20))] "test-code x" #t root-env)))
+  (T '(begin 1) 1 my-env)
+  ($!xxx (@0 my-env) [var: (length (@1 my-env))])
+  (push! (@1 my-env) func)
+  (T '(begin
+		(define k 10)
+		((lambda () (run-vm-prog xxx [])))
+		(+ 12.345 k))
+	 22.345
+	 my-env))
+
+;----------------------------------------------------------------------------
+
 (T '((lambda (x)
        ((lambda (y) (+ x y))
         10))
@@ -33,6 +58,11 @@
 
 ;----------------------------------------------------------------------------
 
+(T '(when   #t 10) 10)
+(T '(when   #f 10) nil)
+(T '(unless #t 10) nil)
+(T '(unless #f 10) 10)
+;----------------------------------------------------------------------------
 
 (t "123"        123)
 (t "(+ 123)"    123)

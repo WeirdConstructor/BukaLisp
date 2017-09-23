@@ -282,6 +282,18 @@ START_PRIM()
 END_PRIM(run-vm-prog)
 
 START_PRIM()
+    REQ_EQ_ARGC(get-vm-modules, 0);
+
+    if (!m_vm)
+        error("Can't get VM modules, no VM instance loaded into interpreter", A0);
+
+    if (!m_modules)
+        error("Can't get VM modules, no modules defined", A0);
+
+    out = Atom(T_MAP, m_modules);
+END_PRIM(get-vm-modules);
+
+START_PRIM()
     REQ_GT_ARGC(error, 1);
 
     Atom a(T_VEC);
@@ -363,7 +375,7 @@ START_PRIM()
 END_PRIM(last)
 
 START_PRIM()
-    REQ_EQ_ARGC(last, 1);
+    REQ_EQ_ARGC(first, 1);
     if (A0.m_type != T_VEC)
         error("Can't 'first' on a non-list", A0);
     out = A0.at(0);

@@ -23,6 +23,6 @@
 
 #pragma once
 
-#include <modules/vval.h>
+#include <modules/bklisp_module_wrapper.h>
 
-VVal::VV init_utillib();
+BukaLISPModule init_utillib();

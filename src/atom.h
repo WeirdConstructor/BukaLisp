@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <unordered_map>
+#include <memory>
 #include "atom_userdata.h"
 
 namespace bukalisp
@@ -152,6 +153,11 @@ struct Atom
     Atom(Type t, Sym *s) : m_type(t)
     {
         m_d.sym = s;
+    }
+
+    Atom(Type t, PrimFunc *f) : m_type(t)
+    {
+        m_d.func = f;
     }
 
     inline void clear()
@@ -369,6 +375,124 @@ class AtomVecPush
 };
 //---------------------------------------------------------------------------
 
+class GCRootRefPool;
+
+#define GC_ROOT(gc, name) \
+    bukalisp::GCRootRefPool::GCRootRef gc_ref_##name((gc).get_root_ref_pool()); \
+    Atom &name = *(gc_ref_##name.m_ref); name
+
+#define GC_ROOT_MEMBER(name) \
+    bukalisp::GCRootRefPool::GCRootRef gc_ref_##name; \
+    Atom &name;
+#define GC_ROOT_MEMBER_INITALIZE(gc, name) \
+    gc_ref_##name((gc).get_root_ref_pool()), \
+    name(*(gc_ref_##name.m_ref))
+
+#define GC_ROOT_MEMBER_MAP(name) \
+    bukalisp::GCRootRefPool::GCRootRef gc_ref_##name; \
+    AtomMap *&name;
+#define GC_ROOT_MEMBER_INITALIZE_MAP(gc, name) \
+    gc_ref_##name(T_MAP, (gc).get_root_ref_pool()), \
+    name(gc_ref_##name.m_ref->m_d.map)
+
+#define GC_ROOT_MEMBER_VEC(name) \
+    bukalisp::GCRootRefPool::GCRootRef gc_ref_##name; \
+    AtomVec *&name;
+#define GC_ROOT_MEMBER_INITALIZE_VEC(gc, name) \
+    gc_ref_##name(T_VEC, (gc).get_root_ref_pool()), \
+    name(gc_ref_##name.m_ref->m_d.vec)
+
+
+class GCRootRefPool
+{
+    private:
+        AtomVec                         *m_slots;
+        std::function<AtomVec*(size_t)>  m_allocator;
+        std::vector<size_t>              m_free_idx_list;
+        size_t                           m_stripe_len;
+
+    public:
+        struct GCRootRef
+        {
+            GCRootRefPool &m_pool;
+            Atom          *m_ref;
+            size_t         m_idx;
+
+            GCRootRef(GCRootRefPool &rp)
+                : m_pool(rp)
+            {
+                m_idx = m_pool.reg();
+                m_ref = &(m_pool.get_ref_at(m_idx));
+                *m_ref = Atom();
+            }
+
+            GCRootRef(Type t, GCRootRefPool &rp)
+                : m_pool(rp)
+            {
+                m_idx = m_pool.reg();
+                m_ref = &(m_pool.get_ref_at(m_idx));
+                *m_ref = Atom(t);
+            }
+            ~GCRootRef();
+        };
+
+    public:
+        GCRootRefPool(const std::function<AtomVec*(size_t)> &allocator)
+            : m_slots(nullptr), m_allocator(allocator),
+              m_stripe_len(10)
+        {
+        }
+
+        void set_pool(AtomVec *p) { m_slots = p; m_slots->m_len = 0; }
+        AtomVec *get_pool() { return m_slots; }
+
+        void unreg(size_t idx)
+        {
+            get_ref_at(idx) = Atom();
+            m_free_idx_list.push_back(idx);
+//            std::cout << "*** IDX DEL: " << idx << std::endl;
+        }
+
+        Atom &get_ref_at(size_t idx)
+        {
+            size_t slot_idx   = idx / m_stripe_len;
+            size_t stripe_idx = idx % m_stripe_len;
+//            std::cout << "SLOT: " << slot_idx << ", STRIPE: " << stripe_idx << std::endl;
+            Atom stripe = m_slots->m_data[slot_idx];
+            Atom &ref = stripe.m_d.vec->m_data[stripe_idx];
+            return ref;
+        }
+
+        size_t reg()
+        {
+            size_t idx = 0;
+            if (m_free_idx_list.size() > 0)
+            {
+                idx = m_free_idx_list.back();
+                m_free_idx_list.pop_back();
+            }
+            else
+            {
+                Atom *last_stripe = m_slots->last();
+                if ((!last_stripe)
+                    || (last_stripe->m_d.vec->m_len >= m_stripe_len))
+                {
+                    m_slots->push(Atom(T_VEC, m_allocator(m_stripe_len)));
+                    last_stripe = m_slots->last();
+                    last_stripe->m_d.vec->m_len = 0;
+                }
+
+                last_stripe->m_d.vec->m_len++;
+                idx = ((m_slots->m_len - 1) * m_stripe_len)
+                      + (last_stripe->m_d.vec->m_len - 1);
+            }
+
+            return idx;
+        }
+
+};
+//---------------------------------------------------------------------------
+
 class GC;
 
 class ExternalGCRoot
@@ -389,10 +513,11 @@ typedef std::unordered_map<std::string, Sym *> StrSymMap;
 class GC
 {
     private:
-        AtomVec  *m_vectors;
-        AtomMap  *m_maps;
-        UserData *m_userdata;
-        Sym      *m_syms;
+        AtomVec         *m_vectors;
+        AtomMap         *m_maps;
+        UserData        *m_userdata;
+        Sym             *m_syms;
+        GCRootRefPool   m_root_pool;
 
         uint8_t  m_current_color;
 
@@ -507,6 +632,10 @@ class GC
                 }
             }
 
+//            std::cout << "ROOT POOL: " << Atom(T_VEC, m_root_pool.get_pool()).to_write_str() << std::endl;
+
+            m_gc_vec_stack.push_back(m_root_pool.get_pool());
+
             // We use an explicit stack, to prevent C++ stack overflow
             // when marking.
             while (!(   m_gc_vec_stack.empty()
@@ -603,8 +732,15 @@ class GC
               m_num_new_syms(0),
               m_num_new_userdata(0),
               m_num_new_vectors(0),
-              m_num_new_maps(0)
+              m_num_new_maps(0),
+              m_root_pool([=](size_t len) { return this->allocate_vector(len); })
         {
+            m_root_pool.set_pool(this->allocate_vector(1000));
+        }
+
+        GCRootRefPool &get_root_ref_pool()
+        {
+            return m_root_pool;
         }
 
         void add_external_root(ExternalGCRoot *gcr) { m_ext_roots.push_back(gcr); }

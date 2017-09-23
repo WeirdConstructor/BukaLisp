@@ -4,6 +4,7 @@
 #include "buklivm.h"
 #include "atom_printer.h"
 #include "util.h"
+#include "modules/bklisp_module_wrapper.h"
 #include <chrono>
 
 using namespace std;
@@ -130,6 +131,49 @@ void VM::init_prims()
 #define END_PRIM(name) };
 
     #include "primitives.cpp"
+}
+//---------------------------------------------------------------------------
+
+void VM::load_module(BukaLISPModule *m)
+{
+    Atom funcs(T_MAP, m_rt->m_gc.allocate_map());
+    m_modules->set(m->module_name(this), funcs);
+
+    Atom init_func;
+    for (size_t i = 0; i < m->function_count(); i++)
+    {
+        Atom func_desc(T_VEC, m_rt->m_gc.allocate_vector(3));
+        func_desc.m_d.vec->set(0, m->get_func_name(this, i));
+        func_desc.m_d.vec->set(1, Atom(T_INT, m_prim_table->m_len));
+        func_desc.m_d.vec->set(2, m->get_func(this, i));
+        funcs.m_d.map->set(func_desc.at(0), func_desc);
+
+        m_prim_table->push(func_desc.at(2));
+
+        if (func_desc.at(0).m_d.sym->m_str == "__INIT__")
+            init_func = func_desc.at(2);
+    }
+
+    if (init_func.m_type == T_PRIM)
+    {
+        AtomVec *args = m_rt->m_gc.allocate_vector(0);
+        AtomVecPush(m_root_stack, Atom(T_VEC, args));
+        Atom ret;
+        (*init_func.m_d.func)(*args, ret);
+    }
+    else if (init_func.m_type != T_NIL)
+    {
+        throw VMException(
+                "Bad __INIT__ in module initialization of '"
+                + m->module_name(this).m_d.sym->m_str
+                + "'");
+    }
+}
+//---------------------------------------------------------------------------
+
+AtomMap *VM::loaded_modules()
+{
+    return m_modules;
 }
 //---------------------------------------------------------------------------
 

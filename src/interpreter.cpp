@@ -3,6 +3,7 @@
 
 #include "interpreter.h"
 #include "buklivm.h"
+#include <modules/bklisp_module_wrapper.h>
 #include <chrono>
 #include "util.h"
 
@@ -16,7 +17,6 @@ void Interpreter::init()
 {
     ExternalGCRoot::init();
 
-    m_root_stack = m_rt->m_gc.allocate_vector(0);
     m_env_stack  = m_rt->m_gc.allocate_vector(0);
     m_cache      = m_rt->m_gc.allocate_vector(0);
 
@@ -71,6 +71,9 @@ void Interpreter::init()
 #define IN_INTERPRETER 1
     #include "primitives.cpp"
 #undef IN_INTERPRETER
+
+    if (m_vm)
+        m_modules = m_vm->loaded_modules();
 }
 //---------------------------------------------------------------------------
 
@@ -243,13 +246,13 @@ Atom Interpreter::eval_while(Atom e, AtomVec *av)
     if (av->m_len < 2)
         error("'while' does not contain enough arguments", e);
 
-    Atom last;
+    GC_ROOT(m_rt->m_gc, last) = Atom();
+
     Atom while_cond = eval(av->m_data[1]);
     bool run = !while_cond.is_false();
     while (run)
     {
         last = eval_begin(e, av, 2);
-        AtomVecPush avpw(m_root_stack, last);
         while_cond = eval(av->m_data[1]);
         run = !while_cond.is_false();
     }
@@ -375,8 +378,7 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
         if (bnd_spec->m_data[1].m_type != T_SYM)
             error("'do-each' second element of bind specification needs to be a symbol", e);
 
-        Atom ds = eval(bnd_spec->m_data[2]);
-        AtomVecPush avpr(m_root_stack, ds);
+        GC_ROOT(m_rt->m_gc, ds) = eval(bnd_spec->m_data[2]);
 
         if (ds.m_type == T_VEC)
         {
@@ -408,8 +410,7 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
     }
     else
     {
-        Atom ds = eval(bnd_spec->m_data[1]);
-        AtomVecPush avpr(m_root_stack, ds);
+        GC_ROOT(m_rt->m_gc, ds) = eval(bnd_spec->m_data[1]);
 
         if (ds.m_type == T_VEC)
         {
@@ -446,8 +447,7 @@ Atom Interpreter::eval_case(Atom e, AtomVec *av)
               "a comparsion branch", e);
     }
 
-    Atom val = eval(av->m_data[1]);
-    AtomVecPush avpv(m_root_stack, val);
+    GC_ROOT(m_rt->m_gc, val) = eval(av->m_data[1]);
 
     Atom ret;
     size_t case_idx = 2;
@@ -501,14 +501,12 @@ Atom Interpreter::eval_field_get(Atom e, AtomVec *av)
               "the key and the map", e);
     }
 
-    Atom key = av->m_data[1];
+    GC_ROOT(m_rt->m_gc, key) = av->m_data[1];
     if (   key.m_type != T_SYM
         && key.m_type != T_STR
         && key.m_type != T_KW)
         key = eval(key);
-    AtomVecPush avpk(m_root_stack, key);
-    Atom obj = eval(av->m_data[2]);
-    AtomVecPush avpo(m_root_stack, obj);
+    GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
 
     set_debug_pos(e);
     if (obj.m_type != T_MAP)
@@ -526,14 +524,12 @@ Atom Interpreter::eval_field_set(Atom e, AtomVec *av)
               "the key, the map and the value", e);
     }
 
-    Atom key = av->m_data[1];
+    GC_ROOT(m_rt->m_gc, key) = av->m_data[1];
     if (   key.m_type != T_SYM
         && key.m_type != T_STR
         && key.m_type != T_KW)
         key = eval(key);
-    AtomVecPush avpk(m_root_stack, key);
-    Atom obj = eval(av->m_data[2]);
-    AtomVecPush avpo(m_root_stack, obj);
+    GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
 
     set_debug_pos(e);
     if (obj.m_type != T_MAP)
@@ -555,8 +551,7 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
               "method name as first argument", e);
     }
 
-    Atom obj = eval(av->m_data[1]);
-    AtomVecPush avpo(m_root_stack, obj);
+    GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[1]);
 
     set_debug_pos(e);
     if (obj.m_type != T_MAP)
@@ -567,12 +562,11 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
 
     AtomVec *arg_bind_def = av->m_data[2].m_d.vec;
 
-    Atom key = arg_bind_def->m_data[0];
+    GC_ROOT(m_rt->m_gc, key) = arg_bind_def->m_data[0];
     if (   key.m_type != T_SYM
         && key.m_type != T_STR
         && key.m_type != T_KW)
         key = eval(key);
-    AtomVecPush avpk(m_root_stack, key);
 
     set_debug_pos(e);
     AtomVec *arg_def_av = m_rt->m_gc.allocate_vector(arg_bind_def->m_len - 1);
@@ -589,8 +583,7 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
     for (size_t i = 3; i < av->m_len; i++)
         lambda_av->m_data[i - 1] = av->m_data[i];
 
-    Atom lambda(T_VEC, lambda_av);
-    AtomVecPush avls(m_root_stack, lambda);
+    GC_ROOT(m_rt->m_gc, lambda) = Atom(T_VEC, lambda_av);
 
     lambda = eval_lambda(lambda, lambda_av);
 
@@ -607,18 +600,15 @@ Atom Interpreter::eval_dot_call(Atom e, AtomVec *av)
               "the method name and the object", e);
     }
 
-    Atom key = av->m_data[1];
+    GC_ROOT(m_rt->m_gc, key) = av->m_data[1];
     if (   key.m_type != T_SYM
         && key.m_type != T_STR
         && key.m_type != T_KW)
         key = eval(key);
-    AtomVecPush avpk(m_root_stack, key);
-    Atom obj = eval(av->m_data[2]);
-    AtomVecPush avpo(m_root_stack, obj);
+    GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
 
     set_debug_pos(e);
-    Atom method = obj.at(key);
-    AtomVecPush avpm(m_root_stack, method);
+    GC_ROOT(m_rt->m_gc, method) = obj.at(key);
     if (   method.m_type != T_PRIM
         && method.m_type != T_CLOS
         && method.m_type != T_UD)
@@ -639,7 +629,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
     if (eval_args)
     {
         AtomVec *ev_av = m_rt->m_gc.allocate_vector(av->m_len - 1);
-        AtomVecPush avp(m_root_stack, Atom(T_VEC, ev_av));
+        GC_ROOT(m_rt->m_gc, ev_av_r) = Atom(T_VEC, ev_av);
 
         for (size_t i = 1 + arg_offs; i < av->m_len; i++)
         {
@@ -649,8 +639,8 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
         av = ev_av;
     }
 
-    AtomVecPush avp(m_root_stack, Atom(T_VEC, av));
-    AtomVecPush avp_func(m_root_stack, func);
+    GC_ROOT(m_rt->m_gc, args_r) = Atom(T_VEC, av);
+    GC_ROOT(m_rt->m_gc, func_r) = func;
 
     if (func.m_type == T_PRIM)
     {
@@ -670,7 +660,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
         Atom debug_pos   = func.m_d.vec->m_data[2];
 
         AtomVec *old_env = m_env_stack;
-        AtomVecPush avp_old_env(m_root_stack, Atom(T_VEC, old_env));
+        GC_ROOT(m_rt->m_gc, old_env_r) = Atom(T_VEC, old_env);
 
         m_env_stack = env.m_d.vec;
 
@@ -762,9 +752,9 @@ Atom Interpreter::eval(Atom e)
     if (m_trace)
         cout << ">> eval: " << write_atom(e) << endl;
 
-    AtomVecPush avpe(m_root_stack, e);
+    GC_ROOT(m_rt->m_gc, e_r) = e;
 
-    Atom ret;
+    GC_ROOT(m_rt->m_gc, ret) = Atom();
 
     switch (e.m_type)
     {
@@ -783,12 +773,11 @@ Atom Interpreter::eval(Atom e)
 
             AtomMap *nm = m_rt->m_gc.allocate_map();
             ret = Atom(T_MAP, nm);
-            AtomVecPush avp(m_root_stack, ret);
 
+            GC_ROOT(m_rt->m_gc, key) = Atom();
             for (auto el : e.m_d.map->m_map)
             {
-                Atom key = eval(el.first);
-                AtomVecPush avpk(m_root_stack, key);
+                key = eval(el.first);
                 Atom val = eval(el.second);
                 nm->set(key, val);
             }
@@ -813,8 +802,7 @@ Atom Interpreter::eval(Atom e)
             if (av->m_len <= 0)
                 error("Can't evaluate empty list of args", e);
 
-            Atom first = eval(av->m_data[0]);
-            AtomVecPush avpf(m_root_stack, first);
+            GC_ROOT(m_rt->m_gc, first) = eval(av->m_data[0]);
 
             if (first.m_type == T_SYNTAX)
             {
@@ -879,8 +867,6 @@ Atom Interpreter::eval(Atom e)
             error("Unknown atom type", e);
             break;
     }
-
-    AtomVecPush avr(m_root_stack, ret);
 
     if (m_force_always_gc)
         m_rt->m_gc.collect();

@@ -18,6 +18,7 @@
 #include "util.h"
 
 #include <modules/util/utillib.h>
+#include <modules/testlib.h>
 
 //---------------------------------------------------------------------------
 
@@ -249,10 +250,10 @@ void test_maps()
     tc.make_always_alive(m.at(tc.a_kw("b")));
 
     TEST_EQ(tc.pot_alive_maps(), 3, "alive map count");
-    TEST_EQ(tc.pot_alive_vecs(), 3, "alive vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 4, "alive vec count");
     tc.collect();
     TEST_EQ(tc.pot_alive_maps(), 2, "alive map count after gc");
-    TEST_EQ(tc.pot_alive_vecs(), 2, "alive vec count after gc");
+    TEST_EQ(tc.pot_alive_vecs(), 3, "alive vec count after gc");
 }
 //---------------------------------------------------------------------------
 
@@ -963,11 +964,15 @@ int main(int argc, char *argv[])
                 input_file_path = argv[i];
         }
 
-//        using namespace VVal;
-//        VVal::VV v = init_utillib();
-//        cout << "MODS:" << v << endl;
-//        cout << v->_(1)->_("fromCsv")->type() << endl;
-//        cout << v->_(1)->_("fromCsv")->call(vv_list() << vv("1,2,3")) << endl;
+        std::vector<BukaLISPModule *> bukalisp_modules;
+        bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
+        bukalisp_modules.push_back(new BukaLISPModule(init_testlib()));
+
+        auto load_vm_modules = [&](VM &vm)
+        {
+            for (auto &mod : bukalisp_modules)
+                vm.load_module(mod);
+        };
 
         if (tests)
         {
@@ -1006,6 +1011,7 @@ int main(int argc, char *argv[])
         {
             Runtime rt;
             VM vm(&rt);
+            load_vm_modules(vm);
             Interpreter i(&rt, &vm);
             i.print_primitive_table();
         }
@@ -1015,6 +1021,7 @@ int main(int argc, char *argv[])
             {
                 Runtime rt;
                 VM vm(&rt);
+                load_vm_modules(vm);
                 Interpreter i(&rt, &vm);
                 vm.set_trace(i_trace_vm);
                 i.set_trace(i_trace);
@@ -1032,6 +1039,7 @@ int main(int argc, char *argv[])
         {
             Runtime rt;
             VM vm(&rt);
+            load_vm_modules(vm);
             Interpreter i(&rt, &vm);
             vm.set_trace(i_trace_vm);
             i.set_trace(i_trace);
@@ -1055,6 +1063,7 @@ int main(int argc, char *argv[])
         {
             Runtime rt;
             VM vm(&rt);
+            load_vm_modules(vm);
             Interpreter i(&rt, &vm);
             vm.set_trace(i_trace_vm);
             i.set_trace(i_trace);
