@@ -138,10 +138,14 @@ class PROG : public UserData
         {
 //            std::cout << "*NEW PROG" << ((void *) this) << std::endl;
         }
-        PROG(size_t atom_data_len, size_t instr_len)
+        PROG(GC &gc, size_t atom_data_len, size_t instr_len)
         {
             m_atom_data_len    = atom_data_len;
+#if WITH_MEM_POOL
+            m_atom_data        = g_atom_array_pool.allocate(atom_data_len + 1);
+#else
             m_atom_data        = new Atom[atom_data_len + 1];
+#endif
             m_instructions_len = instr_len;
             m_instructions     = new INST[instr_len + 1];
             m_instructions[instr_len].op = OP_END;
@@ -182,14 +186,18 @@ class PROG : public UserData
 
         virtual ~PROG()
         {
+#if WITH_MEM_POOL
+            if (m_atom_data)    g_atom_array_pool.free(m_atom_data);
+#else
             if (m_atom_data)    delete[] m_atom_data;
+#endif
             if (m_instructions) delete[] m_instructions;
 //            std::cout << "DEL PROG" << ((void *) this) << std::endl;
         }
 };
 //---------------------------------------------------------------------------
 
-Atom make_prog(Atom prog_info);
+Atom make_prog(GC &gc, Atom prog_info);
 //---------------------------------------------------------------------------
 
 class VMProgStateGuard
@@ -227,6 +235,7 @@ class VM
         GC_ROOT_MEMBER_VEC(m_prim_table);
         GC_ROOT_MEMBER_MAP(m_modules);
         bool       m_trace;
+        std::function<Atom(Atom func, AtomVec *args)> m_interpreter_call;
 
     public:
         Runtime   *m_rt;
@@ -244,6 +253,12 @@ class VM
             m_modules    = rt->m_gc.allocate_map();
 
             init_prims();
+        }
+
+        void set_interpreter_call(
+            const std::function<Atom(Atom func, AtomVec *args)> &func)
+        {
+            m_interpreter_call = func;
         }
 
         AtomMap *loaded_modules();

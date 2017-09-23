@@ -18,6 +18,9 @@
 
 ;----------------------------------------------------------------------------
 
+; (error X:)
+;----------------------------------------------------------------------------
+
 ; test externally given environment executed inside VM:
 (let ((my-env []))
   (T '(begin 1) 1 my-env)
@@ -814,5 +817,6 @@
 (T '(let ((x <=)) (x 11 11 12)) #t)
 (T '(let ((x <=)) (x 11 11 9)) #f)
 
+(displayln (bkl-gc-statistics))
 (displayln "ALL OK")
 ::

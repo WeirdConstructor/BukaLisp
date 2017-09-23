@@ -1,0 +1,7 @@
+
+; (begin (define x 0) (for (i 1 100) (set! x (+ x 1))))
+
+(begin
+  (define x 0)
+  (for (i 1 100000000)
+    (set! x (+ x 1))))

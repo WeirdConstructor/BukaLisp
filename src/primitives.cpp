@@ -261,7 +261,7 @@ END_PRIM(pop!)
 
 START_PRIM()
     REQ_EQ_ARGC(make-vm-prog, 1);
-    out = bukalisp::make_prog(A0);
+    out = bukalisp::make_prog(m_rt->m_gc, A0);
     if (out.m_type == T_UD)
         m_rt->m_gc.reg_userdata(out.m_d.ud);
 END_PRIM(make-vm-prog)
@@ -459,6 +459,12 @@ START_PRIM()
     }
     out = Atom(T_STR, m_rt->m_gc.new_symbol(slurp_str(A0.m_d.sym->m_str)));
 END_PRIM(bkl-slurp-file)
+
+START_PRIM()
+    REQ_EQ_ARGC(bkl-gc-statistics, 0);
+    m_rt->m_gc.collect();
+    out = m_rt->m_gc.get_statistics();
+END_PRIM(bkl-gc-statistics)
 
 #if IN_INTERPRETER
 

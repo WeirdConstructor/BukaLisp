@@ -13,6 +13,7 @@ add_library(bukalisp_lib STATIC
     src/interpreter.cpp
     src/buklivm.cpp
     src/util.cpp
+    src/mempool.cpp
 )
 
 add_executable(bklisp main.cpp)

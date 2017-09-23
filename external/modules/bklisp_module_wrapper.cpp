@@ -30,7 +30,7 @@ class VVPointer : public bukalisp::UserData
 
 Atom vv2atom(bukalisp::VM *vm, const VV &vv)
 {
-    cout << "vv2atom: " << vv << endl;
+//    cout << "vv2atom: " << vv << endl;
 
     if (vv->is_string() || vv->is_bytes() || vv->is_datetime())
     {
@@ -173,8 +173,8 @@ VV atom2vv(VM *vm, Atom &a)
         case T_PRIM:
         case T_CLOS:
         {
-            // FIXME: Add GCRootRef, to save func from being collected!
-            Atom func = a;
+            GC_ROOT_SHARED_PTR(vm->m_rt->m_gc, func_ref) = a;
+
             VVCLSF clos =
                 [=](const VV &obj, const VV &args) -> VV
                 {
@@ -186,7 +186,9 @@ VV atom2vv(VM *vm, Atom &a)
                         a_args = t_a_args;
                     }
 
-                    return atom2vv(vm, vm->eval(func, a_args.m_d.vec));
+                    return atom2vv(vm,
+                                   vm->eval(GC_ROOT_SHP_REF(func_ref),
+                                            a_args.m_d.vec));
                 };
             return vv_closure(clos, vv_undef());
         }

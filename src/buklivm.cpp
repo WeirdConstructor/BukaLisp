@@ -75,7 +75,7 @@ void parse_op_desc(INST &instr, Atom &desc)
 }
 //---------------------------------------------------------------------------
 
-Atom make_prog(Atom prog_info)
+Atom make_prog(GC &gc, Atom prog_info)
 {
     if (prog_info.m_type != T_VEC)
         return Atom();
@@ -89,7 +89,7 @@ Atom make_prog(Atom prog_info)
         || debug.m_type != T_MAP)
         return Atom();
 
-    PROG *new_prog = new PROG(data.m_d.vec->m_len, prog.m_d.vec->m_len + 1);
+    PROG *new_prog = new PROG(gc, data.m_d.vec->m_len, prog.m_d.vec->m_len + 1);
     new_prog->set_debug_info(debug);
     new_prog->set_data_from(data.m_d.vec);
 
@@ -180,29 +180,60 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 {
     using namespace std::chrono;
 
-    cout << "vm start" << endl;
+    PROG *prog = nullptr;
+    INST *pc   = nullptr;
 
-    if (at_ud.m_type != T_UD || at_ud.m_d.ud->type() != "VM-PROG")
+    GC_ROOT_VEC(m_rt->m_gc, env_stack)  = nullptr;
+    GC_ROOT_VEC(m_rt->m_gc, cont_stack) = m_rt->m_gc.allocate_vector(0);
+
+    if (at_ud.m_type == T_UD && at_ud.m_d.ud->type() == "VM-PROG")
+    {
+        prog      = dynamic_cast<PROG*>(at_ud.m_d.ud);
+        pc        = &(prog->m_instructions[0]);
+        env_stack = m_rt->m_gc.allocate_vector(10);
+        env_stack->m_len = 0;
+    }
+    else if (at_ud.m_type == T_CLOS)
+    {
+        if (at_ud.m_d.vec->m_len == 2)
+        {
+            prog = dynamic_cast<PROG*>(at_ud.m_d.vec->m_data[0].m_d.ud);
+            pc   = &(prog->m_instructions[0]);
+            env_stack = at_ud.m_d.vec->m_data[1].m_d.vec;
+        }
+        else if (at_ud.m_d.vec->m_len == 3)
+        {
+            if (!m_interpreter_call)
+            {
+                cout << "VM-ERROR: Can't call eval from interpreter in VM. "
+                        "No interpreter?" << endl;
+                return Atom();
+            }
+            return m_interpreter_call(at_ud, args);
+        }
+        else
+        {
+            cout << "VM-ERROR: Broken closure input to run-vm-prog! "
+                 << at_ud.to_write_str() << endl;
+            return Atom();
+        }
+    }
+    else
     {
 //        error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
-        cout << "VM-ERROR: Bad input type to run-vm-prog, expected VM-PROG."
+        cout << "VM-ERROR: Bad input type to run-vm-prog, expected VM-PROG or closure, got: "
              << at_ud.to_write_str() << endl;
         return Atom();
     }
 
-    PROG *prog = dynamic_cast<PROG*>(at_ud.m_d.ud);
-    INST *pc   = &(prog->m_instructions[0]);
+    cout << "vm start" << endl;
 
     VMProgStateGuard psg(m_prog, m_pc, prog, pc);
 
     Atom *data      = m_prog->data_array();
     size_t data_len = m_prog->data_array_len();
 
-    GC_ROOT_VEC(m_rt->m_gc, env_stack)  = m_rt->m_gc.allocate_vector(10);
-    GC_ROOT_VEC(m_rt->m_gc, cont_stack) = m_rt->m_gc.allocate_vector(0);
-
     AtomVec *cur_env = args;
-    env_stack->m_len = 0;
     env_stack->push(Atom(T_VEC, cur_env));
 
     cont_stack->push(at_ud);
@@ -428,8 +459,6 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_PACK_VA:
             {
-                E_SET_CHECK_REALLOC(O, O);
-
                 size_t pack_idx = P_A;
                 if (pack_idx < cur_env->m_len)
                 {
@@ -438,10 +467,12 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
                     for (size_t i = 0; i < va_len; i++)
                         v->m_data[i] = cur_env->m_data[i + pack_idx];
                     Atom vv(T_VEC, v);
+                    E_SET_CHECK_REALLOC(O, O);
                     E_SET(O, vv);
                 }
                 else
                 {
+                    E_SET_CHECK_REALLOC(O, O);
                     E_SET(O, Atom(T_VEC, m_rt->m_gc.allocate_vector(0)));
                 }
                 break;
@@ -513,15 +544,23 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
 
             case OP_RETURN:
             {
-                Atom *tmp = nullptr;
+
+                // We get the returnvalue here, so we don't get corrupt
+                // addresses when the later E_SET_D is maybe reallocating
+                // some address space we might be refering to.
+                Atom ret_val;
+                {
+                    Atom *tmp = nullptr;
+                    E_GET(tmp, O);
+                    ret_val = *tmp;
+                }
 
                 cont_stack->pop(); // the current function can be discarded
                 // retrieve the continuation:
                 Atom *c = cont_stack->last();
                 if (!c || c->m_type == T_NIL)
                 {
-                    E_GET(tmp, O);
-                    ret = *tmp;
+                    ret = ret_val;
                     m_pc = &(m_prog->m_instructions[m_prog->m_instructions_len - 2]);
                     break;
                 }
@@ -552,9 +591,8 @@ Atom VM::eval(Atom at_ud, AtomVec *args)
                 cur_env   = env_stack->last()->m_d.vec;
 
                 E_SET_CHECK_REALLOC_D(eidx, oidx);
-                E_GET(tmp, O);
-                E_SET_D(eidx, oidx, *tmp);
-                if (m_trace) cout << "RETURN=> " << tmp->to_write_str() << endl;
+                E_SET_D(eidx, oidx, ret_val);
+                if (m_trace) cout << "RETURN(" << oidx << ":" << eidx << ") => " << ret_val.to_write_str() << endl;
 
 //                cout << "VMRETURN VAL: " << retval.to_write_str() << endl;
 

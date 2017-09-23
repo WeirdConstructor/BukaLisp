@@ -12,6 +12,12 @@ size_t AtomVec::s_alloc_count = 0;
 
 //---------------------------------------------------------------------------
 
+#if WITH_MEM_POOL
+MemoryPool<Atom> g_atom_array_pool;
+#endif
+
+//---------------------------------------------------------------------------
+
 std::string Atom::to_write_str() const
 {
      return write_atom(*this);
@@ -68,7 +74,11 @@ void AtomVec::alloc(size_t len)
 {
     m_alloc = len;
     m_len   = 0;
+#if WITH_MEM_POOL
+    m_data  = g_atom_array_pool.allocate(len);
+#else
     m_data  = new Atom[len];
+#endif
 //    std::cout << "ALLOC:" << ((void *) this) << "@" << ((void *) m_data) << std::endl;
 }
 //---------------------------------------------------------------------------
@@ -138,13 +148,23 @@ void AtomVec::check_size(size_t idx)
     {
         Atom *old_data = m_data;
         m_alloc = idx * 2;
-        m_data = new Atom[m_alloc];
+#if WITH_MEM_POOL
+        m_data  = g_atom_array_pool.allocate(m_alloc);
+#else
+        m_data  = new Atom[m_alloc];
+#endif
 //        std::cout << "ALLOC:" << ((void *) this) << "@" << ((void *) m_data) << " ; " << m_alloc << std::endl;
         for (size_t i = 0; i < m_len; i++)
             m_data[i] = old_data[i];
 //        std::cout << "DELETE AR " << ((void *) this) << "@" << ((void *) old_data) << std::endl;
+
+#if WITH_MEM_POOL
+        if (old_data)
+            g_atom_array_pool.free(old_data);
+#else
         if (old_data)
             delete[] old_data;
+#endif
     }
     else
     {
@@ -160,8 +180,13 @@ AtomVec::~AtomVec()
 {
     s_alloc_count--;
 
+#if WITH_MEM_POOL
+    if (m_data)
+        g_atom_array_pool.free(m_data);
+#else
     if (m_data)
         delete[] m_data;
+#endif
 }
 //---------------------------------------------------------------------------
 
@@ -202,6 +227,68 @@ GCRootRefPool::GCRootRef::~GCRootRef()
 }
 //---------------------------------------------------------------------------
 
+Atom GC::get_statistics()
+{
+    AtomVec *v = this->allocate_vector(0);
+    AtomVec *e = nullptr;
+
+#define     BKLISP_GC_NEW_ST_ENTRY(name, num) \
+    e = this->allocate_vector(0); \
+    e->push(Atom(T_KW,  this->new_symbol(name))); \
+    e->push(Atom(T_INT, num)); \
+    v->push(Atom(T_VEC, e));
+
+    BKLISP_GC_NEW_ST_ENTRY("alive-vectors", m_num_alive_vectors);
+    BKLISP_GC_NEW_ST_ENTRY("alive-maps",    m_num_alive_maps);
+    BKLISP_GC_NEW_ST_ENTRY("alive-syms",    m_num_alive_syms);
+
+    size_t n_alive_vector_bytes = 0;
+    AtomVec *alive_v = m_vectors;
+    while (alive_v)
+    {
+        n_alive_vector_bytes +=
+            sizeof(AtomVec) + alive_v->m_alloc * sizeof(Atom);
+        alive_v = alive_v->m_gc_next;
+    }
+
+    size_t n_syms_size = 0;
+    Sym *s = m_syms;
+    while (s)
+    {
+        n_syms_size += sizeof(Sym) + s->m_str.size();
+        s = s->m_gc_next;
+    }
+
+    size_t n_medium_bytes = 0;
+    size_t n_small_bytes = 0;
+    size_t n_medium = 0;
+    size_t n_small  = 0;
+    AtomVec *mv = m_medium_vectors;
+    while (mv)
+    {
+        n_medium_bytes += sizeof(AtomVec) + mv->m_alloc * sizeof(Atom);
+        n_medium++;
+        mv = mv->m_gc_next;
+    }
+
+    mv = m_small_vectors;
+    while (mv)
+    {
+        n_small_bytes += sizeof(AtomVec) + mv->m_alloc * sizeof(Atom);
+        n_small++;
+        mv = mv->m_gc_next;
+    }
+
+    BKLISP_GC_NEW_ST_ENTRY("medium-vector-pool",       n_medium);
+    BKLISP_GC_NEW_ST_ENTRY("small-vector-pool",        n_small);
+
+    BKLISP_GC_NEW_ST_ENTRY("small-vector-pool-bytes",  n_small_bytes);
+    BKLISP_GC_NEW_ST_ENTRY("medium-vector-pool-bytes", n_medium_bytes);
+    BKLISP_GC_NEW_ST_ENTRY("alive-vectors-bytes",      n_alive_vector_bytes);
+    BKLISP_GC_NEW_ST_ENTRY("alive-syms-bytes",         n_syms_size);
+
+    return Atom(T_VEC, v);
+}
 };
 
 /******************************************************************************

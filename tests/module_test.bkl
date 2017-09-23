@@ -1,0 +1,56 @@
+(define *M* (get-vm-modules))
+
+(define T
+  (lambda (func expected what)
+    (define ret (func))
+    (if (eqv? (write-str ret) (write-str expected))
+      (displayln (str "OK - " what))
+      (error (str "Test failed: " what ", got: "
+                  ret " != " expected " (expected)")))))
+
+(define test ($test *M*))
+
+(define *id (lambda (val)
+  (lambda () ((@2 ($identity test)) val))))
+
+(T (lambda () ((@2 ($isInited test))))
+   #t "module initialized");
+
+(T (*id x:)             "x"                     "identity keyword")
+(T (*id 'x)             "x"                     "identity symbol")
+(T (*id "x")            "x"                     "identity string")
+(T (*id [1 2 3])        '(1 2 3)                "identity list")
+(T (*id [1 {2 2} 3])    '(1 {2 2} 3)            "identity nesting list")
+(T (*id {a: 1})         {'a 1}                  "identity map kw")
+(T (*id {'a 1})         {'a 1}                  "identity map sym")
+(T (*id {"a" 1})        {'a 1}                  "identity map str")
+(T (*id #t)             #t                      "identity true")
+(T (*id #f)             #f                      "identity true")
+(T (*id #f)             #f                      "identity true")
+(T (*id 12345678987654321) 12345678987654321    "identity int 64bit")
+(T (*id if)             "#<syntax:if>"          "identity special value (syntax)")
+
+(T (lambda () (str ((@2 ($getCPtr test)))))
+                        "#<cpointer:12356789>"  "get c pointer")
+
+(define VVPtr ((@2 ($getVVPtr test))))
+(T (lambda ()
+     (str ((*id VVPtr))))
+                        "#<userdata:vv:CCC>"    "get vv pointer")
+
+(T (lambda()
+     ((@2 ($call test))
+      (lambda (a b) [a b])
+      12 42))
+   [12 42]
+   "calling function from module")
+
+(T (lambda()
+     (for (i 1 10000)
+       ((@2 ($call test))
+        (lambda (a b) [a b])
+        12 42)))
+   [12 42]
+   "calling function from module (lots of)")
+
+'ALL-OK

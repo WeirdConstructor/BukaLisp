@@ -69,7 +69,15 @@ void Interpreter::init()
 #undef IN_INTERPRETER
 
     if (m_vm)
+    {
         m_modules = m_vm->loaded_modules();
+        m_vm->set_interpreter_call([=](Atom func, AtomVec *args)
+        {
+            GC_ROOT(m_rt->m_gc,     func_r) = func;
+            GC_ROOT_VEC(m_rt->m_gc, args_r) = args;
+            return this->call(func, args, false, 0);
+        });
+    }
 }
 //---------------------------------------------------------------------------
 

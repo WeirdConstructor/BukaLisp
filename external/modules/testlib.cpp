@@ -60,6 +60,12 @@ VV_CLOSURE(test_get_vv_ptr)
 }
 //---------------------------------------------------------------------------
 
+VV_CLOSURE(test_call)
+{
+    return vv_args->_(0)->call(vv_list() << vv_args->_(1) << vv_args->_(2));
+}
+//---------------------------------------------------------------------------
+
 VV_CLOSURE(test_destroy)
 {
     return vv_undef();
@@ -83,6 +89,7 @@ BukaLISPModule init_testlib()
     SET_FUNC(identity,    test_id);
     SET_FUNC(getCPtr,     test_get_c_ptr);
     SET_FUNC(getVVPtr,    test_get_vv_ptr);
+    SET_FUNC(call,        test_call);
 
     return BukaLISPModule(reg);
 }

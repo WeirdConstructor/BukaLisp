@@ -11,6 +11,12 @@
 #include <memory>
 #include "atom_userdata.h"
 
+#define WITH_MEM_POOL 1
+
+#if WITH_MEM_POOL
+#include "mempool.h"
+#endif
+
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
@@ -380,6 +386,12 @@ class GCRootRefPool;
 #define GC_ROOT(gc, name) \
     bukalisp::GCRootRefPool::GCRootRef gc_ref_##name((gc).get_root_ref_pool()); \
     Atom &name = *(gc_ref_##name.m_ref); name
+#define GC_ROOT_SHARED_PTR(gc, name) \
+    std::shared_ptr<bukalisp::GCRootRefPool::GCRootRef> name = \
+        std::make_shared<bukalisp::GCRootRefPool::GCRootRef>((gc).get_root_ref_pool()); \
+    *(name->m_ref)
+#define GC_ROOT_SHP_REF(name) (*(name->m_ref))
+
 #define GC_ROOT_VEC(gc, name) \
     bukalisp::GCRootRefPool::GCRootRef gc_ref_##name(T_VEC, (gc).get_root_ref_pool()); \
     AtomVec *&name = gc_ref_##name.m_ref->m_d.vec; name
@@ -710,7 +722,7 @@ class GC
               m_num_new_maps(0),
               m_root_pool([=](size_t len) { return this->allocate_vector(len); })
         {
-            m_root_pool.set_pool(this->allocate_vector(1000));
+            m_root_pool.set_pool(this->allocate_vector(100));
         }
 
         GCRootRefPool &get_root_ref_pool()
@@ -719,6 +731,8 @@ class GC
         }
 
         void add_permanent(Sym *sym) { m_perm_syms.push_back(sym); }
+
+        Atom get_statistics();
 
         void give_back_vector(AtomVec *cur, bool dec = false)
         {
@@ -978,6 +992,11 @@ class GC
 };
 //---------------------------------------------------------------------------
 
+#if WITH_MEM_POOL
+extern MemoryPool<Atom> g_atom_array_pool;
+#endif
+
+//---------------------------------------------------------------------------
 }
 
 /******************************************************************************
