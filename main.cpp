@@ -918,6 +918,22 @@ void test_ieval_comments()
 }
 //---------------------------------------------------------------------------
 
+void test_ieval_eval()
+{
+    Runtime rt;
+    Interpreter i(&rt);
+    Atom r;
+
+    TEST_EVAL("(eval 1)",                   "1");
+    TEST_EVAL("(eval '(+ 1 2))",            "3");
+    TEST_EVAL("(eval '(eval '(+ 1 2)))",    "3");
+    TEST_EVAL("(let ((env (bkl-environment))) "
+              "  (eval '(define x 12) env) "
+              "  (eval 'x env))",
+              "12");
+}
+//---------------------------------------------------------------------------
+
 int main(int argc, char *argv[])
 {
     using namespace std::chrono;
@@ -994,6 +1010,7 @@ int main(int argc, char *argv[])
                 RUN_TEST(ieval_loops);
                 RUN_TEST(ieval_objs);
                 RUN_TEST(ieval_comments);
+                RUN_TEST(ieval_eval);
 
                 cout << "TESTS OK" << endl;
             }

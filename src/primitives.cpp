@@ -469,9 +469,21 @@ END_PRIM(bkl-gc-statistics)
 #if IN_INTERPRETER
 
 START_PRIM()
-    REQ_EQ_ARGC(eval, 1);
-    out = eval(A0);
+    REQ_GT_ARGC(eval, 1);
+    if (args.m_len > 1)
+    {
+        if (A1.m_type != T_MAP)
+            error("Can invoke 'eval' only with a map as env", A1);
+        out = eval(A0, A1.m_d.map);
+    }
+    else
+        out = eval(A0);
 END_PRIM(eval)
+
+START_PRIM()
+    REQ_EQ_ARGC(bkl-environment, 0);
+    out = Atom(T_MAP, init_root_env());
+END_PRIM(bkl-environment)
 
 // (invoke-compiler code-name code only-compile root-env)
 // (invoke-compiler [code] code-name only-compile root-env)
@@ -492,6 +504,49 @@ START_PRIM()
                 A0, this->m_debug_pos_map,
                 A3.m_d.vec, A1.to_display_str(), !A2.is_false());
 END_PRIM(invoke-compiler)
+
+#else
+
+START_PRIM()
+    REQ_GT_ARGC(eval, 1);
+    Atom exprs(T_VEC, m_rt->m_gc.allocate_vector(0));
+    exprs.m_d.vec->push(A0);
+
+    AtomVec *env = nullptr;
+    if (args.m_len > 1)
+    {
+        if (A1.m_type != T_VEC)
+            error("Can invoke 'eval' only with a vec as env", A1);
+        env = A1.m_d.vec;
+    }
+    else
+    {
+        env = m_rt->m_gc.allocate_vector(0);
+    }
+
+    Atom prog =
+        m_compiler_call(
+            exprs,
+            m_rt->m_gc.allocate_map(),
+            env,
+            "eval",
+            true);
+    if (env->m_len < 2 || env->m_data[1].m_type != T_VEC)
+        error("Compiler returned bad environment in 'eval'", Atom(T_VEC, env));
+    out = eval(prog, env->m_data[1].m_d.vec);
+END_PRIM(eval)
+
+START_PRIM()
+    REQ_EQ_ARGC(bkl-environment, 0);
+    GC_ROOT_VEC(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_vector(0);
+    m_compiler_call(
+        Atom(T_INT, 42),
+        m_rt->m_gc.allocate_map(),
+        root_env,
+        "env-gen",
+        true);
+    out = Atom(T_VEC, root_env);
+END_PRIM(bkl-environment)
 
 #endif
 

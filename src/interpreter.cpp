@@ -13,13 +13,9 @@ namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
-void Interpreter::init()
+AtomMap *Interpreter::init_root_env()
 {
-    m_env_stack  = m_rt->m_gc.allocate_vector(0);
-    m_prim_table = m_rt->m_gc.allocate_vector(0);
-
-    AtomMap *root_env = m_rt->m_gc.allocate_map();
-    m_env_stack->push(Atom(T_MAP, root_env));
+    GC_ROOT_MAP(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_map();
 
     Atom tmp;
     Atom key;
@@ -68,14 +64,38 @@ void Interpreter::init()
     #include "primitives.cpp"
 #undef IN_INTERPRETER
 
+    return root_env;
+}
+//---------------------------------------------------------------------------
+
+void Interpreter::init()
+{
+    m_env_stack  = m_rt->m_gc.allocate_vector(0);
+    m_prim_table = m_rt->m_gc.allocate_vector(0);
+
+    m_env_stack->push(Atom(T_MAP, init_root_env()));
+
     if (m_vm)
     {
         m_modules = m_vm->loaded_modules();
+
         m_vm->set_interpreter_call([=](Atom func, AtomVec *args)
         {
             GC_ROOT(m_rt->m_gc,     func_r) = func;
             GC_ROOT_VEC(m_rt->m_gc, args_r) = args;
             return this->call(func, args, false, 0);
+        });
+
+        m_vm->set_compiler_call([=](Atom prog, AtomMap *debug_info_map,
+                                    AtomVec *root_env,
+                                    const std::string &input_name,
+                                    bool only_compile)
+        {
+            GC_ROOT(m_rt->m_gc,     prog_r)           = prog;
+            GC_ROOT_MAP(m_rt->m_gc, debug_info_map_r) = debug_info_map_r;
+            GC_ROOT_VEC(m_rt->m_gc, root_env_r)       = root_env;
+            return this->call_compiler(prog, debug_info_map, root_env,
+                                       input_name, only_compile);
         });
     }
 }
@@ -744,6 +764,28 @@ void Interpreter::set_debug_pos(Atom &a)
         m_debug_pos = "";
     Atom deb_info = m_debug_pos_map->at(Atom(T_INT, a.id()));
     m_debug_pos = deb_info.to_display_str();
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval(Atom e, AtomMap *env)
+{
+    GC_ROOT_VEC(m_rt->m_gc, old_env) = m_env_stack;
+
+    m_env_stack = m_rt->m_gc.allocate_vector(0);
+    m_env_stack->push(Atom(T_MAP, env));
+
+    Atom ret;
+    try
+    {
+        ret = eval(e);
+        m_env_stack = old_env;
+    }
+    catch (std::exception &)
+    {
+        m_env_stack = old_env;
+        throw;
+    }
+    return ret;
 }
 //---------------------------------------------------------------------------
 

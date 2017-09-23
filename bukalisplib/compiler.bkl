@@ -1,5 +1,5 @@
 (define primitive-table
-'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 < 5 append 42 keyword? 13 > 6 >= 8 first 39 exact? 15 list 9 eqv? 10 map? 20 not 11 nil? 14 inexact? 16 string? 17 bkl-slurp-file 44 boolean? 18 write-str 43 @! 23 list? 19 get-vm-modules 30 pop! 27 procedure? 21 @ 22 type 24 display 32 length 25 push! 26 make-vm-prog 28 str-join 37 run-vm-prog 29 error 31 newline 33 eval 46 displayln 34 atom-id 35 str 36 last 38 take 40 drop 41 bkl-gc-statistics 45 invoke-compiler 47}
+'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 < 5 append 42 keyword? 13 > 6 >= 8 first 39 exact? 15 list 9 eqv? 10 map? 20 not 11 nil? 14 bkl-environment 47 inexact? 16 string? 17 bkl-slurp-file 44 boolean? 18 write-str 43 @! 23 list? 19 get-vm-modules 30 pop! 27 procedure? 21 @ 22 type 24 display 32 length 25 push! 26 make-vm-prog 28 str-join 37 run-vm-prog 29 error 31 newline 33 eval 46 displayln 34 atom-id 35 str 36 last 38 take 40 drop 41 bkl-gc-statistics 45 invoke-compiler 48}
 )
 ;----------------------------------------------------------------------------
 
@@ -682,11 +682,8 @@
            (.op-mov code-pad iter-adr start-val-adr)
            (define body-ret-adr
                    (.compile-block self (drop atom 2) body-pad))
-;           (.op-eq  body-pad cond-res-adr iter-adr end-val-adr)
-;           (.op-inc body-pad iter-adr step-val-adr)
            ; XXX: iter-adr is implicitly passed with cond-res-adr, as the
            ;      following address is automatically fetched!
-           ; INCFOR step-val-adr iter-adr
            (.op-load-nil code-pad cond-res-adr)
            (.op-br code-pad (.count-ops body-pad))
            (.append-code-pad code-pad body-pad)
@@ -879,6 +876,7 @@ after:
 (lambda (name data debug-info only-compile root-env)
   (let ((compiler (make-prog-frame debug-info)))
     (hook-compiler-methods compiler)
+    (displayln PROG-IN: data)
 
     (unless (not (nil? root-env))
       (error "compiler needs root environment"))

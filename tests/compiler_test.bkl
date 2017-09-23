@@ -17,23 +17,7 @@
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
 ;----------------------------------------------------------------------------
-
-(T '(begin
-      (define x 1)
-      (for (i 1 0) (set! x 20) i)
-      x)
-   1)
-(T '(begin
-      (define x 1)
-      (for (i 1 1) (set! x (+ i 20)) i)
-      x)
-   21)
-(T '(begin
-      (define x 1)
-      (for (i 1 2) (set! x (+ i 20)) i)
-      x)
-   22)
-(error X:)
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ; test externally given environment executed inside VM:
@@ -670,10 +654,6 @@
 (t "(define y x)"    13.3 root-env)
 (t "(+ x y)"         26.6 root-env)
 
-;----------------------------------------------------------------------------
-;--- REWRITE OF ADRESSING WORKING TESTS ABOVE -------------------------------
-;----------------------------------------------------------------------------
-
 ; test externally given environment executed inside VM:
 (let ((my-env []))
   (T '(begin 1) 1 my-env)
@@ -775,6 +755,24 @@
            x)
    -5050)
 
+(T '(begin
+      (define x 1)
+      (for (i 1 0) (set! x 20) i)
+      x)
+   1)
+
+(T '(begin
+      (define x 1)
+      (for (i 1 1) (set! x (+ i 20)) i)
+      x)
+   21)
+
+(T '(begin
+      (define x 1)
+      (for (i 1 2) (set! x (+ i 20)) i)
+      x)
+   22)
+
 ; Test binary ops that are (sometimes) optimized by the compiler
 ; to be statically compiled down to VM OPs:
 (T '(+ 1 2 3) 6)
@@ -855,6 +853,21 @@
 
 (T '($x  {'x 10}) 10)
 (T '(let ((m {'x 10})) ($!x m 12) m) {'x 12})
+
+(T '(eval 1)                    1)
+(T '(eval '(+ 1 2))             3)
+(T '(eval '(eval '(+ 1 2)))     3)
+(T '(eval '(eval '(+ 1 2)))     3)
+(T '(let ((env (bkl-environment)))
+      (eval '(define x 12) env)
+      (eval 'x env))
+   12)
+(T '(let ((env (bkl-environment)))
+      (eval '(define x 12) env)
+      (eval '(set! x (* x 2)) env)
+      (eval 'x env))
+   24)
+
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")

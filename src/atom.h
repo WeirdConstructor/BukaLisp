@@ -396,6 +396,10 @@ class GCRootRefPool;
     bukalisp::GCRootRefPool::GCRootRef gc_ref_##name(T_VEC, (gc).get_root_ref_pool()); \
     AtomVec *&name = gc_ref_##name.m_ref->m_d.vec; name
 
+#define GC_ROOT_MAP(gc, name) \
+    bukalisp::GCRootRefPool::GCRootRef gc_ref_##name(T_MAP, (gc).get_root_ref_pool()); \
+    AtomMap *&name = gc_ref_##name.m_ref->m_d.map; name
+
 #define GC_ROOT_MEMBER(name) \
     bukalisp::GCRootRefPool::GCRootRef gc_ref_##name; \
     Atom &name;

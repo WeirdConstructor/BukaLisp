@@ -241,6 +241,8 @@ class VM
         GC_ROOT_MEMBER_MAP(m_modules);
         bool       m_trace;
         std::function<Atom(Atom func, AtomVec *args)> m_interpreter_call;
+        typedef std::function<Atom(Atom prog, AtomMap *debug_info_map, AtomVec *root_env, const std::string &input_name, bool only_compile)> compiler_func;
+        compiler_func m_compiler_call;
 
     public:
         Runtime   *m_rt;
@@ -264,6 +266,11 @@ class VM
             const std::function<Atom(Atom func, AtomVec *args)> &func)
         {
             m_interpreter_call = func;
+        }
+
+        void set_compiler_call(const compiler_func &func)
+        {
+            m_compiler_call = func;
         }
 
         AtomMap *loaded_modules();

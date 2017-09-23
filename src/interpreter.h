@@ -84,6 +84,8 @@ class Interpreter
         void set_trace(bool e) { m_trace = e; }
         void set_force_always_gc(bool e) { m_force_always_gc = e; }
 
+        AtomMap *init_root_env();
+
         Atom lookup(Sym *var, AtomMap *&env)
         {
             env = nullptr;
@@ -173,6 +175,7 @@ class Interpreter
 
         Atom call(Atom func, AtomVec *av, bool eval_args = false, size_t arg_offs = 0);
         Atom eval(Atom e);
+        Atom eval(Atom e, AtomMap *env);
         Atom eval_begin    (Atom e, AtomVec *av, size_t offs);
         Atom eval_define   (Atom e, AtomVec *av);
         Atom eval_setM     (Atom e, AtomVec *av);

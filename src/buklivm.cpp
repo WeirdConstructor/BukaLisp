@@ -183,6 +183,8 @@ Atom VM::eval(Atom callable, AtomVec *args)
     PROG *prog = nullptr;
     INST *pc   = nullptr;
 
+    if (!args) args = m_rt->m_gc.allocate_vector(0);
+
     GC_ROOT_VEC(m_rt->m_gc, env_stack)  = nullptr;
     GC_ROOT_VEC(m_rt->m_gc, cont_stack) = nullptr;
 
