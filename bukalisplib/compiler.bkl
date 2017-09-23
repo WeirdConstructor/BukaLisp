@@ -1,5 +1,5 @@
 (define primitive-table
-'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 < 5 append 42 keyword? 13 > 6 >= 8 first 39 exact? 15 list 9 eqv? 10 map? 20 not 11 nil? 14 bkl-environment 47 inexact? 16 string? 17 bkl-slurp-file 44 boolean? 18 write-str 43 @! 23 list? 19 get-vm-modules 30 pop! 27 procedure? 21 @ 22 type 24 display 32 length 25 push! 26 make-vm-prog 28 str-join 37 run-vm-prog 29 error 31 newline 33 eval 46 displayln 34 atom-id 35 str 36 last 38 take 40 drop 41 bkl-gc-statistics 45 invoke-compiler 48}
+'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 < 5 append 43 keyword? 13 > 6 >= 8 first 40 exact? 16 null? 15 list 9 eqv? 10 map? 21 not 11 nil? 14 bkl-environment 51 inexact? 17 string? 18 boolean? 19 write-str 44 @! 24 list? 20 get-vm-modules 31 pop! 28 procedure? 22 @ 23 type 25 display 33 length 26 push! 27 make-vm-prog 29 str-join 38 run-vm-prog 30 error 32 newline 34 eval 50 displayln 35 atom-id 36 str 37 last 39 take 41 drop 42 sys-slurp-file 45 bkl-gc-statistics 46 sys-path-separator 47 read-str 48 sys-path-split 49 invoke-compiler 52}
 )
 ;----------------------------------------------------------------------------
 
@@ -497,6 +497,20 @@
          (.compile-block self (drop atom 1) code-pad)))
       ;----------------------------------------------------------------------------
 
+      (set-env-syntax new-env 'include
+       (lambda (atom self code-pad)
+         (unless (eqv? (length atom) 2)
+           (.error self "'include' needs exactly 1 argument" atom))
+         ; TODO FIXME: push current directory path, so the being
+         ;             compiled included file includes other files!
+         (let ((include-file-path (@1 atom))
+               (include-content   (sys-slurp-file include-file-path))
+               (read-data         (read-str include-content with-debug-info:)))
+           (.push-debug-info self (@1 read-data))
+           (.compile-block self (@0 read-data) code-pad)
+         )))
+      ;----------------------------------------------------------------------------
+
       (set-env-syntax new-env 'lambda
        (lambda (atom self code-pad)
          (.compile-lambda self (@1 atom) (drop atom 2) code-pad)))
@@ -739,6 +753,7 @@
          (unless (eqv? 2 (length atom))
            (.error self "'quote' needs exactly 1 argument" atom))
          (.compile-quote self (@1 atom) code-pad)))
+      ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env '$
        (lambda (atom self code-pad)
@@ -752,6 +767,7 @@
                             (keyword? (@1 atom))
                             (string?  (@1 atom))))
                        code-pad)))
+      ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env '$!
        (lambda (atom self code-pad)
@@ -766,6 +782,7 @@
                             (string?  (@1 atom))))
                        (@3 atom)
                        code-pad)))
+      ;----------------------------------------------------------------------------
 
       (set-env-syntax-prim new-env '@
        (lambda (atom self code-pad)
@@ -773,6 +790,7 @@
            (.error self "'@' needs exactly 2 arguments" atom))
          (.compile-get self (@2 atom) (@1 atom) #true code-pad))
        (@'@ primitive-table))
+      ;----------------------------------------------------------------------------
 
       (set-env-syntax-prim new-env '@!
        (lambda (atom self code-pad)
@@ -780,6 +798,7 @@
            (.error self "'@!' needs exactly 3 arguments" atom))
          (.compile-set self (@2 atom) (@1 atom) #true (@3 atom) code-pad))
        (@'@! primitive-table))
+      ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'do-each
        (lambda (atom self code-pad)
@@ -850,33 +869,16 @@
            (.op-pop-env code-pad)
            (.pop-env self)
            (dec-env-offs ret-adr))))
-
-#|
-
-  map-reg <= NEW_MAP
-  ; iter-reg recieved vector with map (for keepalive) and iteration value:
-  ITER iter-reg map-reg
-  NEXT ok-reg val-reg iter-reg
-  BRNIF ok-reg after:
-  ; this one can be skipped for vectors, however, for vectors it should store the current index:
-  IKEY key-reg state-reg 
-  MOV k-reg key-reg
-  MOV v-reg val-reg
-  ...
-
-after:
-  PUSH_NIL ...
-  ...
-
-|#
+      ;----------------------------------------------------------------------------
 
       new-env)))
 ;----------------------------------------------------------------------------
 
 (lambda (name data debug-info only-compile root-env)
-  (let ((compiler (make-prog-frame debug-info)))
+  (let ((compiler (make-prog-frame)))
+    (.push-debug-info compiler debug-info)
     (hook-compiler-methods compiler)
-    (displayln PROG-IN: data)
+    (displayln PROG-IN: name data)
 
     (unless (not (nil? root-env))
       (error "compiler needs root environment"))

@@ -1,9 +1,10 @@
 (define make-prog-frame
- (lambda (debug-info)
-   (let ((self { pad: []
-                 stack: []
-                 debug-pos: nil
-                 debug-info: debug-info }))
+ (lambda ()
+   (let ((self { pad:               []
+                 stack:             []
+                 debug-info-stack:  []
+                 debug-pos:         nil
+                 debug-info:        {} }))
 
      ($define! self (push-prog-frame)
        (push! ($stack: self) ($pad: self))
@@ -12,8 +13,15 @@
      ($define! self (pop-prog-frame)
        ($!pad: self (pop! ($stack: self))))
 
+     ($define! self (push-debug-info info)
+       (push! ($debug-info-stack: self) ($debug-info: self))
+       ($!debug-info: self info))
+
+     ($define! self (pop-debug-info)
+       ($!debug-info: self (pop! ($debug-info-stack: self))))
+
      ($define! self (set-debug-pos atom)
-       (let ((info (@(atom-id atom) debug-info)))
+       (let ((info (@(atom-id atom) ($debug-info: self))))
          (unless (nil? info)
            ($!debug-pos: self info))))
 

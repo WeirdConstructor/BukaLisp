@@ -261,7 +261,7 @@
 (T '(append [1 2 3] 1 a: { x: 12 } [5 5 5]) '(1 2 3 1 a: x: 12 5 5 5))
 (T '(append [1 2 3]) '(1 2 3))
 
-(T '(bkl-slurp-file "foo.txt") "xxx\n")
+(T '(sys-slurp-file "foo.txt") "xxx\n")
 
 ; Test let TODO: Moar!
 (T '(let ((x 10)) x) 10)
@@ -868,6 +868,10 @@
       (eval 'x env))
    24)
 
+(T '(begin
+      (include "bukalisplib\\test-compiler.bkl")
+      test-include-ok)
+   1)
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")

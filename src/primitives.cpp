@@ -132,6 +132,12 @@ START_PRIM()
 END_PRIM(nil?);
 
 START_PRIM()
+    REQ_EQ_ARGC(null?, 1);
+    out = Atom(T_BOOL);
+    out.m_d.b = A0.m_type == T_NIL;
+END_PRIM(null?);
+
+START_PRIM()
     REQ_EQ_ARGC(exact?, 1);
     out = Atom(T_BOOL);
     out.m_d.b = A0.m_type == T_INT;
@@ -170,7 +176,10 @@ END_PRIM(map?);
 START_PRIM()
     REQ_EQ_ARGC(procedure?, 1);
     out = Atom(T_BOOL);
-    out.m_d.b = A0.m_type == T_PRIM || A0.m_type == T_CLOS;
+    out.m_d.b =
+           A0.m_type == T_PRIM
+        || A0.m_type == T_CLOS
+        || (A0.m_type == T_UD && A0.m_d.ud->type() == "VM-PROG");
 END_PRIM(procedure?);
 
 START_PRIM()
@@ -449,7 +458,7 @@ START_PRIM()
 END_PRIM(write-str);
 
 START_PRIM()
-    REQ_EQ_ARGC(bkl-slurp-file, 1);
+    REQ_EQ_ARGC(sys-slurp-file, 1);
     if (   A0.m_type != T_STR
         && A0.m_type != T_SYM
         && A0.m_type != T_KW)
@@ -458,13 +467,69 @@ START_PRIM()
               "or keyword as first argument.", A0);
     }
     out = Atom(T_STR, m_rt->m_gc.new_symbol(slurp_str(A0.m_d.sym->m_str)));
-END_PRIM(bkl-slurp-file)
+END_PRIM(sys-slurp-file)
 
 START_PRIM()
     REQ_EQ_ARGC(bkl-gc-statistics, 0);
     m_rt->m_gc.collect();
     out = m_rt->m_gc.get_statistics();
 END_PRIM(bkl-gc-statistics)
+
+START_PRIM()
+    REQ_EQ_ARGC(sys-path-separator, 0);
+#if defined(WIN32) || defined(_WIN32) 
+    out = Atom(T_STR, m_rt->m_gc.new_symbol("\\"));
+#else
+    out = Atom(T_STR, m_rt->m_gc.new_symbol("/"));
+#endif
+END_PRIM(sys-path-separator)
+
+START_PRIM()
+    REQ_GT_ARGC(read-str, 1);
+    bool include_debug_info = false;
+    if (args.m_len > 1)
+    {
+        include_debug_info =
+            args.m_data[args.m_len - 1].to_display_str() == "with-debug-info";
+    }
+
+    AtomMap *am = nullptr;
+    if (args.m_len > 1)
+    {
+        out = m_rt->read(A1.to_display_str(), A0.to_display_str(), am);
+    }
+    else
+    {
+        out = m_rt->read("", A0.to_display_str(), am);
+    }
+
+    if (include_debug_info)
+    {
+        AtomVec *av = m_rt->m_gc.allocate_vector(0);
+        av->push(out);
+        if (am)
+            av->push(Atom(T_MAP, am));
+        out = Atom(T_VEC, av);
+    }
+END_PRIM(read-str)
+
+START_PRIM()
+    REQ_EQ_ARGC(sys-path-split, 1);
+    std::string s = A0.to_display_str();
+    size_t pos = s.find_last_of("/\\");
+    AtomVec *av = m_rt->m_gc.allocate_vector(0);
+    if (pos == string::npos)
+    {
+        av->push(Atom(T_STR, m_rt->m_gc.new_symbol(s)));
+        av->push(Atom(T_STR, m_rt->m_gc.new_symbol("")));
+    }
+    else
+    {
+        av->push(Atom(T_STR, m_rt->m_gc.new_symbol(s.substr(0, pos))));
+        av->push(Atom(T_STR, m_rt->m_gc.new_symbol(s.substr(pos + 1))));
+    }
+    out = Atom(T_VEC, av);
+END_PRIM(sys-path-split)
 
 #if IN_INTERPRETER
 
