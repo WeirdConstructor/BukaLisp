@@ -137,27 +137,27 @@ find_package(Qt5Widgets)
 find_package(Qt5PrintSupport)
 find_package(Qt5Gui)
 
-if (Qt5Widgets_FOUND)
-    add_definitions(-DHAS_QT5=1)
-    if (NOT WIN32)
-        add_definitions(-fPIC)
-    endif()
-    add_library(lalrt_qt STATIC
-        modules/qt/init.cpp
-        modules/qt/line_editor.cpp
-    )
-    if (MSVC)
-        set(QT_LIBRARIES Qt5::Core Qt5::Widgets)
-    else()
-        set(QT_LIBRARIES Qt5::Core Qt5::Widgets) # msys2: -ljasper -ldbus-1 -lwebp)
-    endif()
-    set(QT_INCLUDEDIRS ${Qt5Widgets_INCLUDE_DIRS}
-                       ${Qt5Core_INCLUDE_DIRS})
-    TARGET_LINK_LIBRARIES(lalrt_support lalrt_qt ${QT_LIBRARIES})
-else()
+#if (Qt5Widgets_FOUND)
+#    add_definitions(-DHAS_QT5=1)
+#    if (NOT WIN32)
+#        add_definitions(-fPIC)
+#    endif()
+#    add_library(bkl_mod_qt STATIC
+#        modules/qt/init.cpp
+#        modules/qt/line_editor.cpp
+#    )
+#    if (MSVC)
+#        set(QT_LIBRARIES Qt5::Core Qt5::Widgets)
+#    else()
+#        set(QT_LIBRARIES Qt5::Core Qt5::Widgets) # msys2: -ljasper -ldbus-1 -lwebp)
+#    endif()
+#    set(QT_INCLUDEDIRS ${Qt5Widgets_INCLUDE_DIRS}
+#                       ${Qt5Core_INCLUDE_DIRS})
+#    TARGET_LINK_LIBRARIES(lalrt_support lalrt_qt ${QT_LIBRARIES})
+#else()
     add_definitions(-DHAS_QT5=0)
     set(QT_LIBRARIES)
     set(QT_INCLUDEDIRS)
-endif()
+#endif()
 
 include_directories(${Boost_INCLUDE_DIRS} ${POCO_INCLUDEDIRS} ${QT_INCLUDEDIRS})

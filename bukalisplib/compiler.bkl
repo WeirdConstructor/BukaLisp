@@ -672,25 +672,30 @@
 
                (start-val-adr (.compile self start-val code-pad))
                (end-val-adr   (.compile self end-val   code-pad))
-               (iter-val-adr  (if (nil? iter-val)
+               (step-val-adr  (if (nil? iter-val)
                                 (.store-static-data self 1)
                                 (.compile self iter-val code-pad)))
-               (iter-adr      (.new-pos self))
                (cond-res-adr  (.new-pos self))
+               (iter-adr      (.new-pos self))
                (body-pad      (.make-code-pad self)))
            (.define-var self iter-name [var: (@0 iter-adr)])
            (.op-mov code-pad iter-adr start-val-adr)
            (define body-ret-adr
                    (.compile-block self (drop atom 2) body-pad))
-           (.op-eq  body-pad cond-res-adr iter-adr end-val-adr)
-           (.op-inc body-pad iter-adr iter-val-adr)
-           ; INCFOR iter-val-adr iter-adr
+;           (.op-eq  body-pad cond-res-adr iter-adr end-val-adr)
+;           (.op-inc body-pad iter-adr step-val-adr)
+           ; XXX: iter-adr is implicitly passed with cond-res-adr, as the
+           ;      following address is automatically fetched!
+           ; INCFOR step-val-adr iter-adr
+           (.op-load-nil code-pad cond-res-adr)
+           (.op-br code-pad (.count-ops body-pad))
            (.append-code-pad code-pad body-pad)
-           (.op-brnif        code-pad
-                             (- 0 (+ 1 (.count-ops body-pad)))
-                             cond-res-adr)
+           (.op-forinc code-pad cond-res-adr step-val-adr end-val-adr)
+           (.op-brnif  code-pad
+                       (- 0 (+ 2 (.count-ops body-pad)))
+                       cond-res-adr)
+           (.op-mov    code-pad for-ret-adr body-ret-adr)
            ; cleanup:
-           (.op-mov code-pad for-ret-adr body-ret-adr)
            (.op-pop-env code-pad)
            (.pop-env self)
            (dec-env-offs for-ret-adr))))

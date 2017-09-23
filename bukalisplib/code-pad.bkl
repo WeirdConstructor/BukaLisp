@@ -129,8 +129,9 @@
       ($define! self (op-le out-idx a-idx b-idx)
         (push-op LE: out-idx a-idx b-idx))
 
-      ($define! self (op-inc val-idx incrementor-idx)
-        (push-op INC: val-idx incrementor-idx 0))
+      ($define! self (op-forinc cond-idx step-idx end-idx)
+        ; XXX: iter-idx=cond-idx+1
+        (push-op FORINC: cond-idx step-idx end-idx))
 
       ($define! self (op-set obj-idx key-idx val-idx)
         (push-op SET: obj-idx key-idx val-idx))

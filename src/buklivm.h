@@ -35,45 +35,45 @@ class VMException : public std::exception
 //    X(LOAD_STATIC,    4) 
 
 #define OP_CODE_DEF(X) \
-    X(NOP,            0) \
-    X(MOV,            1) \
-    X(MOV_FROM,       2) \
-    X(MOV_TO,         3) \
-    X(LOAD_PRIM,      5) \
-    X(LOAD_NIL,       6) \
-    X(NEW_VEC,        7) \
-    X(NEW_MAP,        8) \
-    X(CSET_VEC,       9) \
-    X(PUSH_ENV,      11) \
-    X(POP_ENV,       12) \
-    X(DUMP_ENV_STACK,13) \
-    X(SET_RETURN,    14) \
-    X(CALL,          15) \
-    X(NEW_CLOSURE,   16) \
-    X(BRNIF,         17) \
-    X(BRIF,          18) \
-    X(BR,            19) \
-    X(INC,           20) \
-    X(SET,           21) \
-    X(GET,           22) \
-    X(ITER,          23) \
-    X(NEXT,          24) \
-    X(IKEY,          25) \
-    X(ADD,          100) \
-    X(SUB,          101) \
-    X(MUL,          102) \
-    X(DIV,          103) \
-    X(MOD,          104) \
-    X(LT,           105) \
-    X(GT,           106) \
-    X(LE,           107) \
-    X(GE,           108) \
-    X(EQ,           109) \
-    X(NEQ,          110) \
-    X(NOT,          111) \
-    X(PACK_VA,      200) \
-    X(RETURN,       250) \
-    X(END,          254)
+    X(NOP,            0) /* ()                                     */ \
+    X(MOV,            1) /*                                        */ \
+    X(MOV_FROM,       2) /*                                        */ \
+    X(MOV_TO,         3) /*                                        */ \
+    X(LOAD_PRIM,      5) /*                                        */ \
+    X(LOAD_NIL,       6) /*                                        */ \
+    X(NEW_VEC,        7) /*                                        */ \
+    X(NEW_MAP,        8) /*                                        */ \
+    X(CSET_VEC,       9) /*                                        */ \
+    X(PUSH_ENV,      11) /*                                        */ \
+    X(POP_ENV,       12) /*                                        */ \
+    X(DUMP_ENV_STACK,13) /*                                        */ \
+    X(SET_RETURN,    14) /*                                        */ \
+    X(CALL,          15) /*                                        */ \
+    X(NEW_CLOSURE,   16) /*                                        */ \
+    X(BRNIF,         17) /*                                        */ \
+    X(BRIF,          18) /*                                        */ \
+    X(BR,            19) /*                                        */ \
+    X(FORINC,        20) /* (O: (cond+1=iter) A: cur   B: end)     */ \
+    X(SET,           21) /*                                        */ \
+    X(GET,           22) /*                                        */ \
+    X(ITER,          23) /*                                        */ \
+    X(NEXT,          24) /*                                        */ \
+    X(IKEY,          25) /*                                        */ \
+    X(ADD,          100) /*                                        */ \
+    X(SUB,          101) /*                                        */ \
+    X(MUL,          102) /*                                        */ \
+    X(DIV,          103) /*                                        */ \
+    X(MOD,          104) /*                                        */ \
+    X(LT,           105) /*                                        */ \
+    X(GT,           106) /*                                        */ \
+    X(LE,           107) /*                                        */ \
+    X(GE,           108) /*                                        */ \
+    X(EQ,           109) /*                                        */ \
+    X(NEQ,          110) /*                                        */ \
+    X(NOT,          111) /*                                        */ \
+    X(PACK_VA,      200) /*                                        */ \
+    X(RETURN,       250) /*                                        */ \
+    X(END,          254) /*                                        */
 
 enum OPCODE : uint8_t
 {

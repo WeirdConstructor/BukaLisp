@@ -705,23 +705,49 @@ Atom VM::eval(Atom callable, AtomVec *args)
                 break;
             }
 
-            case OP_INC:
+            case OP_FORINC:
             {
                 E_SET_CHECK_REALLOC(O, O);
 
-                size_t idx_o = P_O;
+                size_t idx_o = P_O + 1;
                 if (idx_o >= cur_env->m_len)
                     cur_env->set(idx_o, Atom(T_INT));
 
-                E_GET(tmp, A);
+                Atom *step;
+                E_GET(step, A);
+                E_GET(tmp, B);
 
                 Atom *ot;
-                E_SET_D_PTR(PE_O, P_O, ot);
+                E_SET_D_PTR(PE_O, (P_O + 1), ot);
                 Atom &o = *ot;
+
+                Atom *condt;
+                E_SET_D_PTR(PE_O, P_O, condt);
+                Atom &cond = *condt;
+
+                bool update = cond.m_type == T_BOOL;
+
                 if (o.m_type == T_DBL)
-                    o.m_d.d += tmp->to_dbl();
+                {
+                    double step_i = step->to_dbl();
+                    double i = o.m_d.d;
+                    if (update) i += step_i;
+                    cond = Atom(T_BOOL, step_i > 0.0
+                                        ? i > tmp->to_dbl()
+                                        : i < tmp->to_dbl());
+                    o.m_d.d = i;
+                }
                 else
-                    o.m_d.i += tmp->to_int();
+                {
+                    int64_t step_i = step->to_int();
+                    int64_t i = o.m_d.i;
+                    if (update) i += step_i;
+                    cond = Atom(T_BOOL, step_i > 0
+                                        ? i > tmp->to_int()
+                                        : i < tmp->to_int());
+                    o.m_d.i = i;
+                }
+
                 break;
             }
 
