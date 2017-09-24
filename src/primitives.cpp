@@ -323,6 +323,17 @@ START_PRIM()
 END_PRIM(bkl-error)
 
 START_PRIM()
+    REQ_EQ_ARGC(bkl-set-meta, 3);
+    m_rt->m_gc.set_meta_register(A0, (size_t) A1.to_int(), A2);
+    out = A2;
+END_PRIM(bkl-set-meta)
+
+START_PRIM()
+    REQ_EQ_ARGC(bkl-get-meta, 1);
+    out = A0.meta();
+END_PRIM(bkl-get-meta)
+
+START_PRIM()
     REQ_GT_ARGC(display, 1);
 
     for (size_t i = 0; i < args.m_len; i++)

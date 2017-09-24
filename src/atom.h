@@ -118,18 +118,19 @@ struct AtomVec;
 
 struct AtomVec
 {
-    uint8_t  m_gc_color;
-    AtomVec *m_gc_next;
+    uint8_t     m_gc_color;
+    AtomVec    *m_gc_next;
 
-    size_t  m_alloc;
-    size_t  m_len;
-    Atom   *m_data;
+    size_t      m_alloc;
+    size_t      m_len;
+    Atom       *m_data;
+    AtomVec    *m_meta;
 
     static size_t   s_alloc_count;
 
     AtomVec()
         : m_gc_next(nullptr), m_gc_color(0), m_alloc(0),
-          m_len(0), m_data(nullptr)
+          m_len(0), m_data(nullptr), m_meta(nullptr)
     {
         s_alloc_count++;
     }
@@ -162,11 +163,12 @@ typedef std::unordered_map<Atom, Atom, AtomHash>    UnordAtomMap;
 
 struct AtomMap
 {
-    uint8_t  m_gc_color;
-    AtomMap *m_gc_next;
-    UnordAtomMap m_map;
+    uint8_t         m_gc_color;
+    AtomMap        *m_gc_next;
+    UnordAtomMap    m_map;
+    AtomVec        *m_meta;
 
-    AtomMap() : m_gc_next(nullptr), m_gc_color(0) { }
+    AtomMap() : m_gc_next(nullptr), m_gc_color(0), m_meta(nullptr) { }
 
     void set(Sym *s, Atom &a);
     void set(const Atom &str, Atom &a);
@@ -268,6 +270,13 @@ struct Atom
     {
         if (m_type != T_MAP) return Atom();
         return m_d.map->at(a);
+    }
+
+    Atom meta()
+    {
+        if      (m_type == T_VEC && m_d.vec->m_meta) return Atom(T_VEC, m_d.vec->m_meta);
+        else if (m_type == T_MAP && m_d.map->m_meta) return Atom(T_VEC, m_d.map->m_meta);
+        else return Atom();
     }
 
     bool eqv(const Atom &o)
@@ -649,6 +658,9 @@ class GC
 
             vec->m_gc_color = m_current_color;
 
+            if (vec->m_meta && vec->m_meta)
+                m_gc_vec_stack.push_back(vec->m_meta);
+
             for (size_t i = 0; i < vec->m_len; i++)
             {
                 mark_atom(vec->m_data[i]);
@@ -663,6 +675,9 @@ class GC
                 return;
 
             map->m_gc_color = m_current_color;
+
+            if (map && map->m_meta)
+                m_gc_vec_stack.push_back(map->m_meta);
 
             for (UnordAtomMap::iterator i = map->m_map.begin();
                  i != map->m_map.end();
@@ -850,12 +865,12 @@ class GC
             switch (at.m_type)
             {
                 case T_MAP:
-                    m_gc_map_stack.push_back((AtomMap *) at.m_d.map);
+                    m_gc_map_stack.push_back(at.m_d.map);
                     break;
 
                 case T_CLOS:
                 case T_VEC:
-                    m_gc_vec_stack.push_back((AtomVec *) at.m_d.vec);
+                    m_gc_vec_stack.push_back(at.m_d.vec);
                     break;
 
                 case T_UD:
@@ -978,6 +993,22 @@ class GC
             m_num_new_vectors++;
 
             return new_vec;
+        }
+
+        void set_meta_register(Atom &a, size_t i, Atom &meta)
+        {
+            if (a.m_type == T_VEC)
+            {
+                if (!a.m_d.vec->m_meta)
+                    a.m_d.vec->m_meta = this->allocate_vector(i + 1);
+                a.m_d.vec->m_meta->set(i, meta);
+            }
+            else if (a.m_type == T_MAP)
+            {
+                if (!a.m_d.map->m_meta)
+                    a.m_d.map->m_meta = this->allocate_vector(i + 1);
+                a.m_d.map->m_meta->set(i, meta);
+            }
         }
 
         AtomVec *clone_vector(AtomVec *av)

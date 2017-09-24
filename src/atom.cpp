@@ -87,6 +87,7 @@ void AtomVec::init(uint8_t current_gc_color, size_t len)
 {
     m_len      = len;
     m_gc_color = current_gc_color;
+    m_meta     = nullptr;
 
     for (size_t i = 0; i < m_len; i++)
     {
@@ -333,7 +334,7 @@ BukaLISPException &BukaLISPException::push(Atom &err_stack)
         push(
             err_stack.at(i).at(0).to_display_str(),
             err_stack.at(i).at(1).to_display_str(),
-            err_stack.at(i).at(2).to_int(),
+            (size_t) err_stack.at(i).at(2).to_int(),
             err_stack.at(i).at(3).to_display_str());
     }
     return *this;

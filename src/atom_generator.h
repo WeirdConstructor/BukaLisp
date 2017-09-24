@@ -75,14 +75,18 @@ class AtomGenerator : public bukalisp::SEX_Builder
         virtual void start_list()
         {
             AtomVec *new_vec = m_gc->allocate_vector(0);
-            Atom a(T_VEC);
-            a.m_d.vec = new_vec;
+            Atom a(T_VEC, new_vec);
             add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
+
+            AtomVec *meta_info = m_gc->allocate_vector(2);
+            meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));
+            meta_info->push(Atom(T_INT, m_dbg_line));
+            m_gc->set_meta_register(a, 0, Atom(T_VEC, meta_info));
 
             m_add_stack.push_back(
                 std::pair<Atom, AddFunc>(
                     a,
-                    [new_vec](Atom &a) { new_vec->push(a); }));
+                    [=](Atom &a) { new_vec->push(a); }));
         }
 
         virtual void end_list()
@@ -95,9 +99,13 @@ class AtomGenerator : public bukalisp::SEX_Builder
         virtual void start_map()
         {
             AtomMap *new_map = m_gc->allocate_map();
-            Atom a(T_MAP);
-            a.m_d.map = new_map;
+            Atom a(T_MAP, new_map);
             add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
+
+            AtomVec *meta_info = m_gc->allocate_vector(2);
+            meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));
+            meta_info->push(Atom(T_INT, m_dbg_line));
+            m_gc->set_meta_register(a, 0, Atom(T_VEC, meta_info));
 
             std::shared_ptr<std::pair<bool, Atom>> key_data
                 = std::make_shared<std::pair<bool, Atom>>(true, Atom());

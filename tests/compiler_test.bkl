@@ -17,8 +17,8 @@
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
 ;----------------------------------------------------------------------------
-(T '(+) 1)
-(error X:)
+;(T '(+) 1)
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ; test externally given environment executed inside VM:
@@ -873,6 +873,11 @@
       (include "bukalisplib\\test-compiler.bkl")
       test-include-ok)
    1)
+
+(T '(let ((v []))
+      (bkl-set-meta v 2 42)
+      (bkl-get-meta v))
+   '(nil nil 42))
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")

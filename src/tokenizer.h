@@ -269,6 +269,7 @@ class Tokenizer
                             if (c == '#')
                             {
                                 m_u8buf.skip_bytes(1);
+                                c = m_u8buf.first_byte();
                                 nest--;
                                 continue;
                             }
@@ -282,6 +283,7 @@ class Tokenizer
                             if (c == '|')
                             {
                                 m_u8buf.skip_bytes(1);
+                                c = m_u8buf.first_byte();
                                 nest++;
                                 continue;
                             }

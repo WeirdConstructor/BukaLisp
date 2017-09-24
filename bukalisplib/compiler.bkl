@@ -1,5 +1,5 @@
 (define primitive-table
-'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 < 5 append 43 keyword? 13 > 6 >= 8 first 40 exact? 16 null? 15 list 9 eqv? 10 map? 21 not 11 nil? 14 bkl-environment 51 inexact? 17 string? 18 boolean? 19 write-str 44 @! 24 list? 20 get-vm-modules 31 pop! 28 procedure? 22 @ 23 type 25 display 33 length 26 push! 27 make-vm-prog 29 str-join 38 run-vm-prog 30 error 32 newline 34 eval 50 displayln 35 atom-id 36 str 37 last 39 take 41 drop 42 sys-slurp-file 45 bkl-gc-statistics 46 sys-path-separator 47 read-str 48 sys-path-split 49 invoke-compiler 52}
+'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 < 5 append 46 keyword? 13 > 6 >= 8 first 43 exact? 16 null? 15 list 9 eqv? 10 map? 21 not 11 nil? 14 bkl-environment 54 inexact? 17 string? 18 boolean? 19 write-str 47 @! 24 list? 20 get-vm-modules 31 pop! 28 procedure? 22 @ 23 type 25 display 36 length 26 push! 27 make-vm-prog 29 str-join 41 run-vm-prog 30 error 32 bkl-error 33 bkl-set-meta 34 bkl-get-meta 35 newline 37 eval 53 displayln 38 atom-id 39 str 40 last 42 take 44 drop 45 sys-slurp-file 48 bkl-gc-statistics 49 sys-path-separator 50 read-str 51 sys-path-split 52 invoke-compiler 55}
 )
 ;----------------------------------------------------------------------------
 
@@ -201,7 +201,7 @@
 ;        (when (eqv? (@0 var) syntax:) (.define-var self sym var))
 ;        (when (eqv? (@0 var) prim:)   (.define-var self sym var))
 ;        (when (eqv? (@0 var) macro:)  (.define-var self sym var))))
-;
+
     ($define! self (error msg atom)
       (bkl-error
           (str-join " " msg atom)

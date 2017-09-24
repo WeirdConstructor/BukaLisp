@@ -235,6 +235,7 @@ void test_maps()
 
     Atom m = r.at(2);
 
+    TEST_EQSTR(r.meta().to_display_str(), "((\"test_maps\" 1))", "meta info");
     TEST_EQ(r.at(3).m_d.i, 4, "last atom");
 
     TEST_EQ(m.at(tc.a_kw("a")).m_type, T_INT, "map a key type");
@@ -245,10 +246,10 @@ void test_maps()
     tc.make_always_alive(m.at(tc.a_kw("b")));
 
     TEST_EQ(tc.pot_alive_maps(), 3, "alive map count");
-    TEST_EQ(tc.pot_alive_vecs(), 5, "alive vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 13, "alive vec count");
     tc.collect();
     TEST_EQ(tc.pot_alive_maps(), 2, "alive map count after gc");
-    TEST_EQ(tc.pot_alive_vecs(), 4, "alive vec count after gc");
+    TEST_EQ(tc.pot_alive_vecs(), 8, "alive vec count after gc");
 }
 //---------------------------------------------------------------------------
 
@@ -263,7 +264,7 @@ void test_symbols_and_keywords()
 
     Atom r = tc.root();
 
-    TEST_EQ(tc.pot_alive_syms(), 4, "some syms alive after parse");
+    TEST_EQ(tc.pot_alive_syms(), 5, "some syms alive after parse");
 
     TEST_EQ(r.at(0).m_type, T_SYM, "sym 1");
     TEST_EQ(r.at(1).m_type, T_SYM, "sym 2");
@@ -288,7 +289,7 @@ void test_maps2()
 {
     Reader tc;
 
-    tc.parse("test_atom_printer", "({ 123 5 }{ #t 34 }{ #f 5 }");
+    tc.parse("test_atom_printer", "({ 123 5 }{ #t 34 }{ #f 5 })");
 
     Atom r = tc.root();
 

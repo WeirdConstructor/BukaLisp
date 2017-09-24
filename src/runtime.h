@@ -42,7 +42,10 @@ struct Runtime
                 return Atom();
             }
             if (!m_par.is_eof())
+            {
                 elems->push(m_ag.root());
+//                std::cout << "ELEMS PUSH " << Atom(T_VEC, elems).at(1).meta().to_write_str() << std::endl;
+            }
         }
         debug_map_output = m_ag.debug_info();
         m_ag.clear_debug_info();
