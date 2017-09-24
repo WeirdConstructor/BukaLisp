@@ -968,11 +968,21 @@ Atom Interpreter::get_compiler_func()
     {
         m_compiler_func = eval(compiler_path, slurp_str(compiler_path));
     }
+    catch (BukaLISPException &e)
+    {
+        e.push("interpreter", compiler_path, 0, "get_compiler_func");
+        throw e;
+    }
     catch (std::exception &e)
     {
-        throw InterpreterException(
-            "ERROR while compiling the compiler ["
-            + compiler_path + "] Exception: " + e.what());
+        throw BukaLISPException(
+            "interpreter",
+            compiler_path,
+            0,
+            "get_compiler_func",
+            std::string(
+                "Unknown error while compiling the compiler, Exception: ")
+            + e.what());
     }
 
     if (m_compiler_func.m_type != T_CLOS)

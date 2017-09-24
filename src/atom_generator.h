@@ -64,6 +64,14 @@ class AtomGenerator : public bukalisp::SEX_Builder
                 Atom(T_STR, m_gc->new_symbol(info)));
         }
 
+        virtual void error(const std::string &what,
+                           const std::string &inp_name,
+                           size_t line,
+                           const std::string &tok)
+        {
+            throw BukaLISPException("reader", inp_name, line, tok, what);
+        }
+
         virtual void start_list()
         {
             AtomVec *new_vec = m_gc->allocate_vector(0);

@@ -18,6 +18,11 @@ class SEX_Builder
     public:
         virtual ~SEX_Builder() { }
 
+        virtual void error(const std::string &what,
+                           const std::string &inp_name,
+                           size_t line,
+                           const std::string &tok) = 0;
+
         virtual void set_debug_info(const std::string &inp_name, size_t line)
         {
             m_dbg_input_name = inp_name;
@@ -65,7 +70,7 @@ class Parser
 
         void log_error(const std::string &what, Token &t)
         {
-            std::cout << "ERROR [" << t.m_line << "] :" << what << std::endl;
+            M_BUILDER(error(what, t.m_input_name, t.m_line, t.dump()));
         }
 
         void debug_token(Token &t)
@@ -75,6 +80,7 @@ class Parser
 
         bool parse_map()
         {
+            Token start_t = m_tok.peek();
             m_tok.next();
             if (!skip_comments())
                 return false;
@@ -88,21 +94,31 @@ class Parser
                 if (t.m_token_id == TOK_CHR && t.nth(0) == '}')
                     break;
 
+                debug_token(t);
                 M_BUILDER(start_kv_pair());
 
                 if (!parse())
                     return false;
 
+                debug_token(t);
                 M_BUILDER(end_kv_key());
 
                 if (!parse())
                     return false;
 
+                debug_token(t);
                 M_BUILDER(end_kv_pair());
 
                 if (!skip_comments())
                     return false;
                 t = m_tok.peek();
+            }
+
+            if (t.m_token_id == TOK_EOF)
+            {
+                log_error(
+                    "Couldn't find matching delimiter: '}'",
+                    start_t);
             }
 
             debug_token(t);
@@ -117,6 +133,7 @@ class Parser
 
         bool parse_sequence(bool quoted, char end_delim)
         {
+            Token start_t = m_tok.peek();
             m_tok.next();
             if (!skip_comments())
                 return false;
@@ -133,12 +150,21 @@ class Parser
                 if (t.m_token_id == TOK_CHR && t.nth(0) == end_delim)
                     break;
 
+                debug_token(t);
                 if (!parse())
                     return false;
 
                 if (!skip_comments())
                     return false;
                 t = m_tok.peek();
+            }
+
+            if (t.m_token_id == TOK_EOF)
+            {
+                log_error(
+                    std::string("Couldn't find matching delimiter: '")
+                    + end_delim + "'",
+                    start_t);
             }
 
             debug_token(t);

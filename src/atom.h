@@ -21,6 +21,64 @@ namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
+class BukaLISPException : public std::exception
+{
+    private:
+        struct ErrorFrame
+        {
+            std::string m_place;
+            std::string m_file_name;
+            size_t      m_line;
+            std::string m_func_name;
+
+            std::string to_string()
+            {
+                return "{" + m_place + "} "
+                       + " (" + m_func_name
+                       + ") [" + m_file_name
+                              + ":" + std::to_string(m_line) + "]\n";
+            }
+        };
+        std::vector<ErrorFrame> m_frames;
+        std::string m_error_message;
+        std::string m_err;
+
+    public:
+        BukaLISPException(const std::string &err)
+        {
+            m_error_message = err;
+        }
+        BukaLISPException(const std::string place,
+                  const std::string file_name,
+                  size_t line,
+                  const std::string &func_name,
+                  const std::string &err)
+        {
+            m_error_message = err;
+            push(place, file_name, line, func_name);
+        }
+        void push(const std::string place,
+                  const std::string file_name,
+                  size_t line,
+                  const std::string &func_name)
+        {
+            ErrorFrame frm;
+            frm.m_place     = place;
+            frm.m_file_name = file_name;
+            frm.m_line      = line;
+            frm.m_func_name = func_name;
+            m_frames.push_back(frm);
+            m_err = "";
+            for (auto &frm : m_frames)
+                m_err = frm.to_string() + m_err;
+            m_err += "Error: " + m_error_message;
+            m_err = "\n" + m_err;
+        }
+        virtual const char *what() const noexcept { return m_err.c_str(); }
+        virtual ~BukaLISPException() { }
+};
+//---------------------------------------------------------------------------
+
 enum Type : int16_t
 {
     T_NIL,
