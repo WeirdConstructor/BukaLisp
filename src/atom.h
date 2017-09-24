@@ -21,6 +21,8 @@ namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
+struct Atom;
+
 class BukaLISPException : public std::exception
 {
     private:
@@ -57,7 +59,10 @@ class BukaLISPException : public std::exception
             m_error_message = err;
             push(place, file_name, line, func_name);
         }
-        void push(const std::string place,
+
+        BukaLISPException &push(Atom &err_stack);
+
+        BukaLISPException &push(const std::string place,
                   const std::string file_name,
                   size_t line,
                   const std::string &func_name)
@@ -73,6 +78,7 @@ class BukaLISPException : public std::exception
                 m_err = frm.to_string() + m_err;
             m_err += "Error: " + m_error_message;
             m_err = "\n" + m_err;
+            return *this;
         }
         virtual const char *what() const noexcept { return m_err.c_str(); }
         virtual ~BukaLISPException() { }

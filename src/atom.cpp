@@ -324,6 +324,22 @@ void AtomMapIterator::mark(GC *gc, uint8_t clr)
 }
 //---------------------------------------------------------------------------
 
+BukaLISPException &BukaLISPException::push(Atom &err_stack)
+{
+    if (err_stack.m_type != T_VEC)
+        return *this;
+    for (size_t i = 0; i < err_stack.m_d.vec->m_len; i++)
+    {
+        push(
+            err_stack.at(i).at(0).to_display_str(),
+            err_stack.at(i).at(1).to_display_str(),
+            err_stack.at(i).at(2).to_int(),
+            err_stack.at(i).at(3).to_display_str());
+    }
+    return *this;
+}
+//---------------------------------------------------------------------------
+
 };
 
 /******************************************************************************

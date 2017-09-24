@@ -17,7 +17,8 @@
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
 ;----------------------------------------------------------------------------
-;(error X:)
+(T '(+) 1)
+(error X:)
 ;----------------------------------------------------------------------------
 
 ; test externally given environment executed inside VM:

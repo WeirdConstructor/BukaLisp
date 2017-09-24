@@ -203,8 +203,9 @@
 ;        (when (eqv? (@0 var) macro:)  (.define-var self sym var))))
 ;
     ($define! self (error msg atom)
-      (error (str-join " " "BukaLISP-Compiler Error: " ($debug-pos: self) msg)
-             atom))
+      (bkl-error
+          (str-join " " msg atom)
+          [["compiler" ($debug-pos: self) 0 ""]]))
 
     ($define! self (new-tmp-pos)
       (let ((env-pos (last ($env-pos-stack: self)))

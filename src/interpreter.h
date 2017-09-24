@@ -164,9 +164,15 @@ class Interpreter
             AtomVec *root_env,
             bool only_compile = false);
 
+        BukaLISPException &add_stack_trace_error(BukaLISPException &e)
+        {
+            return e.push("interpreter", m_debug_pos, 0, "");
+        }
+
         void error(const std::string &msg)
         {
-            throw InterpreterException("(@" + m_debug_pos + "): " + msg);
+            throw BukaLISPException("interpreter", m_debug_pos, 0, "", msg);
+//            throw InterpreterException("(@" + m_debug_pos + "): " + msg);
         }
         void error(const std::string &msg, Atom &err_atom)
         {

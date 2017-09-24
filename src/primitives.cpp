@@ -315,6 +315,14 @@ START_PRIM()
 END_PRIM(error)
 
 START_PRIM()
+    REQ_EQ_ARGC(bkl-error, 2);
+    throw
+        add_stack_trace_error(
+            BukaLISPException(A0.to_display_str())
+        .push(A1));
+END_PRIM(bkl-error)
+
+START_PRIM()
     REQ_GT_ARGC(display, 1);
 
     for (size_t i = 0; i < args.m_len; i++)
