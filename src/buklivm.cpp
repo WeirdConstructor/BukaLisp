@@ -143,9 +143,9 @@ void VM::load_module(BukaLISPModule *m)
     for (size_t i = 0; i < m->function_count(); i++)
     {
         Atom func_desc(T_VEC, m_rt->m_gc.allocate_vector(3));
-        func_desc.m_d.vec->set(0, m->get_func_name(this, i));
-        func_desc.m_d.vec->set(1, Atom(T_INT, m_prim_table->m_len));
-        func_desc.m_d.vec->set(2, m->get_func(this, i));
+        func_desc.m_d.vec->push(m->get_func_name(this, i));
+        func_desc.m_d.vec->push(Atom(T_INT, m_prim_table->m_len));
+        func_desc.m_d.vec->push(m->get_func(this, i));
         funcs.m_d.map->set(func_desc.at(0), func_desc);
 
         m_prim_table->push(func_desc.at(2));
@@ -193,7 +193,6 @@ Atom VM::eval(Atom callable, AtomVec *args)
         prog      = dynamic_cast<PROG*>(callable.m_d.ud);
         pc        = &(prog->m_instructions[0]);
         env_stack = m_rt->m_gc.allocate_vector(10);
-        env_stack->m_len = 0;
     }
     else if (callable.m_type == T_CLOS)
     {
@@ -534,6 +533,7 @@ Atom VM::eval(Atom callable, AtomVec *args)
                     AtomVec *v = m_rt->m_gc.allocate_vector(va_len);
                     for (size_t i = 0; i < va_len; i++)
                         v->m_data[i] = cur_env->m_data[i + pack_idx];
+                    v->m_len = va_len;
                     Atom vv(T_VEC, v);
                     E_SET_CHECK_REALLOC(O, O);
                     E_SET(O, vv);
@@ -590,6 +590,7 @@ Atom VM::eval(Atom callable, AtomVec *args)
                     cont->m_data[4] = Atom(T_INT, PE_O);
                     // just for keepin a reference to the called function:
                     cont->m_data[5] = func;
+                    cont->m_len = 6;
 
                     // replace current function with continuation
                     *cont_stack->last() = Atom(T_VEC, cont);

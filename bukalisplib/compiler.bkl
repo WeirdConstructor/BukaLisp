@@ -878,7 +878,7 @@
   (let ((compiler (make-prog-frame)))
     (.push-debug-info compiler debug-info)
     (hook-compiler-methods compiler)
-    (displayln PROG-IN: name data)
+;    (displayln PROG-IN: name data)
 
     (unless (not (nil? root-env))
       (error "compiler needs root environment"))
@@ -907,7 +907,7 @@
       (.recycle-pos compiler ret-adr)
 ;      (displayln PAD: ($pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
-        (displayln prog)
+;        (displayln prog)
         (if only-compile
           prog
           (run-vm-prog prog (@1 root-env)))))))

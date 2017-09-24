@@ -214,10 +214,10 @@ Atom Interpreter::eval_lambda(Atom e, AtomVec *av)
 
     AtomVec *clos_env = m_rt->m_gc.clone_vector(m_env_stack);
     AtomVec *closure  = m_rt->m_gc.allocate_vector(3);
-    closure->m_data[0] = Atom(T_VEC, clos_env);
-    closure->m_data[1] = Atom(T_VEC, av);
-    closure->m_data[2] =
-        m_debug_pos_map ? Atom(T_MAP, m_debug_pos_map) : Atom();
+    closure->push(Atom(T_VEC, clos_env));
+    closure->push(Atom(T_VEC, av));
+    closure->push(
+        m_debug_pos_map ? Atom(T_MAP, m_debug_pos_map) : Atom());
     return Atom(T_CLOS, closure);
 }
 //---------------------------------------------------------------------------
@@ -598,13 +598,13 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
         Atom bind_param = arg_bind_def->m_data[i];
         if (bind_param.m_type != T_SYM)
             error("Argument binding parameter name must be a symbol", bind_param);
-        arg_def_av->m_data[i - 1] = bind_param;
+        arg_def_av->set(i - 1, bind_param);
     }
 
     AtomVec *lambda_av = m_rt->m_gc.allocate_vector(2 + (av->m_len - 3));
-    lambda_av->m_data[1] = Atom(T_VEC, arg_def_av);
+    lambda_av->set(1, Atom(T_VEC, arg_def_av));
     for (size_t i = 3; i < av->m_len; i++)
-        lambda_av->m_data[i - 1] = av->m_data[i];
+        lambda_av->set(i - 1, av->m_data[i]);
 
     GC_ROOT(m_rt->m_gc, lambda) = Atom(T_VEC, lambda_av);
 
@@ -655,7 +655,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
 
         for (size_t i = 1 + arg_offs; i < av->m_len; i++)
         {
-            ev_av->m_data[i - (1 + arg_offs)] = eval(av->m_data[i]);
+            ev_av->set(i - (1 + arg_offs), eval(av->m_data[i]));
         }
 
         av = ev_av;
@@ -771,7 +771,7 @@ Atom Interpreter::eval(Atom e, AtomMap *env)
 {
     GC_ROOT_VEC(m_rt->m_gc, old_env) = m_env_stack;
 
-    m_env_stack = m_rt->m_gc.allocate_vector(0);
+    m_env_stack = m_rt->m_gc.allocate_vector(1);
     m_env_stack->push(Atom(T_MAP, env));
 
     Atom ret;
@@ -934,11 +934,11 @@ Atom Interpreter::call_compiler(
     try
     {
         AtomVec *args = m_rt->m_gc.allocate_vector(5);
-        args->m_data[0] = Atom(T_STR, m_rt->m_gc.new_symbol(input_name));
-        args->m_data[1] = prog;
-        args->m_data[2] = debug_info_map ? Atom(T_MAP, debug_info_map) : Atom();
-        args->m_data[3] = Atom(T_BOOL, only_compile);
-        args->m_data[4] = Atom(T_VEC, root_env);
+        args->push(Atom(T_STR, m_rt->m_gc.new_symbol(input_name)));
+        args->push(prog);
+        args->push(debug_info_map ? Atom(T_MAP, debug_info_map) : Atom());
+        args->push(Atom(T_BOOL, only_compile));
+        args->push(Atom(T_VEC, root_env));
 
         return call(compiler_func, args, false);
     }

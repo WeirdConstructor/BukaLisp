@@ -498,7 +498,6 @@ class GCRootRefPool
                 {
                     m_slots->push(Atom(T_VEC, m_allocator(m_stripe_len)));
                     last_stripe = m_slots->last();
-                    last_stripe->m_d.vec->m_len = 0;
                 }
 
                 last_stripe->m_d.vec->m_len++;
@@ -874,18 +873,18 @@ class GC
             return new_map;
         }
 
-        AtomVec *allocate_vector(size_t vec_len)
+        AtomVec *allocate_vector(size_t alloc_len)
         {
             AtomVec *new_vec = nullptr;
 
-            if (vec_len > GC_MEDIUM_VEC_LEN)
+            if (alloc_len > GC_MEDIUM_VEC_LEN)
             {
                 new_vec = new AtomVec;
-//                new_vec->alloc(vec_len == 0 ? 10 : vec_len);
-                new_vec->alloc(vec_len);
+//                new_vec->alloc(alloc_len == 0 ? 10 : alloc_len);
+                new_vec->alloc(alloc_len);
 //                std::cout << "NEWVEC " << new_vec << std::endl;
             }
-            else if (vec_len > GC_SMALL_VEC_LEN)
+            else if (alloc_len > GC_SMALL_VEC_LEN)
             {
                 if (!m_medium_vectors)
                 {
@@ -908,7 +907,7 @@ class GC
                 m_small_vectors = m_small_vectors->m_gc_next;
             }
 
-            new_vec->init(m_current_color, vec_len);
+            new_vec->init(m_current_color, 0);
 
             new_vec->m_gc_next = m_vectors;
             m_vectors          = new_vec;

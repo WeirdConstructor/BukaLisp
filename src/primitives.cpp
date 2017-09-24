@@ -99,6 +99,7 @@ START_PRIM()
     out.m_d.vec = l;
     for (size_t i = 0; i < args.m_len; i++)
         l->m_data[i] = args.m_data[i];
+    l->m_len = args.m_len;
 END_PRIM(list);
 
 START_PRIM()
@@ -309,6 +310,7 @@ START_PRIM()
     a.m_d.vec = m_rt->m_gc.allocate_vector(args.m_len - 1);
     for (size_t i = 1; i < args.m_len; i++)
         a.m_d.vec->m_data[i - 1] = args.m_data[i];
+    a.m_d.vec->m_len = args.m_len - 1;
     error(A0.to_display_str(), a);
 END_PRIM(error)
 
@@ -400,6 +402,7 @@ START_PRIM()
     AtomVec *av = m_rt->m_gc.allocate_vector(ti);
     for (size_t i = 0; i < len && i < ti; i++)
         av->m_data[i] = A0.m_d.vec->m_data[i];
+    av->m_len = ti;
     out = Atom(T_VEC, av);
 END_PRIM(take)
 
@@ -418,12 +421,13 @@ START_PRIM()
     AtomVec *av = m_rt->m_gc.allocate_vector(len);
     for (size_t i = 0; i < len; i++)
         av->m_data[i] = A0.m_d.vec->m_data[i + di];
+    av->m_len = len;
     out = Atom(T_VEC, av);
 END_PRIM(drop)
 
 START_PRIM()
     REQ_GT_ARGC(append, 0);
-    AtomVec *av = m_rt->m_gc.allocate_vector(0);
+    AtomVec *av = m_rt->m_gc.allocate_vector(args.m_len);
     for (size_t i = 0; i < args.m_len; i++)
     {
         Atom &a = args.m_data[i];
@@ -505,7 +509,7 @@ START_PRIM()
 
     if (include_debug_info)
     {
-        AtomVec *av = m_rt->m_gc.allocate_vector(0);
+        AtomVec *av = m_rt->m_gc.allocate_vector(2);
         av->push(out);
         if (am)
             av->push(Atom(T_MAP, am));
@@ -517,7 +521,7 @@ START_PRIM()
     REQ_EQ_ARGC(sys-path-split, 1);
     std::string s = A0.to_display_str();
     size_t pos = s.find_last_of("/\\");
-    AtomVec *av = m_rt->m_gc.allocate_vector(0);
+    AtomVec *av = m_rt->m_gc.allocate_vector(2);
     if (pos == string::npos)
     {
         av->push(Atom(T_STR, m_rt->m_gc.new_symbol(s)));
@@ -574,7 +578,7 @@ END_PRIM(invoke-compiler)
 
 START_PRIM()
     REQ_GT_ARGC(eval, 1);
-    Atom exprs(T_VEC, m_rt->m_gc.allocate_vector(0));
+    Atom exprs(T_VEC, m_rt->m_gc.allocate_vector(1));
     exprs.m_d.vec->push(A0);
 
     AtomVec *env = nullptr;
@@ -586,7 +590,7 @@ START_PRIM()
     }
     else
     {
-        env = m_rt->m_gc.allocate_vector(0);
+        env = m_rt->m_gc.allocate_vector(2);
     }
 
     Atom prog =
@@ -603,7 +607,7 @@ END_PRIM(eval)
 
 START_PRIM()
     REQ_EQ_ARGC(bkl-environment, 0);
-    GC_ROOT_VEC(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_vector(0);
+    GC_ROOT_VEC(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_vector(2);
     m_compiler_call(
         Atom(T_INT, 42),
         m_rt->m_gc.allocate_map(),
