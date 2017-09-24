@@ -454,11 +454,6 @@ class Tokenizer
         void pushAtom(UTF8Buffer &u8)
         {
             std::string s(u8.as_string());
-            if (s == "->")
-            {
-                push(u8);
-                return;
-            }
 
             UTF8Buffer u8P(u8);
             if (u8P.length() == 1 && charClass(u8P.first_byte(), "+-"))
@@ -489,20 +484,7 @@ class Tokenizer
             }
             else
             {
-                std::string s(u8.as_string());
-                size_t pos = s.find("->");
-                if (pos != std::string::npos)
-                {
-                    Token t("->");
-                    t.m_token_id = TOK_CHR;
-                    push(t);
-                    push(Token(s.substr(0, pos).c_str()));
-                    push(Token(s.substr(pos + 2, s.size() - (pos + 2)).c_str()));
-                }
-                else
-                {
-                    push(Token(u8));
-                }
+                push(Token(u8));
             }
         }
 
