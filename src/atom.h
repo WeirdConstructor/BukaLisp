@@ -36,8 +36,8 @@ class BukaLISPException : public std::exception
             std::string to_string()
             {
                 return "{" + m_place + "} "
-                       + " (" + m_func_name
-                       + ") [" + m_file_name
+                       + m_func_name
+                       + " [" + m_file_name
                               + ":" + std::to_string(m_line) + "]\n";
             }
         };

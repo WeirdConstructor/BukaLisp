@@ -277,6 +277,11 @@ START_PRIM()
 END_PRIM(make-vm-prog)
 
 START_PRIM()
+    REQ_EQ_ARGC(bkl-prog-serialize, 2);
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(atom2cpp(A0.to_display_str(), A1)));
+END_PRIM(bkl-prog-serialize)
+
+START_PRIM()
     REQ_EQ_ARGC(run-vm-prog, 2);
 
     if (A0.m_type != T_UD || A0.m_d.ud->type() != "VM-PROG")
@@ -509,31 +514,10 @@ END_PRIM(sys-path-separator)
 
 START_PRIM()
     REQ_GT_ARGC(read-str, 1);
-    bool include_debug_info = false;
     if (args.m_len > 1)
-    {
-        include_debug_info =
-            args.m_data[args.m_len - 1].to_display_str() == "with-debug-info";
-    }
-
-    AtomMap *am = nullptr;
-    if (args.m_len > 1)
-    {
-        out = m_rt->read(A1.to_display_str(), A0.to_display_str(), am);
-    }
+        out = m_rt->read(A1.to_display_str(), A0.to_display_str());
     else
-    {
-        out = m_rt->read("", A0.to_display_str(), am);
-    }
-
-    if (include_debug_info)
-    {
-        AtomVec *av = m_rt->m_gc.allocate_vector(2);
-        av->push(out);
-        if (am)
-            av->push(Atom(T_MAP, am));
-        out = Atom(T_VEC, av);
-    }
+        out = m_rt->read("", A0.to_display_str());
 END_PRIM(read-str)
 
 START_PRIM()
@@ -589,8 +573,7 @@ START_PRIM()
     else
         out =
             this->call_compiler(
-                A0, this->m_debug_pos_map,
-                A3.m_d.vec, A1.to_display_str(), !A2.is_false());
+                A0, A3.m_d.vec, A1.to_display_str(), !A2.is_false());
 END_PRIM(invoke-compiler)
 
 #else
@@ -613,12 +596,7 @@ START_PRIM()
     }
 
     Atom prog =
-        m_compiler_call(
-            exprs,
-            m_rt->m_gc.allocate_map(),
-            env,
-            "eval",
-            true);
+        m_compiler_call(exprs, env, "eval", true);
     if (env->m_len < 2 || env->m_data[1].m_type != T_VEC)
         error("Compiler returned bad environment in 'eval'", Atom(T_VEC, env));
     out = eval(prog, env->m_data[1].m_d.vec);
@@ -627,12 +605,7 @@ END_PRIM(eval)
 START_PRIM()
     REQ_EQ_ARGC(bkl-environment, 0);
     GC_ROOT_VEC(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_vector(2);
-    m_compiler_call(
-        Atom(T_INT, 42),
-        m_rt->m_gc.allocate_map(),
-        root_env,
-        "env-gen",
-        true);
+    m_compiler_call(Atom(T_INT, 42), root_env, "env-gen", true);
     out = Atom(T_VEC, root_env);
 END_PRIM(bkl-environment)
 

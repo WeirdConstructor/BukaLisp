@@ -3,6 +3,7 @@
 
 #include "buklivm.h"
 #include "atom_printer.h"
+#include "atom_cpp_serializer.h"
 #include "util.h"
 #include "modules/bklisp_module_wrapper.h"
 #include <chrono>

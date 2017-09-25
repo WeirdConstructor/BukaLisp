@@ -3,6 +3,7 @@
 
 #include "interpreter.h"
 #include "buklivm.h"
+#include "atom_cpp_serializer.h"
 #include <modules/bklisp_module_wrapper.h>
 #include <chrono>
 #include "util.h"
@@ -72,6 +73,7 @@ void Interpreter::init()
 {
     m_env_stack  = m_rt->m_gc.allocate_vector(0);
     m_prim_table = m_rt->m_gc.allocate_vector(0);
+    m_call_stack = m_rt->m_gc.allocate_vector(100);
 
     m_env_stack->push(Atom(T_MAP, init_root_env()));
 
@@ -86,7 +88,7 @@ void Interpreter::init()
             return this->call(func, args, false, 0);
         });
 
-        m_vm->set_compiler_call([=](Atom prog, AtomMap *debug_info_map,
+        m_vm->set_compiler_call([=](Atom prog,
                                     AtomVec *root_env,
                                     const std::string &input_name,
                                     bool only_compile)
@@ -94,7 +96,7 @@ void Interpreter::init()
             GC_ROOT(m_rt->m_gc,     prog_r)           = prog;
             GC_ROOT_MAP(m_rt->m_gc, debug_info_map_r) = debug_info_map_r;
             GC_ROOT_VEC(m_rt->m_gc, root_env_r)       = root_env;
-            return this->call_compiler(prog, debug_info_map, root_env,
+            return this->call_compiler(prog, root_env,
                                        input_name, only_compile);
         });
     }
@@ -176,8 +178,6 @@ Atom Interpreter::eval_let(Atom e, AtomVec *av)
 
     for (size_t i = 0; i < binds->m_len; i++)
     {
-        set_debug_pos(e);
-
         if (binds->m_data[i].m_type != T_VEC)
             error("Binding specification in 'let' is not a list", binds->m_data[i]);
 
@@ -216,8 +216,6 @@ Atom Interpreter::eval_lambda(Atom e, AtomVec *av)
     AtomVec *closure  = m_rt->m_gc.allocate_vector(3);
     closure->push(Atom(T_VEC, clos_env));
     closure->push(Atom(T_VEC, av));
-    closure->push(
-        m_debug_pos_map ? Atom(T_MAP, m_debug_pos_map) : Atom());
     return Atom(T_CLOS, closure);
 }
 //---------------------------------------------------------------------------
@@ -477,8 +475,6 @@ Atom Interpreter::eval_case(Atom e, AtomVec *av)
 
     while (case_idx < av->m_len)
     {
-        set_debug_pos(e);
-
         if (av->m_data[case_idx].m_type != T_VEC)
             error("'case' test condition is not a list", av->m_data[case_idx]);
 
@@ -491,8 +487,6 @@ Atom Interpreter::eval_case(Atom e, AtomVec *av)
         {
             return eval_begin(e, cc, 1);
         }
-
-        set_debug_pos(e);
 
         if (cc->m_data[0].m_type != T_VEC)
             error("'case' test condition starts not with a list", Atom(T_VEC, cc));
@@ -531,7 +525,6 @@ Atom Interpreter::eval_field_get(Atom e, AtomVec *av)
         key = eval(key);
     GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
 
-    set_debug_pos(e);
     if (obj.m_type != T_MAP)
         error("Can't set key on non map", obj);
 
@@ -554,7 +547,6 @@ Atom Interpreter::eval_field_set(Atom e, AtomVec *av)
         key = eval(key);
     GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
 
-    set_debug_pos(e);
     if (obj.m_type != T_MAP)
         error("Can't set key on non map", obj);
 
@@ -576,7 +568,6 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
 
     GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[1]);
 
-    set_debug_pos(e);
     if (obj.m_type != T_MAP)
         error("Can't define method on non map atom", obj);
 
@@ -591,7 +582,6 @@ Atom Interpreter::eval_meth_def(Atom e, AtomVec *av)
         && key.m_type != T_KW)
         key = eval(key);
 
-    set_debug_pos(e);
     AtomVec *arg_def_av = m_rt->m_gc.allocate_vector(arg_bind_def->m_len - 1);
     for (size_t i = 1; i < arg_bind_def->m_len; i++)
     {
@@ -630,7 +620,6 @@ Atom Interpreter::eval_dot_call(Atom e, AtomVec *av)
         key = eval(key);
     GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
 
-    set_debug_pos(e);
     GC_ROOT(m_rt->m_gc, method) = obj.at(key);
     if (   method.m_type != T_PRIM
         && method.m_type != T_CLOS
@@ -708,21 +697,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
                         Atom(T_NIL));
             }
 
-            // XXX: Old m_debug_pos_map and the closure keep alive
-            //      the AtomMaps.
-            AtomMap *old_debug_pos_map = m_debug_pos_map;
-            m_debug_pos_map =
-                debug_pos.m_type == T_MAP ? debug_pos.m_d.map : nullptr;
-            try
-            {
-                ret = eval_begin(lambda_form, lambda_form.m_d.vec, 2);
-            }
-            catch (...)
-            {
-                m_debug_pos_map = old_debug_pos_map;
-                throw;
-            }
-            m_debug_pos_map = old_debug_pos_map;
+            ret = eval_begin(lambda_form, lambda_form.m_d.vec, 2);
         }
         m_env_stack = old_env;
     }
@@ -755,15 +730,6 @@ Atom Interpreter::eval_include(Atom e, AtomVec *av)
 
     std::string code = slurp_str(filepath);
     return eval(filepath, code);
-}
-//---------------------------------------------------------------------------
-
-void Interpreter::set_debug_pos(Atom &a)
-{
-    if (!m_debug_pos_map)
-        m_debug_pos = "";
-    Atom deb_info = m_debug_pos_map->at(Atom(T_INT, a.id()));
-    m_debug_pos = deb_info.to_display_str();
 }
 //---------------------------------------------------------------------------
 
@@ -812,7 +778,7 @@ Atom Interpreter::eval(Atom e)
 
         case T_MAP:
         {
-            set_debug_pos(e);
+            AtomVecPush call_frame_r(m_call_stack, e);
 
             AtomMap *nm = m_rt->m_gc.allocate_map();
             ret = Atom(T_MAP, nm);
@@ -831,6 +797,7 @@ Atom Interpreter::eval(Atom e)
         {
             AtomMap *env = nullptr;
             ret = lookup(e.m_d.sym, env);
+            annotate_meta_func(ret, e);
             if (!env)
                 error("Undefined variable binding", e);
             break;
@@ -838,7 +805,7 @@ Atom Interpreter::eval(Atom e)
 
         case T_VEC:
         {
-            set_debug_pos(e);
+            AtomVecPush call_frame_r(m_call_stack, e);
 
             AtomVec *av = e.m_d.vec;
 
@@ -849,6 +816,8 @@ Atom Interpreter::eval(Atom e)
 
             if (first.m_type == T_SYNTAX)
             {
+                annotate_meta_func(e, first);
+
                 // TODO: optimize by caching symbol pointers:
                 std::string s = first.m_d.sym->m_str;
                 if      (s == "begin")    ret = eval_begin(e, av, 1);
@@ -924,7 +893,6 @@ Atom Interpreter::eval(Atom e)
 
 Atom Interpreter::call_compiler(
     Atom prog,
-    AtomMap *debug_info_map,
     AtomVec *root_env,
     const std::string &input_name,
     bool only_compile)
@@ -936,7 +904,7 @@ Atom Interpreter::call_compiler(
         AtomVec *args = m_rt->m_gc.allocate_vector(5);
         args->push(Atom(T_STR, m_rt->m_gc.new_symbol(input_name)));
         args->push(prog);
-        args->push(debug_info_map ? Atom(T_MAP, debug_info_map) : Atom());
+        args->push(Atom());
         args->push(Atom(T_BOOL, only_compile));
         args->push(Atom(T_VEC, root_env));
 
@@ -1004,9 +972,8 @@ Atom Interpreter::call_compiler(
 
     try
     {
-        AtomMap *debug_info = nullptr;
-        Atom input_data = m_rt->read(code_name, code, debug_info);
-        return call_compiler(input_data, debug_info, root_env, code_name, only_compile);
+        Atom input_data = m_rt->read(code_name, code);
+        return call_compiler(input_data, root_env, code_name, only_compile);
     }
     catch (std::exception &e)
     {

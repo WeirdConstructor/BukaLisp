@@ -28,8 +28,6 @@ class AtomGenerator : public bukalisp::SEX_Builder
 {
     private:
         GC                       *m_gc;
-        AtomMap                  *m_debug_map;
-
         Atom                      m_root;
 
         typedef std::function<void(Atom &a)>  AddFunc;
@@ -51,19 +49,6 @@ class AtomGenerator : public bukalisp::SEX_Builder
 
         Atom &root() { return m_root; }
 
-        void clear_debug_info() { m_debug_map = nullptr; }
-        AtomMap *debug_info() { return m_debug_map; }
-
-        void add_debug_info(int64_t id, const std::string &input_name, size_t line)
-        {
-            if (!m_debug_map)
-                m_debug_map = m_gc->allocate_map();
-            std::string info = input_name + ":" + std::to_string(line);
-            m_debug_map->set(
-                Atom(T_INT, id),
-                Atom(T_STR, m_gc->new_symbol(info)));
-        }
-
         virtual void error(const std::string &what,
                            const std::string &inp_name,
                            size_t line,
@@ -76,7 +61,6 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             AtomVec *new_vec = m_gc->allocate_vector(0);
             Atom a(T_VEC, new_vec);
-            add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
 
             AtomVec *meta_info = m_gc->allocate_vector(2);
             meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));
@@ -100,7 +84,6 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             AtomMap *new_map = m_gc->allocate_map();
             Atom a(T_MAP, new_map);
-            add_debug_info(a.id(), m_dbg_input_name, m_dbg_line);
 
             AtomVec *meta_info = m_gc->allocate_vector(2);
             meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));

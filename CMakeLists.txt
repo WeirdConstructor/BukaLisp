@@ -10,6 +10,7 @@ add_library(bukalisp_lib STATIC
     external/JSON.cpp
     src/atom_printer.cpp
     src/atom.cpp
+    src/atom_cpp_serializer.cpp
     src/interpreter.cpp
     src/buklivm.cpp
     src/util.cpp

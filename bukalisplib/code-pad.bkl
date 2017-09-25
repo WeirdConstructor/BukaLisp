@@ -32,7 +32,7 @@
       ($define! self (to-vm-prog-debug-info)
         (let ((m {}) (i 0))
           (do-each (op-desc ($code: self))
-            (@!i m (@op-desc ($debug-info: self)))
+            (@!i m "???")
             (set! i (+ i 1)))
           m))
 

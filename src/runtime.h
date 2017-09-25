@@ -24,9 +24,8 @@ struct Runtime
     {
     }
 
-    Atom read(const std::string &input_name, const std::string &input, AtomMap *&debug_map_output)
+    Atom read(const std::string &input_name, const std::string &input)
     {
-        m_ag.clear_debug_info();
         m_par.reset();
         m_tok.reset();
         m_tok.tokenize(input_name, input);
@@ -47,8 +46,6 @@ struct Runtime
 //                std::cout << "ELEMS PUSH " << Atom(T_VEC, elems).at(1).meta().to_write_str() << std::endl;
             }
         }
-        debug_map_output = m_ag.debug_info();
-        m_ag.clear_debug_info();
         return Atom(T_VEC, elems);
     }
 

@@ -101,7 +101,6 @@ class Reader
         AtomGenerator     m_ag;
         Tokenizer         m_tok;
         Parser            m_par;
-        AtomMap          *m_debug_info;
 
         GC_ROOT_MEMBER_VEC(m_root_set);
 
@@ -116,8 +115,10 @@ class Reader
 
         std::string debug_info(Atom &a)
         {
-            Atom info = m_debug_info->at(Atom(T_INT, a.id()));
-            return info.to_display_str();
+            Atom meta = a.meta();
+            std::string f = meta.at(0).at(0).to_display_str();
+            int64_t l     = meta.at(0).at(1).to_int();
+            return f + ":" + std::to_string(l);
         }
 
         size_t pot_alive_vecs() { return m_gc.count_potentially_alive_vectors(); }
@@ -135,11 +136,8 @@ class Reader
         bool parse(const std::string &codename, const std::string &in)
         {
             m_tok.tokenize(codename, in);
-            m_ag.clear_debug_info();
             m_ag.start();
             bool r = m_par.parse();
-            m_debug_info = m_ag.debug_info();
-            m_root_set->push(Atom(T_MAP, m_debug_info));
             // m_tok.dump_tokens();
             return r;
         }
@@ -245,10 +243,10 @@ void test_maps()
 
     tc.make_always_alive(m.at(tc.a_kw("b")));
 
-    TEST_EQ(tc.pot_alive_maps(), 3, "alive map count");
+    TEST_EQ(tc.pot_alive_maps(), 2, "alive map count");
     TEST_EQ(tc.pot_alive_vecs(), 13, "alive vec count");
     tc.collect();
-    TEST_EQ(tc.pot_alive_maps(), 2, "alive map count after gc");
+    TEST_EQ(tc.pot_alive_maps(), 1, "alive map count after gc");
     TEST_EQ(tc.pot_alive_vecs(), 8, "alive vec count after gc");
 }
 //---------------------------------------------------------------------------
@@ -264,7 +262,7 @@ void test_symbols_and_keywords()
 
     Atom r = tc.root();
 
-    TEST_EQ(tc.pot_alive_syms(), 5, "some syms alive after parse");
+    TEST_EQ(tc.pot_alive_syms(), 4, "some syms alive after parse");
 
     TEST_EQ(r.at(0).m_type, T_SYM, "sym 1");
     TEST_EQ(r.at(1).m_type, T_SYM, "sym 2");
@@ -281,7 +279,7 @@ void test_symbols_and_keywords()
 
     tc.collect();
 
-    TEST_EQ(tc.pot_alive_syms(), 1, "no syms except debug sym alive after collect");
+    TEST_EQ(tc.pot_alive_syms(), 0, "no syms except debug sym alive after collect");
 }
 //---------------------------------------------------------------------------
 

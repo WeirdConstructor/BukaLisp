@@ -35,18 +35,14 @@ class Interpreter
         Runtime        *m_rt;
         VM             *m_vm;
         GC_ROOT_MEMBER_VEC(m_env_stack);
+        GC_ROOT_MEMBER_VEC(m_call_stack);
         GC_ROOT_MEMBER_VEC(m_prim_table);
-        GC_ROOT_MEMBER_MAP(m_debug_pos_map);
         GC_ROOT_MEMBER(m_compiler_func);
         AtomMap        *m_modules;
-        std::string     m_debug_pos;
         std::vector<Atom::PrimFunc *> m_primitives;
 
         bool            m_trace;
         bool            m_force_always_gc;
-
-        void set_debug_pos(Atom &a);
-
     public:
         Interpreter(Runtime *rt, VM *vm = nullptr)
             : m_rt(rt),
@@ -54,11 +50,12 @@ class Interpreter
               m_force_always_gc(true), m_modules(nullptr),
               GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_env_stack),
               GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_prim_table),
-              GC_ROOT_MEMBER_INITALIZE_MAP(rt->m_gc, m_debug_pos_map),
+              GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_call_stack),
               GC_ROOT_MEMBER_INITALIZE(rt->m_gc, m_compiler_func)
         {
             m_env_stack  = nullptr;
             m_prim_table = nullptr;
+            m_call_stack = nullptr;
             init();
         }
 
@@ -117,43 +114,20 @@ class Interpreter
 
         Atom eval(const std::string &input_name, const std::string &input)
         {
-            GC_ROOT(m_rt->m_gc, old_debug_info);
-            if (m_debug_pos_map)
-                old_debug_info = Atom(T_MAP, m_debug_pos_map);
-
-            GC_ROOT(m_rt->m_gc, prog) =
-                m_rt->read(input_name, input, m_debug_pos_map);
+            GC_ROOT(m_rt->m_gc, prog) = m_rt->read(input_name, input);
 
 //            std::cerr << "EVAL(" << write_atom(prog) << std::endl;
             Atom ret;
-            try
-            {
-                if (prog.m_type == T_VEC)
-                    ret = eval_begin(prog, prog.m_d.vec, 0);
-                else
-                    ret = eval(prog);
-            }
-            catch (...)
-            {
-                m_debug_pos_map =
-                    old_debug_info.m_type == T_MAP
-                    ? old_debug_info.m_d.map
-                    : nullptr;
-                throw;
-            }
-
-            m_debug_pos_map =
-                old_debug_info.m_type == T_MAP
-                ? old_debug_info.m_d.map
-                : nullptr;
-
+            if (prog.m_type == T_VEC)
+                ret = eval_begin(prog, prog.m_d.vec, 0);
+            else
+                ret = eval(prog);
             return ret;
         }
 
         Atom get_compiler_func();
         Atom call_compiler(
             Atom prog,
-            AtomMap *debug_info_map,
             AtomVec *root_env,
             const std::string &input_name = "",
             bool only_compile = false);
@@ -166,17 +140,35 @@ class Interpreter
 
         BukaLISPException &add_stack_trace_error(BukaLISPException &e)
         {
-            return e.push("interpreter", m_debug_pos, 0, "");
+            for (size_t i = m_call_stack->m_len; i > 0; i--)
+            {
+                Atom meta        = m_call_stack->m_data[i - 1].meta();
+                std::string file = meta.at(0).at(0).to_display_str();
+                int64_t line     = meta.at(0).at(1).to_int();
+                std::string func = meta.at(0).at(2).to_display_str();
+                e.push("interpreter", file, (size_t) line, func);
+            }
+            return e;
+        }
+
+        void annotate_meta_func(Atom a, Atom sym)
+        {
+            Atom meta_debug_info = a.meta().at(0);
+            if (meta_debug_info.m_type == T_VEC)
+                meta_debug_info.m_d.vec->set(2, sym);
         }
 
         void error(const std::string &msg)
         {
-            throw BukaLISPException("interpreter", m_debug_pos, 0, "", msg);
-//            throw InterpreterException("(@" + m_debug_pos + "): " + msg);
+            throw add_stack_trace_error(BukaLISPException(msg));
         }
+
         void error(const std::string &msg, Atom &err_atom)
         {
-            error(msg + ", atom: " + write_atom(err_atom));
+            throw
+                add_stack_trace_error(
+                    BukaLISPException(
+                        msg + ", atom: " + err_atom.to_write_str()));
         }
 
         Atom call(Atom func, AtomVec *av, bool eval_args = false, size_t arg_offs = 0);
