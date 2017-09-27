@@ -18,6 +18,10 @@
 
 ;----------------------------------------------------------------------------
 
+(T '(begin
+      (include "..\\bukalisplib\\test-compiler.bkl")
+      test-include-ok)
+   1)
 ;(T '(+) 1)
 ;(T '(begin
 ;      (include "bukalisplib\\test-compiler.bkl")
@@ -25,7 +29,7 @@
 ;   1)
 ;
 ;(T '(when   #t 10) 10)
-;(error X:)
+(error X:)
 ;----------------------------------------------------------------------------
 
 ;; test externally given environment executed inside VM:

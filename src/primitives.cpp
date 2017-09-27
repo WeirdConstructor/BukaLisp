@@ -621,6 +621,27 @@ START_PRIM()
     out = Atom(T_VEC, root_env);
 END_PRIM(bkl-environment)
 
+START_PRIM()
+    REQ_GT_ARGC(invoke-compiler, 4);
+    if (A3.m_type != T_VEC)
+        error("invoke-compiler needs a root-env (<map>, <storage>) "
+              "to compile and evaluate in", A3);
+
+    if (A0.m_type == T_STR)
+    {
+        GC_ROOT(m_rt->m_gc, input) =
+            m_rt->read(A1.to_display_str(), A0.to_display_str());
+        out =
+            m_compiler_call(
+                input, A3.m_d.vec, A1.to_display_str(), !A2.is_false());
+    }
+    else
+        out =
+            m_compiler_call(
+                A0, A3.m_d.vec, A1.to_display_str(), !A2.is_false());
+END_PRIM(invoke-compiler)
+
+
 #endif
 
 /******************************************************************************

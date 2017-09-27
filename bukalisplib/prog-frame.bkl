@@ -52,6 +52,7 @@
        trace)
 
      ($define! self (get-debug-info)
+       (displayln DEB-I: ($debug-pos-stack: self))
        (unless (eqv? (length ($debug-pos-stack: self)) 0)
          (define info nil)
          (if (eqv? (length ($debug-pos-stack: self)) 1)
