@@ -31,7 +31,6 @@
 
       ($define! self (to-vm-prog-debug-info)
         (let ((m {}) (i 0))
-          (displayln COOC:)
           (do-each (op-desc ($code: self))
             #;(displayln TO-VM-PROG-DEBUG-INFO:
                        op-desc (@op-desc ($debug-info: self)))

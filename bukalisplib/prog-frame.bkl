@@ -2,6 +2,7 @@
  (lambda ()
    (let ((self { pad:               []
                  stack:             []
+                 define-name-stack: []
                  debug-pos-stack:   [] }))
 
      ($define! self (push-prog-frame)
@@ -10,6 +11,12 @@
 
      ($define! self (pop-prog-frame)
        ($!pad: self (pop! ($stack: self))))
+
+     ($define! self (push-define-name-info name)
+       (push! ($define-name-stack: self) name))
+
+     ($define! self (pop-define-name-info name)
+       (pop! ($define-name-stack: self)))
 
      ($define! self (push-debug-info atom)
        (let ((meta-info (bkl-get-meta atom))
@@ -23,9 +30,15 @@
      ($define! self (get-debug-info)
        (unless (eqv? (length ($debug-pos-stack: self)) 0)
          (define info nil)
-         (for (i (- (length ($debug-pos-stack: self)) 1) 0 -1)
-           (unless info
-             (set! info (@i ($debug-pos-stack: self)))))
+         (if (eqv? (length ($debug-pos-stack: self)) 1)
+           (set! info (last ($debug-pos-stack: self)))
+           (for (i (- (length ($debug-pos-stack: self)) 1) 0 -1)
+             (unless info
+               (set! info (@i ($debug-pos-stack: self))))))
+         (when info
+           (set! info [(@0 info)
+                       (@1 info)
+                       (last ($define-name-stack: self))]))
          info))
 
      ($define! self (store-static-data data)

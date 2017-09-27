@@ -4,5 +4,4 @@
 (begin
   (define x 0)
   (for (i 1 100000000)
-    (set! x (+ x 1)))
-  #;(error X:))
+    (set! x (+ x 1))))
