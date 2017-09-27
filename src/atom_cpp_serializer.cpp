@@ -170,7 +170,8 @@ class Atom2CPP
                         o << nn << "_i_" << i << ".be = " << prog->m_instructions[i].be << ";\n";
                     }
 
-                    o << "gc.reg_userdata(" << nn << "_ud.m_d.ud);\n";
+                    o << "gc.reg_userdata(" << nn << "_ud);\n";
+                    o << "Atom " << nn << "(T_UD); " << nn << ".m_d.ud = " << nn << "_ud;\n";
 
 
                     break;

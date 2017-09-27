@@ -66,11 +66,9 @@
                 (.store-static-data self atom))
 
    'map       (lambda (atom self code-pad)
-                (.set-debug-pos self atom)
                 (let ((ret-adr (.new-tmp-pos self)))
                   (.op-new-map code-pad ret-adr)
                   (do-each (k v atom)
-                    (.set-debug-pos self atom)
                     (let ((k-adr (.compile-quote self k code-pad))
                           (v-adr (.compile-quote self v code-pad)))
                       (.op-cset-vec code-pad ret-adr k-adr v-adr)
@@ -83,7 +81,6 @@
                       (i 0))
                   (.op-new-vec code-pad vec-adr (length atom))
                   (do-each (a atom)
-                    (.set-debug-pos self atom)
                     (let ((val-adr (.compile-quote self a code-pad)))
                       (.op-cset-vec code-pad vec-adr i val-adr)
                       (.recycle-pos self val-adr)
@@ -106,11 +103,9 @@
                 (.store-static-data self atom))
 
    'map       (lambda (atom self code-pad)
-                (.set-debug-pos self atom)
                 (let ((ret-adr (.new-tmp-pos self)))
                   (.op-new-map code-pad ret-adr)
                   (do-each (k v atom)
-                    (.set-debug-pos self atom)
                     (let ((k-adr (.compile self k code-pad))
                           (v-adr (.compile self v code-pad)))
                       (.op-cset-vec code-pad ret-adr k-adr v-adr)
@@ -136,7 +131,6 @@
                       (.error self "Not a value binding variable" atom)))))
 
    'list      (lambda (atom self code-pad)
-                (.set-debug-pos self atom)
                 (case (type (@0 atom))
                   ((symbol)
                    (let ((var (.lookup self (@0 atom))))
@@ -205,7 +199,8 @@
     ($define! self (error msg atom)
       (bkl-error
           (str-join " " msg atom)
-          [["compiler" (.get-debug-pos self) 0 ""]]))
+          [(let ((info (.get-debug-info self)))
+             ["compiler" (@0 info) (@1 info) (@2 info)])]))
 
     ($define! self (new-tmp-pos)
       (let ((env-pos (last ($env-pos-stack: self)))
@@ -288,7 +283,6 @@
         (.op-new-vec code-pad argvec-adr argc)
         (when (> argc 0)
           (for (i 1 argc)
-            (.set-debug-pos self atom)
             (let ((arg-adr (.compile self (@i atom) code-pad)))
               (.op-cset-vec code-pad argvec-adr (- i 1) arg-adr)
               (.recycle-pos self arg-adr))))
@@ -297,7 +291,7 @@
           (.recycle-pos self argvec-adr)
           ret-adr)))
 
-    ($define! self (compile-lambda parameters body code-pad)
+    ($define! self (compile-lambda parameters body code-pad define-pos)
       (.push-prog-frame self)
       (.push-env self)
       (define dot-var-adr  #f)
@@ -361,10 +355,16 @@
           ret-adr)))
 
     ($define! self (compile atom code-pad)
-      (type-dispatch atom compile-expr-dispatch-map self code-pad))
+      (with-cleanup
+        (.push-debug-info self atom)
+        (.pop-debug-info self)
+        (type-dispatch atom compile-expr-dispatch-map self code-pad)))
 
     ($define! self (compile-quote atom code-pad)
-      (type-dispatch atom compile-quote-dispatch-map self code-pad))
+      (with-cleanup
+        (.push-debug-info self atom)
+        (.pop-debug-info self)
+        (type-dispatch atom compile-quote-dispatch-map self code-pad)))
 
     ($define! self (push-root-env root-env)
       (push! ($env-stack: self) (@0 root-env))
@@ -906,7 +906,7 @@
       (.recycle-pos compiler ret-adr)
 ;      (displayln PAD: ($pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
-;        (displayln prog)
+        (displayln prog)
         (if only-compile
           prog
           (run-vm-prog prog (@1 root-env)))))))

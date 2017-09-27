@@ -284,15 +284,17 @@ class VM
             INST *start_pc = &(m_prog->m_instructions[0]);
             Atom a(T_INT, m_pc - start_pc);
             Atom info = m_prog->m_debug_info_map.at(a);
-            return e.push("vm", info.to_display_str(), 0, "");
+            Atom func = m_prog->m_debug_info_map.at(Atom(T_INT, -1));
+            return
+                e.push("vm",
+                       info.at(0).to_display_str(),
+                       (size_t) info.at(1).to_int(),
+                       func.to_display_str());
         }
 
         void error(const std::string &msg)
         {
-            INST *start_pc = &(m_prog->m_instructions[0]);
-            Atom a(T_INT, m_pc - start_pc);
-            Atom info = m_prog->m_debug_info_map.at(a);
-            throw VMException("(@" + info.to_display_str() + "): " + msg);
+            throw add_stack_trace_error(BukaLISPException(msg));
         }
 
         void error(const std::string &msg, Atom &err_atom)

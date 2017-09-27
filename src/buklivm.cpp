@@ -339,654 +339,669 @@ Atom VM::eval(Atom callable, AtomVec *args)
     Atom *tmp = nullptr;
 
     bool alloc = false;
-    while (m_pc->op != OP_END)
+    try
     {
-        INST &PC = *m_pc;
-
-        if (m_trace)
+        while (m_pc->op != OP_END)
         {
-            cout << "VMTRC FRMS(" << cont_stack->m_len << "/" << env_stack->m_len << "): ";
-            m_pc->to_string(cout);
-            cout << " {ENV= ";
-            for (size_t i = 0; i < cur_env->m_len; i++)
-            {
-                Atom &a = cur_env->m_data[i];
-                if (a.m_type == T_UD && a.m_d.ud->type() == "VM-PROG")
-                    cout << i << "[#<prog>] ";
-                else
-                    cout << i << "[" << a.to_write_str() << "] ";
-            }
-            cout << "}" << endl;
-        }
+            INST &PC = *m_pc;
 
-        switch (m_pc->op)
-        {
-            case OP_DUMP_ENV_STACK:
+            if (m_trace)
             {
-                for (size_t i = 0; i < env_stack->m_len; i++)
+                cout << "VMTRC FRMS(" << cont_stack->m_len << "/" << env_stack->m_len << "): ";
+                m_pc->to_string(cout);
+                cout << " {ENV= ";
+                for (size_t i = 0; i < cur_env->m_len; i++)
                 {
-                    cout << "ENV@" << (env_stack->m_len - (i + 1)) << ": ";
-                    AtomVec *env = env_stack->at(i).m_d.vec;
-                    for (size_t j = 0; j < env->m_len; j++)
-                        cout << "[" << j << "=" << env->at(j).to_write_str() << "] ";
-                    cout << endl;
+                    Atom &a = cur_env->m_data[i];
+                    if (a.m_type == T_UD && a.m_d.ud->type() == "VM-PROG")
+                        cout << i << "[#<prog>] ";
+                    else
+                        cout << i << "[" << a.to_write_str() << "] ";
                 }
-                break;
+                cout << "}" << endl;
             }
 
-            case OP_MOV:
+            switch (m_pc->op)
             {
-                E_SET_CHECK_REALLOC(O, O);
-                E_GET(tmp, A);
-                E_SET(O, *tmp);
-                break;
-            }
-
-            case OP_NEW_VEC:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-                alloc = true;
-                E_SET(O, Atom(T_VEC, m_rt->m_gc.allocate_vector(P_A)));
-                break;
-            }
-
-            case OP_NEW_MAP:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-                alloc = true;
-                E_SET(O, Atom(T_MAP, m_rt->m_gc.allocate_map()));
-                break;
-            }
-
-            case OP_CSET_VEC:
-            {
-                E_GET(tmp, O);
-                Atom &vec = *tmp;
-
-                E_GET(tmp, B);
-                if (vec.m_type == T_VEC)
+                case OP_DUMP_ENV_STACK:
                 {
-                    // XXX: Attention, *tmp is taken as reference and assigned
-                    //      to a vector it is itself part of. In this case, the
-                    //      vector might get reallocated and the *tmp reference
-                    //      might be invalidated!
-                    //      However, as *tmp comes from the current environment
-                    //      frame, this should not happen, until we get
-                    //      direct access to the environment/frame vector.
-                    vec.m_d.vec->set(P_A, *tmp);
-                }
-                else if (vec.m_type == T_MAP)
-                {
-                    Atom *key;
-                    E_GET(key, A);
-                    vec.m_d.map->set(*key, *tmp);
-                }
-                else
-                    error("Can CSET_VEC on vector and map", vec);
-
-                break;
-            }
-
-            case OP_SET:
-            {
-                E_GET(tmp, O);
-                Atom &vec = *tmp;
-                Atom *key;
-                E_GET(key, A);
-
-                E_GET(tmp, B);
-                if (vec.m_type == T_VEC)
-                {
-                    // XXX: Attention, *tmp is taken as reference and assigned
-                    //      to a vector it is itself part of. In this case, the
-                    //      vector might get reallocated and the *tmp reference
-                    //      might be invalidated!
-                    //      However, as *tmp comes from the current environment
-                    //      frame, this should not happen, until we get
-                    //      direct access to the environment/frame vector.
-                    vec.m_d.vec->set((size_t) key->to_int(), *tmp);
-                }
-                else if (vec.m_type == T_MAP)
-                {
-                    vec.m_d.map->set(*key, *tmp);
-                }
-                else
-                    error("Can SET on vector and map", vec);
-
-                break;
-            }
-
-            case OP_GET:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                E_GET(tmp, A);
-                Atom &vec = *tmp;
-
-                Atom *key;
-                E_GET(key, B);
-
-                if (vec.m_type == T_VEC)
-                {
-                    E_SET(O, vec.m_d.vec->at((size_t) key->to_int()));
-                }
-                else if (vec.m_type == T_MAP)
-                {
-                    E_SET(O, vec.m_d.map->at(*key));
-                }
-                else
-                    error("Can GET on vector and map", vec);
-
-                break;
-            }
-
-            case OP_LOAD_NIL:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-                E_SET(O, Atom());
-                break;
-            }
-
-            case OP_PUSH_ENV:
-            {
-                alloc = true;
-                env_stack->push(
-                    Atom(T_VEC, cur_env = m_rt->m_gc.allocate_vector(P_A)));
-                break;
-            }
-
-            case OP_POP_ENV:
-            {
-                env_stack->pop();
-                Atom *l = env_stack->last();
-                if (l) cur_env = l->m_d.vec;
-                break;
-            }
-
-            case OP_NEW_CLOSURE:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                alloc = true;
-
-                E_GET(tmp, A);
-                Atom &prog = *tmp;
-                if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
-                    error("VM can't make closure from non VM-PROG", prog);
-
-                Atom cl(T_CLOS);
-                cl.m_d.vec = m_rt->m_gc.allocate_vector(2);
-//                std::cout << "NEW CLOS " << ((void *) cl.m_d.vec) << "@" << ((void *) cl.m_d.vec->m_data) << std::endl;
-                cl.m_d.vec->set(0, prog); // XXX: m_data[0] = prog;
-                cl.m_d.vec->set(1,        //      m_data[1] =
-                    Atom(T_VEC, m_rt->m_gc.clone_vector(env_stack)));
-
-                E_SET(O, cl);
-                break;
-            }
-
-            case OP_PACK_VA:
-            {
-                size_t pack_idx = P_A;
-                if (pack_idx < cur_env->m_len)
-                {
-                    size_t va_len = cur_env->m_len - pack_idx;
-                    AtomVec *v = m_rt->m_gc.allocate_vector(va_len);
-                    for (size_t i = 0; i < va_len; i++)
-                        v->m_data[i] = cur_env->m_data[i + pack_idx];
-                    v->m_len = va_len;
-                    Atom vv(T_VEC, v);
-                    E_SET_CHECK_REALLOC(O, O);
-                    E_SET(O, vv);
-                }
-                else
-                {
-                    E_SET_CHECK_REALLOC(O, O);
-                    E_SET(O, Atom(T_VEC, m_rt->m_gc.allocate_vector(0)));
-                }
-                break;
-            }
-
-            case OP_CALL:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                E_GET(tmp, A);
-                Atom &func = *tmp;
-                E_GET(tmp, B);
-                Atom &argv = *tmp;
-
-                if (argv.m_type != T_VEC)
-                    error("CALL argv not a vector", argv);
-
-                if (func.m_type == T_PRIM)
-                {
-                    Atom *ot;
-                    E_SET_D_PTR(PE_O, P_O, ot);
-                    (*func.m_d.func)(*(argv.m_d.vec), *ot);
-//                    cout << "argv: " << argv.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
-                    if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
-
-//                    m_rt->m_gc.give_back_vector(argv.m_d.vec, true);
-                }
-                else if (func.m_type == T_CLOS)
-                {
-                    if (func.m_d.vec->m_len < 2)
-                        error("Bad closure found", func);
-                    if (func.m_d.vec->m_data[0].m_type != T_UD)
-                        error("Bad closure found", func);
-
-                    alloc = true;
-                    AtomVec *cont = m_rt->m_gc.allocate_vector(6);
-
-                    Atom prog(T_UD);
-                    prog.m_d.ud = (UserData *) m_prog;
-                    Atom pc(T_C_PTR);
-                    pc.m_d.ptr = m_pc;
-
-                    cont->m_data[0] = prog;
-                    cont->m_data[1] = Atom(T_VEC, env_stack);
-                    cont->m_data[2] = pc;
-                    cont->m_data[3] = Atom(T_INT, P_O);
-                    cont->m_data[4] = Atom(T_INT, PE_O);
-                    // just for keepin a reference to the called function:
-                    cont->m_data[5] = func;
-                    cont->m_len = 6;
-
-                    // replace current function with continuation
-                    *cont_stack->last() = Atom(T_VEC, cont);
-                    cont_stack->push(func); // save the current function
-
-                    m_prog   = dynamic_cast<PROG*>(func.m_d.vec->m_data[0].m_d.ud);
-                    data     = m_prog->data_array();
-                    data_len = m_prog->data_array_len();
-                    m_pc     = &(m_prog->m_instructions[0]);
-                    m_pc--;
-
-                    env_stack = func.m_d.vec->m_data[1].m_d.vec;
-                    env_stack->push(Atom(T_VEC, cur_env = argv.m_d.vec));
-                }
-                else
-                    error("CALL does not support that function type yet", func);
-
-                break;
-            }
-
-            case OP_RETURN:
-            {
-
-                // We get the returnvalue here, so we don't get corrupt
-                // addresses when the later E_SET_D is maybe reallocating
-                // some address space we might be refering to.
-                Atom ret_val;
-                {
-                    Atom *tmp = nullptr;
-                    E_GET(tmp, O);
-                    ret_val = *tmp;
-                }
-
-                cont_stack->pop(); // the current function can be discarded
-                // retrieve the continuation:
-                Atom *c = cont_stack->last();
-                if (!c || c->m_type == T_NIL)
-                {
-                    ret = ret_val;
-                    m_pc = &(m_prog->m_instructions[m_prog->m_instructions_len - 2]);
+                    for (size_t i = 0; i < env_stack->m_len; i++)
+                    {
+                        cout << "ENV@" << (env_stack->m_len - (i + 1)) << ": ";
+                        AtomVec *env = env_stack->at(i).m_d.vec;
+                        for (size_t j = 0; j < env->m_len; j++)
+                            cout << "[" << j << "=" << env->at(j).to_write_str() << "] ";
+                        cout << endl;
+                    }
                     break;
                 }
 
-                Atom cont = *c;
-                cont_stack->pop();
-                if (cont.m_type != T_VEC || cont.m_d.vec->m_len < 4)
-                    error("Empty or bad continuation stack item!", cont);
+                case OP_MOV:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+                    E_GET(tmp, A);
+                    E_SET(O, *tmp);
+                    break;
+                }
 
-                env_stack->pop();
+                case OP_NEW_VEC:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+                    alloc = true;
+                    E_SET(O, Atom(T_VEC, m_rt->m_gc.allocate_vector(P_A)));
+                    break;
+                }
 
-                Atom *cv = cont.m_d.vec->m_data;
+                case OP_NEW_MAP:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+                    alloc = true;
+                    E_SET(O, Atom(T_MAP, m_rt->m_gc.allocate_map()));
+                    break;
+                }
 
-                Atom proc    = cv[0];
-                Atom envs    = cv[1];
-                Atom pc      = cv[2];
-                int32_t oidx = (int32_t) cv[3].m_d.i;
-                int32_t eidx = (int32_t) cv[4].m_d.i;
+                case OP_CSET_VEC:
+                {
+                    E_GET(tmp, O);
+                    Atom &vec = *tmp;
 
-                // save current function for gc:
-                cont_stack->push(proc);
-                m_prog   = dynamic_cast<PROG*>(proc.m_d.ud);
-                data     = m_prog->data_array();
-                data_len = m_prog->data_array_len();
-                m_pc     = (INST *) pc.m_d.ptr;
+                    E_GET(tmp, B);
+                    if (vec.m_type == T_VEC)
+                    {
+                        // XXX: Attention, *tmp is taken as reference and assigned
+                        //      to a vector it is itself part of. In this case, the
+                        //      vector might get reallocated and the *tmp reference
+                        //      might be invalidated!
+                        //      However, as *tmp comes from the current environment
+                        //      frame, this should not happen, until we get
+                        //      direct access to the environment/frame vector.
+                        vec.m_d.vec->set(P_A, *tmp);
+                    }
+                    else if (vec.m_type == T_MAP)
+                    {
+                        Atom *key;
+                        E_GET(key, A);
+                        vec.m_d.map->set(*key, *tmp);
+                    }
+                    else
+                        error("Can CSET_VEC on vector and map", vec);
 
-                env_stack = envs.m_d.vec;
-                cur_env   = env_stack->last()->m_d.vec;
+                    break;
+                }
 
-                E_SET_CHECK_REALLOC_D(eidx, oidx);
-                E_SET_D(eidx, oidx, ret_val);
-                if (m_trace) cout << "RETURN(" << oidx << ":" << eidx << ") => " << ret_val.to_write_str() << endl;
+                case OP_SET:
+                {
+                    E_GET(tmp, O);
+                    Atom &vec = *tmp;
+                    Atom *key;
+                    E_GET(key, A);
 
-//                cout << "VMRETURN VAL: " << retval.to_write_str() << endl;
+                    E_GET(tmp, B);
+                    if (vec.m_type == T_VEC)
+                    {
+                        // XXX: Attention, *tmp is taken as reference and assigned
+                        //      to a vector it is itself part of. In this case, the
+                        //      vector might get reallocated and the *tmp reference
+                        //      might be invalidated!
+                        //      However, as *tmp comes from the current environment
+                        //      frame, this should not happen, until we get
+                        //      direct access to the environment/frame vector.
+                        vec.m_d.vec->set((size_t) key->to_int(), *tmp);
+                    }
+                    else if (vec.m_type == T_MAP)
+                    {
+                        vec.m_d.map->set(*key, *tmp);
+                    }
+                    else
+                        error("Can SET on vector and map", vec);
 
-                break;
-            }
+                    break;
+                }
 
-            case OP_SET_RETURN:
-            {
-                E_GET(tmp, A);
-                ret = *tmp;
-                if (m_trace) cout << "SET_RETURN=> " << ret.to_write_str() << endl;
-                break;
-            }
+                case OP_GET:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
 
-            case OP_BR:
-            {
-                m_pc += P_O;
-                if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
-                    error("BR out of PROG", Atom());
-                break;
-            }
+                    E_GET(tmp, A);
+                    Atom &vec = *tmp;
 
-            case OP_BRIF:
-            {
-                E_GET(tmp, A);
-                if (!tmp->is_false())
+                    Atom *key;
+                    E_GET(key, B);
+
+                    if (vec.m_type == T_VEC)
+                    {
+                        E_SET(O, vec.m_d.vec->at((size_t) key->to_int()));
+                    }
+                    else if (vec.m_type == T_MAP)
+                    {
+                        E_SET(O, vec.m_d.map->at(*key));
+                    }
+                    else
+                        error("Can GET on vector and map", vec);
+
+                    break;
+                }
+
+                case OP_LOAD_NIL:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+                    E_SET(O, Atom());
+                    break;
+                }
+
+                case OP_PUSH_ENV:
+                {
+                    alloc = true;
+                    env_stack->push(
+                        Atom(T_VEC, cur_env = m_rt->m_gc.allocate_vector(P_A)));
+                    break;
+                }
+
+                case OP_POP_ENV:
+                {
+                    env_stack->pop();
+                    Atom *l = env_stack->last();
+                    if (l) cur_env = l->m_d.vec;
+                    break;
+                }
+
+                case OP_NEW_CLOSURE:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    alloc = true;
+
+                    E_GET(tmp, A);
+                    Atom &prog = *tmp;
+                    if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
+                        error("VM can't make closure from non VM-PROG", prog);
+
+                    Atom cl(T_CLOS);
+                    cl.m_d.vec = m_rt->m_gc.allocate_vector(2);
+    //                std::cout << "NEW CLOS " << ((void *) cl.m_d.vec) << "@" << ((void *) cl.m_d.vec->m_data) << std::endl;
+                    cl.m_d.vec->set(0, prog); // XXX: m_data[0] = prog;
+                    cl.m_d.vec->set(1,        //      m_data[1] =
+                        Atom(T_VEC, m_rt->m_gc.clone_vector(env_stack)));
+
+                    E_SET(O, cl);
+                    break;
+                }
+
+                case OP_PACK_VA:
+                {
+                    size_t pack_idx = P_A;
+                    if (pack_idx < cur_env->m_len)
+                    {
+                        size_t va_len = cur_env->m_len - pack_idx;
+                        AtomVec *v = m_rt->m_gc.allocate_vector(va_len);
+                        for (size_t i = 0; i < va_len; i++)
+                            v->m_data[i] = cur_env->m_data[i + pack_idx];
+                        v->m_len = va_len;
+                        Atom vv(T_VEC, v);
+                        E_SET_CHECK_REALLOC(O, O);
+                        E_SET(O, vv);
+                    }
+                    else
+                    {
+                        E_SET_CHECK_REALLOC(O, O);
+                        E_SET(O, Atom(T_VEC, m_rt->m_gc.allocate_vector(0)));
+                    }
+                    break;
+                }
+
+                case OP_CALL:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom &func = *tmp;
+                    E_GET(tmp, B);
+                    Atom &argv = *tmp;
+
+                    if (argv.m_type != T_VEC)
+                        error("CALL argv not a vector", argv);
+
+                    if (func.m_type == T_PRIM)
+                    {
+                        Atom *ot;
+                        E_SET_D_PTR(PE_O, P_O, ot);
+                        (*func.m_d.func)(*(argv.m_d.vec), *ot);
+    //                    cout << "argv: " << argv.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
+                        if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
+
+    //                    m_rt->m_gc.give_back_vector(argv.m_d.vec, true);
+                    }
+                    else if (func.m_type == T_CLOS)
+                    {
+                        if (func.m_d.vec->m_len < 2)
+                            error("Bad closure found", func);
+                        if (func.m_d.vec->m_data[0].m_type != T_UD)
+                            error("Bad closure found", func);
+
+                        alloc = true;
+                        AtomVec *cont = m_rt->m_gc.allocate_vector(6);
+
+                        Atom prog(T_UD);
+                        prog.m_d.ud = (UserData *) m_prog;
+                        Atom pc(T_C_PTR);
+                        pc.m_d.ptr = m_pc;
+
+                        cont->m_data[0] = prog;
+                        cont->m_data[1] = Atom(T_VEC, env_stack);
+                        cont->m_data[2] = pc;
+                        cont->m_data[3] = Atom(T_INT, P_O);
+                        cont->m_data[4] = Atom(T_INT, PE_O);
+                        // just for keepin a reference to the called function:
+                        cont->m_data[5] = func;
+                        cont->m_len = 6;
+
+                        // replace current function with continuation
+                        *cont_stack->last() = Atom(T_VEC, cont);
+                        cont_stack->push(func); // save the current function
+
+                        m_prog   = dynamic_cast<PROG*>(func.m_d.vec->m_data[0].m_d.ud);
+                        data     = m_prog->data_array();
+                        data_len = m_prog->data_array_len();
+                        m_pc     = &(m_prog->m_instructions[0]);
+                        m_pc--;
+
+                        env_stack = func.m_d.vec->m_data[1].m_d.vec;
+                        env_stack->push(Atom(T_VEC, cur_env = argv.m_d.vec));
+                    }
+                    else
+                        error("CALL does not support that function type yet", func);
+
+                    break;
+                }
+
+                case OP_RETURN:
+                {
+
+                    // We get the returnvalue here, so we don't get corrupt
+                    // addresses when the later E_SET_D is maybe reallocating
+                    // some address space we might be refering to.
+                    Atom ret_val;
+                    {
+                        Atom *tmp = nullptr;
+                        E_GET(tmp, O);
+                        ret_val = *tmp;
+                    }
+
+                    cont_stack->pop(); // the current function can be discarded
+                    // retrieve the continuation:
+                    Atom *c = cont_stack->last();
+                    if (!c || c->m_type == T_NIL)
+                    {
+                        ret = ret_val;
+                        m_pc = &(m_prog->m_instructions[m_prog->m_instructions_len - 2]);
+                        break;
+                    }
+
+                    Atom cont = *c;
+                    cont_stack->pop();
+                    if (cont.m_type != T_VEC || cont.m_d.vec->m_len < 4)
+                        error("Empty or bad continuation stack item!", cont);
+
+                    env_stack->pop();
+
+                    Atom *cv = cont.m_d.vec->m_data;
+
+                    Atom proc    = cv[0];
+                    Atom envs    = cv[1];
+                    Atom pc      = cv[2];
+                    int32_t oidx = (int32_t) cv[3].m_d.i;
+                    int32_t eidx = (int32_t) cv[4].m_d.i;
+
+                    // save current function for gc:
+                    cont_stack->push(proc);
+                    m_prog   = dynamic_cast<PROG*>(proc.m_d.ud);
+                    data     = m_prog->data_array();
+                    data_len = m_prog->data_array_len();
+                    m_pc     = (INST *) pc.m_d.ptr;
+
+                    env_stack = envs.m_d.vec;
+                    cur_env   = env_stack->last()->m_d.vec;
+
+                    E_SET_CHECK_REALLOC_D(eidx, oidx);
+                    E_SET_D(eidx, oidx, ret_val);
+                    if (m_trace) cout << "RETURN(" << oidx << ":" << eidx << ") => " << ret_val.to_write_str() << endl;
+
+    //                cout << "VMRETURN VAL: " << retval.to_write_str() << endl;
+
+                    break;
+                }
+
+                case OP_SET_RETURN:
+                {
+                    E_GET(tmp, A);
+                    ret = *tmp;
+                    if (m_trace) cout << "SET_RETURN=> " << ret.to_write_str() << endl;
+                    break;
+                }
+
+                case OP_BR:
                 {
                     m_pc += P_O;
                     if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
-                        error("BRIF out of PROG", Atom());
-                }
-                break;
-            }
-
-            case OP_BRNIF:
-            {
-                E_GET(tmp, A);
-                if (tmp->is_false())
-                {
-                    m_pc += P_O;
-                    if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
-                        error("BRIF out of PROG", Atom());
-                }
-                break;
-            }
-
-            case OP_FORINC:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                size_t idx_o = P_O + 1;
-                if (idx_o >= cur_env->m_len)
-                    cur_env->set(idx_o, Atom(T_INT));
-
-                Atom *step;
-                E_GET(step, A);
-                E_GET(tmp, B);
-
-                Atom *ot;
-                E_SET_D_PTR(PE_O, (P_O + 1), ot);
-                Atom &o = *ot;
-
-                Atom *condt;
-                E_SET_D_PTR(PE_O, P_O, condt);
-                Atom &cond = *condt;
-
-                bool update = cond.m_type == T_BOOL;
-
-                if (o.m_type == T_DBL)
-                {
-                    double step_i = step->to_dbl();
-                    double i = o.m_d.d;
-                    if (update) i += step_i;
-                    cond = Atom(T_BOOL, step_i > 0.0
-                                        ? i > tmp->to_dbl()
-                                        : i < tmp->to_dbl());
-                    o.m_d.d = i;
-                }
-                else
-                {
-                    int64_t step_i = step->to_int();
-                    int64_t i = o.m_d.i;
-                    if (update) i += step_i;
-                    cond = Atom(T_BOOL, step_i > 0
-                                        ? i > tmp->to_int()
-                                        : i < tmp->to_int());
-                    o.m_d.i = i;
+                        error("BR out of PROG", Atom());
+                    break;
                 }
 
-                break;
-            }
-
-            case OP_NOT:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                E_GET(tmp, A);
-                Atom o(T_BOOL);
-                o.m_d.b = tmp->is_false();
-                E_SET(O, o);
-                break;
-            }
-
-            case OP_EQ:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                E_GET(tmp, A);
-                Atom &a = *tmp;
-                E_GET(tmp, B);
-                Atom &b = *tmp;
-
-                Atom o(T_BOOL);
-                if (a.m_type == T_DBL)
-                    o.m_d.b = std::fabs(a.to_dbl() - b.to_dbl())
-                              < std::numeric_limits<double>::epsilon();
-                else
-                    o.m_d.b = a.to_int() == b.to_int();
-                E_SET(O, o);
-                break;
-            }
-
-            case OP_NEQ:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                E_GET(tmp, A);
-                Atom &a = *tmp;
-                E_GET(tmp, B);
-                Atom &b = *tmp;
-
-                Atom o(T_BOOL);
-                if (a.m_type == T_DBL)
-                    o.m_d.b = std::fabs(a.to_dbl() - b.to_dbl())
-                              >= std::numeric_limits<double>::epsilon();
-                else
-                    o.m_d.b = a.to_int() != b.to_int();
-                E_SET(O, o);
-                break;
-            }
-
-            case OP_ITER:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-
-                E_GET(tmp, A);
-                Atom &vec = *tmp;
-
-                alloc = true;
-                Atom iter(T_VEC, m_rt->m_gc.allocate_vector(2));
-                if (vec.m_type == T_VEC)
+                case OP_BRIF:
                 {
-                    iter.m_d.vec->m_data[0] = Atom(T_INT, -1);
-                }
-                else if (vec.m_type == T_MAP)
-                {
-                    AtomMapIterator *mi = new AtomMapIterator(vec);
-                    Atom ud(T_UD);
-                    ud.m_d.ud = mi;
-                    iter.m_d.vec->m_data[0] = ud;
-                }
-                else
-                    error("Can't ITER on non map or non vector", vec);
-
-                iter.m_d.vec->m_data[1] = vec;
-                E_SET(O, iter);
-                break;
-            }
-
-            case OP_NEXT:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-                E_SET_CHECK_REALLOC(A, A);
-
-                E_GET(tmp, B);
-                Atom &iter = *tmp;
-                if (iter.m_type != T_VEC && iter.m_d.vec->m_len < 2)
-                    error("Bad iterator found in NEXT", iter);
-
-                Atom *iter_elems = iter.m_d.vec->m_data;
-
-                if (iter_elems[0].m_type == T_INT)
-                {
-                    int64_t &i = iter_elems[0].m_d.i;
-                    i++;
-                    Atom b(T_BOOL);
-                    b.m_d.b = i >= iter_elems[1].m_d.vec->m_len;
-                    E_SET(O, b);
-                    if (!b.m_d.b)
+                    E_GET(tmp, A);
+                    if (!tmp->is_false())
                     {
-                        E_SET(A, iter_elems[1].m_d.vec->at((size_t) i));
+                        m_pc += P_O;
+                        if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
+                            error("BRIF out of PROG", Atom());
                     }
+                    break;
                 }
-                else if (iter_elems[0].m_type == T_UD)
+
+                case OP_BRNIF:
                 {
-                    AtomMapIterator *mi =
-                        dynamic_cast<AtomMapIterator *>(iter_elems[0].m_d.ud);
-                    mi->next();
-                    Atom b(T_BOOL);
-                    b.m_d.b = !mi->ok();
-                    E_SET(O, b);
-                    if (!b.m_d.b)
+                    E_GET(tmp, A);
+                    if (tmp->is_false())
                     {
-                        E_SET(A, mi->value());
+                        m_pc += P_O;
+                        if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
+                            error("BRIF out of PROG", Atom());
                     }
+                    break;
                 }
-                break;
-            }
 
-            case OP_IKEY:
-            {
-                E_SET_CHECK_REALLOC(O, O);
-                E_GET(tmp, B);
-                Atom &iter = *tmp;
-                if (iter.m_type != T_VEC && iter.m_d.vec->m_len < 2)
-                    error("Bad iterator found in NEXT", iter);
-
-                Atom *iter_elems = iter.m_d.vec->m_data;
-
-                if (iter_elems[0].m_type == T_INT)
+                case OP_FORINC:
                 {
-                    E_SET(O, iter_elems[0]);
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    size_t idx_o = P_O + 1;
+                    if (idx_o >= cur_env->m_len)
+                        cur_env->set(idx_o, Atom(T_INT));
+
+                    Atom *step;
+                    E_GET(step, A);
+                    E_GET(tmp, B);
+
+                    Atom *ot;
+                    E_SET_D_PTR(PE_O, (P_O + 1), ot);
+                    Atom &o = *ot;
+
+                    Atom *condt;
+                    E_SET_D_PTR(PE_O, P_O, condt);
+                    Atom &cond = *condt;
+
+                    bool update = cond.m_type == T_BOOL;
+
+                    if (o.m_type == T_DBL)
+                    {
+                        double step_i = step->to_dbl();
+                        double i = o.m_d.d;
+                        if (update) i += step_i;
+                        cond = Atom(T_BOOL, step_i > 0.0
+                                            ? i > tmp->to_dbl()
+                                            : i < tmp->to_dbl());
+                        o.m_d.d = i;
+                    }
+                    else
+                    {
+                        int64_t step_i = step->to_int();
+                        int64_t i = o.m_d.i;
+                        if (update) i += step_i;
+                        cond = Atom(T_BOOL, step_i > 0
+                                            ? i > tmp->to_int()
+                                            : i < tmp->to_int());
+                        o.m_d.i = i;
+                    }
+
+                    break;
                 }
-                else if (iter_elems[0].m_type == T_UD)
+
+                case OP_NOT:
                 {
-                    AtomMapIterator *mi =
-                        dynamic_cast<AtomMapIterator *>(iter_elems[0].m_d.ud);
-                    E_SET(O, mi->key());
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom o(T_BOOL);
+                    o.m_d.b = tmp->is_false();
+                    E_SET(O, o);
+                    break;
                 }
-                break;
+
+                case OP_EQ:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom &a = *tmp;
+                    E_GET(tmp, B);
+                    Atom &b = *tmp;
+
+                    Atom o(T_BOOL);
+                    if (a.m_type == T_DBL)
+                        o.m_d.b = std::fabs(a.to_dbl() - b.to_dbl())
+                                  < std::numeric_limits<double>::epsilon();
+                    else
+                        o.m_d.b = a.to_int() == b.to_int();
+                    E_SET(O, o);
+                    break;
+                }
+
+                case OP_NEQ:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom &a = *tmp;
+                    E_GET(tmp, B);
+                    Atom &b = *tmp;
+
+                    Atom o(T_BOOL);
+                    if (a.m_type == T_DBL)
+                        o.m_d.b = std::fabs(a.to_dbl() - b.to_dbl())
+                                  >= std::numeric_limits<double>::epsilon();
+                    else
+                        o.m_d.b = a.to_int() != b.to_int();
+                    E_SET(O, o);
+                    break;
+                }
+
+                case OP_ITER:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom &vec = *tmp;
+
+                    alloc = true;
+                    Atom iter(T_VEC, m_rt->m_gc.allocate_vector(2));
+                    if (vec.m_type == T_VEC)
+                    {
+                        iter.m_d.vec->m_data[0] = Atom(T_INT, -1);
+                    }
+                    else if (vec.m_type == T_MAP)
+                    {
+                        AtomMapIterator *mi = new AtomMapIterator(vec);
+                        Atom ud(T_UD);
+                        ud.m_d.ud = mi;
+                        iter.m_d.vec->m_data[0] = ud;
+                    }
+                    else
+                        error("Can't ITER on non map or non vector", vec);
+
+                    iter.m_d.vec->m_data[1] = vec;
+                    E_SET(O, iter);
+                    break;
+                }
+
+                case OP_NEXT:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+                    E_SET_CHECK_REALLOC(A, A);
+
+                    E_GET(tmp, B);
+                    Atom &iter = *tmp;
+                    if (iter.m_type != T_VEC && iter.m_d.vec->m_len < 2)
+                        error("Bad iterator found in NEXT", iter);
+
+                    Atom *iter_elems = iter.m_d.vec->m_data;
+
+                    if (iter_elems[0].m_type == T_INT)
+                    {
+                        int64_t &i = iter_elems[0].m_d.i;
+                        i++;
+                        Atom b(T_BOOL);
+                        b.m_d.b = i >= iter_elems[1].m_d.vec->m_len;
+                        E_SET(O, b);
+                        if (!b.m_d.b)
+                        {
+                            E_SET(A, iter_elems[1].m_d.vec->at((size_t) i));
+                        }
+                    }
+                    else if (iter_elems[0].m_type == T_UD)
+                    {
+                        AtomMapIterator *mi =
+                            dynamic_cast<AtomMapIterator *>(iter_elems[0].m_d.ud);
+                        mi->next();
+                        Atom b(T_BOOL);
+                        b.m_d.b = !mi->ok();
+                        E_SET(O, b);
+                        if (!b.m_d.b)
+                        {
+                            E_SET(A, mi->value());
+                        }
+                    }
+                    break;
+                }
+
+                case OP_IKEY:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+                    E_GET(tmp, B);
+                    Atom &iter = *tmp;
+                    if (iter.m_type != T_VEC && iter.m_d.vec->m_len < 2)
+                        error("Bad iterator found in NEXT", iter);
+
+                    Atom *iter_elems = iter.m_d.vec->m_data;
+
+                    if (iter_elems[0].m_type == T_INT)
+                    {
+                        E_SET(O, iter_elems[0]);
+                    }
+                    else if (iter_elems[0].m_type == T_UD)
+                    {
+                        AtomMapIterator *mi =
+                            dynamic_cast<AtomMapIterator *>(iter_elems[0].m_d.ud);
+                        E_SET(O, mi->key());
+                    }
+                    break;
+                }
+
+    #define     DEFINE_NUM_OP_BOOL(opname, oper)              \
+                case OP_##opname:                             \
+                {                                             \
+                    E_SET_CHECK_REALLOC(O, O); \
+                    E_GET(tmp, A);                            \
+                    Atom &a = *tmp;                           \
+                    E_GET(tmp, B);                            \
+                    Atom &b = *tmp;                           \
+                                                              \
+                    Atom o(T_BOOL);                           \
+                    if (a.m_type == T_DBL)                    \
+                        o.m_d.b = a.to_dbl() oper b.to_dbl(); \
+                    else                                      \
+                        o.m_d.b = a.to_int() oper b.to_int(); \
+                    E_SET(O, o);                              \
+                    break;                                    \
+                }
+
+    #define     DEFINE_NUM_OP_NUM(opname, oper, neutr)                   \
+                case OP_##opname:                                        \
+                {                                                        \
+                    E_SET_CHECK_REALLOC(O, O);      \
+                    E_GET(tmp, A);                                       \
+                    Atom &a = *tmp;                                      \
+                    E_GET(tmp, B);                                       \
+                    Atom &b = *tmp;                                      \
+                                                                         \
+                    Atom *ot;                                            \
+                    E_SET_D_PTR(PE_O, P_O, ot);                          \
+                    Atom &o = *ot;                                       \
+                    o.m_type = a.m_type;                                 \
+                    if (a.m_type == T_DBL)                               \
+                        o.m_d.d = a.to_dbl() oper b.to_dbl();            \
+                    else if (a.m_type == T_NIL)                          \
+                    {                                                    \
+                        o.m_type = b.m_type;                             \
+                        if (b.m_type == T_DBL)                           \
+                        {                                                \
+                            o.m_d.d = (double) neutr;                    \
+                            o.m_d.d = ((double) neutr) oper b.to_dbl();  \
+                        }                                                \
+                        else                                             \
+                        {                                                \
+                            o.m_d.i = (int64_t) neutr;                   \
+                            o.m_d.i = ((int64_t) neutr) oper b.to_int(); \
+                        }                                                \
+                    }                                                    \
+                    else                                                 \
+                        o.m_d.i = a.to_int() oper b.to_int();            \
+                    break;                                               \
+                }
+
+                DEFINE_NUM_OP_NUM(ADD, +, 0)
+                DEFINE_NUM_OP_NUM(SUB, -, 0)
+                DEFINE_NUM_OP_NUM(MUL, *, 1)
+                DEFINE_NUM_OP_NUM(DIV, /, 1)
+
+                case OP_MOD:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom &a = *tmp;
+                    E_GET(tmp, B);
+                    Atom &b = *tmp;
+
+                    Atom *ot;
+                    E_SET_D_PTR(PE_O, P_O, ot);
+                    Atom &o = *ot;
+                    o.m_type = a.m_type;
+                    if (a.m_type == T_DBL)
+                        o.m_d.d = (double) (((int64_t) a.to_dbl()) % ((int64_t) b.to_dbl()));
+                    else
+                        o.m_d.i = a.to_int() % b.to_int();
+                    break;
+                }
+
+                DEFINE_NUM_OP_BOOL(GE, >=)
+                DEFINE_NUM_OP_BOOL(LE, <=)
+                DEFINE_NUM_OP_BOOL(LT, <)
+                DEFINE_NUM_OP_BOOL(GT, >)
+
+                default:
+                    throw VMException("Unknown VM opcode: " + to_string(m_pc->op));
             }
+            m_pc++;
 
-#define     DEFINE_NUM_OP_BOOL(opname, oper)              \
-            case OP_##opname:                             \
-            {                                             \
-                E_SET_CHECK_REALLOC(O, O); \
-                E_GET(tmp, A);                            \
-                Atom &a = *tmp;                           \
-                E_GET(tmp, B);                            \
-                Atom &b = *tmp;                           \
-                                                          \
-                Atom o(T_BOOL);                           \
-                if (a.m_type == T_DBL)                    \
-                    o.m_d.b = a.to_dbl() oper b.to_dbl(); \
-                else                                      \
-                    o.m_d.b = a.to_int() oper b.to_int(); \
-                E_SET(O, o);                              \
-                break;                                    \
-            }
-
-#define     DEFINE_NUM_OP_NUM(opname, oper, neutr)                   \
-            case OP_##opname:                                        \
-            {                                                        \
-                E_SET_CHECK_REALLOC(O, O);      \
-                E_GET(tmp, A);                                       \
-                Atom &a = *tmp;                                      \
-                E_GET(tmp, B);                                       \
-                Atom &b = *tmp;                                      \
-                                                                     \
-                Atom *ot;                                            \
-                E_SET_D_PTR(PE_O, P_O, ot);                          \
-                Atom &o = *ot;                                       \
-                o.m_type = a.m_type;                                 \
-                if (a.m_type == T_DBL)                               \
-                    o.m_d.d = a.to_dbl() oper b.to_dbl();            \
-                else if (a.m_type == T_NIL)                          \
-                {                                                    \
-                    o.m_type = b.m_type;                             \
-                    if (b.m_type == T_DBL)                           \
-                    {                                                \
-                        o.m_d.d = (double) neutr;                    \
-                        o.m_d.d = ((double) neutr) oper b.to_dbl();  \
-                    }                                                \
-                    else                                             \
-                    {                                                \
-                        o.m_d.i = (int64_t) neutr;                   \
-                        o.m_d.i = ((int64_t) neutr) oper b.to_int(); \
-                    }                                                \
-                }                                                    \
-                else                                                 \
-                    o.m_d.i = a.to_int() oper b.to_int();            \
-                break;                                               \
-            }
-
-            DEFINE_NUM_OP_NUM(ADD, +, 0)
-            DEFINE_NUM_OP_NUM(SUB, -, 0)
-            DEFINE_NUM_OP_NUM(MUL, *, 1)
-            DEFINE_NUM_OP_NUM(DIV, /, 1)
-
-            case OP_MOD:
+            if (alloc)
             {
-                E_SET_CHECK_REALLOC(O, O);
-
-                E_GET(tmp, A);
-                Atom &a = *tmp;
-                E_GET(tmp, B);
-                Atom &b = *tmp;
-
-                Atom *ot;
-                E_SET_D_PTR(PE_O, P_O, ot);
-                Atom &o = *ot;
-                o.m_type = a.m_type;
-                if (a.m_type == T_DBL)
-                    o.m_d.d = (double) (((int64_t) a.to_dbl()) % ((int64_t) b.to_dbl()));
-                else
-                    o.m_d.i = a.to_int() % b.to_int();
-                break;
+                m_rt->m_gc.collect_maybe();
+                alloc = false;
             }
-
-            DEFINE_NUM_OP_BOOL(GE, >=)
-            DEFINE_NUM_OP_BOOL(LE, <=)
-            DEFINE_NUM_OP_BOOL(LT, <)
-            DEFINE_NUM_OP_BOOL(GT, >)
-
-            default:
-                throw VMException("Unknown VM opcode: " + to_string(m_pc->op));
         }
-        m_pc++;
-
-        if (alloc)
-        {
-            m_rt->m_gc.collect_maybe();
-            alloc = false;
-        }
+    }
+    catch (BukaLISPException &)
+    {
+        throw;
+    }
+    catch (std::exception &e)
+    {
+        throw
+            add_stack_trace_error(
+                BukaLISPException(
+                    std::string("Exception in VM: ")
+                    + e.what()));
     }
 
     cont_stack->pop();

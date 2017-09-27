@@ -193,6 +193,7 @@ class Interpreter
         Atom eval_field_get(Atom e, AtomVec *av);
         Atom eval_case     (Atom e, AtomVec *av);
         Atom eval_include  (Atom e, AtomVec *av);
+        Atom eval_with_cln (Atom e, AtomVec *av);
 };
 //---------------------------------------------------------------------------
 

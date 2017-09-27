@@ -3,10 +3,10 @@
 
 #include "interpreter.h"
 #include "buklivm.h"
-#include "atom_cpp_serializer.h"
 #include <modules/bklisp_module_wrapper.h>
 #include <chrono>
 #include "util.h"
+#include "atom_cpp_serializer.h"
 
 using namespace std;
 
@@ -49,6 +49,7 @@ AtomMap *Interpreter::init_root_env()
     DEF_SYNTAX($);
     DEF_SYNTAX(displayln-time);
     DEF_SYNTAX(include);
+    DEF_SYNTAX(with-cleanup);
 
 #define START_PRIM() \
     tmp = Atom(T_PRIM); \
@@ -714,7 +715,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
 
 Atom Interpreter::eval_include(Atom e, AtomVec *av)
 {
-    if (av->m_len == 1)
+    if (av->m_len != 2)
         error("'include' needs exactly one argument", e);
 
     if (   av->m_data[1].m_type != T_STR
@@ -730,6 +731,25 @@ Atom Interpreter::eval_include(Atom e, AtomVec *av)
 
     std::string code = slurp_str(filepath);
     return eval(filepath, code);
+}
+//---------------------------------------------------------------------------
+
+Atom Interpreter::eval_with_cln(Atom e, AtomVec *av)
+{
+    if (!(av->m_len == 3 || av->m_len == 4))
+        error("'with-cleanup' needs either two or three arguments", e);
+
+    size_t o = 0;
+    if (av->m_len == 4)
+    {
+        o = 1;
+        eval(av->m_data[1]);
+    }
+
+    GC_ROOT(m_rt->m_gc, ret) = eval(av->m_data[2 + o]);
+    eval(av->m_data[1 + o]);
+
+    return ret;
 }
 //---------------------------------------------------------------------------
 
@@ -797,7 +817,8 @@ Atom Interpreter::eval(Atom e)
         {
             AtomMap *env = nullptr;
             ret = lookup(e.m_d.sym, env);
-            annotate_meta_func(ret, e);
+            if (ret.m_type == T_CLOS)
+                annotate_meta_func(ret, e);
             if (!env)
                 error("Undefined variable binding", e);
             break;
@@ -840,6 +861,8 @@ Atom Interpreter::eval(Atom e)
                 else if (s == "$!")       ret = eval_field_set(e, av);
                 else if (s == "$define!") ret = eval_meth_def(e, av);
                 else if (s == "include")  ret = eval_include(e, av);
+                else if (s == "with-cleanup")
+                                          ret = eval_with_cln(e, av);
                 else if (s == "displayln-time")
                 {
                     if (av->m_len != 2)
