@@ -217,6 +217,7 @@ Atom Interpreter::eval_lambda(Atom e, AtomVec *av)
     AtomVec *closure  = m_rt->m_gc.allocate_vector(3);
     closure->push(Atom(T_VEC, clos_env));
     closure->push(Atom(T_VEC, av));
+    closure->push(Atom());
     return Atom(T_CLOS, closure);
 }
 //---------------------------------------------------------------------------

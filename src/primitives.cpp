@@ -538,6 +538,18 @@ START_PRIM()
     out = Atom(T_VEC, av);
 END_PRIM(sys-path-split)
 
+START_PRIM()
+    REQ_EQ_ARGC(apply, 2);
+
+    if (A1.m_type != T_VEC)
+        error("No argument list given.", A1);
+
+    if (!m_vm)
+        error("Can't run 'apply' without VM.", A0);
+
+    out = m_vm->eval(A0, A1.m_d.vec);
+END_PRIM(apply)
+
 #if IN_INTERPRETER
 
 START_PRIM()

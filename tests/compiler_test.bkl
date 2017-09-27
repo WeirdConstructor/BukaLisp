@@ -17,38 +17,40 @@
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
 ;----------------------------------------------------------------------------
+
 ;(T '(+) 1)
 ;(T '(begin
 ;      (include "bukalisplib\\test-compiler.bkl")
 ;      test-include-ok)
 ;   1)
 ;
+;(T '(when   #t 10) 10)
 ;(error X:)
 ;----------------------------------------------------------------------------
 
-; test externally given environment executed inside VM:
-(let ((my-env []))
-  (T '(begin 1) 1 my-env)
-  ($!l (@0 my-env) [var: (length (@1 my-env))])
-  (push! (@1 my-env) 12)
-  (displayln my-env)
-  (T '(begin
-        (define k 10)
-        ((lambda () l)))
-     12 my-env))
-
-; test recursive calling into VM:
-(let ((my-env [])
-      (func (invoke-compiler ['(displayln foo-out: (+ 10 20))] "test-code x" #t root-env)))
-  (T '(begin 1) 1 my-env)
-  ($!xxx (@0 my-env) [var: (length (@1 my-env))])
-  (push! (@1 my-env) func)
-  (T '(begin
-		(define k 10)
-		((lambda () (run-vm-prog xxx [])))
-		(+ 12.345 k))
-	 22.345
-	 my-env))
+;; test externally given environment executed inside VM:
+;(let ((my-env []))
+;  (T '(begin 1) 1 my-env)
+;  ($!l (@0 my-env) [var: (length (@1 my-env))])
+;  (push! (@1 my-env) 12)
+;  (displayln my-env)
+;  (T '(begin
+;        (define k 10)
+;        ((lambda () l)))
+;     12 my-env))
+;
+;; test recursive calling into VM:
+;(let ((my-env [])
+;      (func (invoke-compiler ['(displayln foo-out: (+ 10 20))] "test-code x" #t root-env)))
+;  (T '(begin 1) 1 my-env)
+;  ($!xxx (@0 my-env) [var: (length (@1 my-env))])
+;  (push! (@1 my-env) func)
+;  (T '(begin
+;		(define k 10)
+;		((lambda () (run-vm-prog xxx [])))
+;		(+ 12.345 k))
+;	 22.345
+;	 my-env))
 
 ;----------------------------------------------------------------------------
 
@@ -875,7 +877,7 @@
    24)
 
 (T '(begin
-      (include "bukalisplib\\test-compiler.bkl")
+      (include "..\\bukalisplib\\test-compiler.bkl")
       test-include-ok)
    1)
 
@@ -883,6 +885,16 @@
       (bkl-set-meta v 2 42)
       (bkl-get-meta v))
    '(nil nil 42))
+
+(T '(begin
+      (define x 10)
+      (define m nil)
+      (let ()
+       (define-macro (x a b)
+         ['quote [a b a b]])
+       (set! m (x 9 11)))
+      [m x])
+   [[9 11 9 11] 10])
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")

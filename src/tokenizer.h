@@ -331,6 +331,8 @@ class Tokenizer
                             {
                                 while (peek_c == ' ' || peek_c == '\t' || peek_c == '\n' || peek_c == '\r')
                                 {
+                                    if (peek_c == '\n') m_cur_line++;
+
                                     m_u8buf.skip_bytes(1);
                                     peek_c = m_u8buf.first_byte();
                                     if (peek_c == '\n')
