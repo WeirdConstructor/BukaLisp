@@ -199,8 +199,7 @@
     ($define! self (error msg atom)
       (bkl-error
           (str-join " " msg atom)
-          [(let ((info (.get-debug-info self)))
-             ["compiler" (@0 info) (@1 info) (@2 info)])]))
+          (.get-debug-info-trace self)))
 
     ($define! self (new-tmp-pos)
       (let ((env-pos (last ($env-pos-stack: self)))
@@ -502,13 +501,22 @@
        (lambda (atom self code-pad)
          (unless (eqv? (length atom) 2)
            (.error self "'include' needs exactly 1 argument" atom))
-         ; TODO FIXME: push current directory path, so the being
-         ;             compiled included file includes other files!
-         (let ((include-file-path (@1 atom))
+         (define current-file (@0 (.get-debug-info self)))
+         (define current-dir (first (sys-path-split current-file)))
+         (let ((include-file-path (str current-dir
+                                       (sys-path-separator)
+                                       (@1 atom)))
                (include-content   (sys-slurp-file include-file-path))
-               (read-data         (read-str include-content)))
-           (.compile-block self read-data code-pad)
-         )))
+               (read-data         (read-str include-content include-file-path)))
+           (bkl-set-meta read-data 0 [include-file-path 1])
+           (with-cleanup
+             (begin
+               (.push-define-name-info self "<toplevel>")
+               (.push-debug-info self read-data))
+             (begin
+               (.pop-debug-info self)
+               (.pop-define-name-info self))
+             (.compile-block self read-data code-pad)))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'lambda

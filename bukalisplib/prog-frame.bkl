@@ -21,11 +21,35 @@
      ($define! self (push-debug-info atom)
        (let ((meta-info (bkl-get-meta atom))
              (debug-info (if (nil? meta-info) nil (@0 meta-info))))
-         (push! ($debug-pos-stack: self) debug-info)
+         (push! ($debug-pos-stack: self)
+                (if (nil? debug-info)
+                  nil
+                  [(@0 debug-info)
+                   (@1 debug-info)
+                   (last ($define-name-stack: self))]))
          #;(displayln PUSH-DEBUG-INFO: ($debug-pos-stack: self))))
 
      ($define! self (pop-debug-info)
        (pop! ($debug-pos-stack: self)))
+
+     ($define! self (get-debug-info-trace)
+       (define to-trace-info
+         (lambda (info)
+           (if (nil? info)
+             ["compiler" nil nil nil]
+             ["compiler" (@0 info) (@1 info) (@2 info)])))
+       (define trace [])
+       (define add-trace-info
+         (lambda (info)
+           (when (not (nil? info))
+             (push! trace (to-trace-info info)))))
+       (unless (eqv? (length ($debug-pos-stack: self)) 0)
+         (define info nil)
+         (if (eqv? (length ($debug-pos-stack: self)) 1)
+           (add-trace-info (last ($debug-pos-stack: self)))
+           (for (i (- (length ($debug-pos-stack: self)) 1) 0 -1)
+             (add-trace-info (@i ($debug-pos-stack: self))))))
+       trace)
 
      ($define! self (get-debug-info)
        (unless (eqv? (length ($debug-pos-stack: self)) 0)
@@ -35,10 +59,6 @@
            (for (i (- (length ($debug-pos-stack: self)) 1) 0 -1)
              (unless info
                (set! info (@i ($debug-pos-stack: self))))))
-         (when info
-           (set! info [(@0 info)
-                       (@1 info)
-                       (last ($define-name-stack: self))]))
          info))
 
      ($define! self (store-static-data data)
