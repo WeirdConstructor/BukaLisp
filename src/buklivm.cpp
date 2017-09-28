@@ -358,7 +358,7 @@ Atom VM::eval(Atom callable, AtomVec *args)
                     else
                         cout << i << "[" << a.to_write_str() << "] ";
                 }
-                cout << "}" << endl;
+                cout << "}" << get_current_debug_info().to_write_str() << endl;
             }
 
             switch (m_pc->op)

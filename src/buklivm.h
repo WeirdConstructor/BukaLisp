@@ -281,14 +281,21 @@ class VM
 
         BukaLISPException &add_stack_trace_error(BukaLISPException &e)
         {
-            INST *start_pc = &(m_prog->m_instructions[0]);
-            Atom a(T_INT, m_pc - start_pc);
-            Atom info = m_prog->m_debug_info_map.at(a);
+            Atom info = get_current_debug_info();
             return
                 e.push("vm",
                        info.at(0).to_display_str(),
                        (size_t) info.at(1).to_int(),
                        info.at(2).to_display_str());
+        }
+
+        Atom get_current_debug_info()
+        {
+            if (!m_prog)
+                return Atom();
+            INST *start_pc = &(m_prog->m_instructions[0]);
+            Atom a(T_INT, m_pc - start_pc);
+            return m_prog->m_debug_info_map.at(a);
         }
 
         void error(const std::string &msg)

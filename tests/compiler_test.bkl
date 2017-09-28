@@ -18,18 +18,7 @@
 
 ;----------------------------------------------------------------------------
 
-(T '(begin
-      (include "..\\bukalisplib\\test-compiler.bkl")
-      test-include-ok)
-   1)
-;(T '(+) 1)
-;(T '(begin
-;      (include "bukalisplib\\test-compiler.bkl")
-;      test-include-ok)
-;   1)
-;
-;(T '(when   #t 10) 10)
-(error X:)
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ;; test externally given environment executed inside VM:
@@ -842,6 +831,7 @@
 (T '(let ((x <=)) (x 11 11 12)) #t)
 (T '(let ((x <=)) (x 11 11 9)) #f)
 
+; Test accessor operations like @, $, $! and @!
 (T ''@ '@)
 (T ''@! '@!)
 
@@ -866,6 +856,7 @@
 (T '($x  {'x 10}) 10)
 (T '(let ((m {'x 10})) ($!x m 12) m) {'x 12})
 
+; Test eval
 (T '(eval 1)                    1)
 (T '(eval '(+ 1 2))             3)
 (T '(eval '(eval '(+ 1 2)))     3)
@@ -880,16 +871,19 @@
       (eval 'x env))
    24)
 
+; Test include
 (T '(begin
       (include "..\\bukalisplib\\test-compiler.bkl")
       test-include-ok)
    1)
 
+; Test meta-infos:
 (T '(let ((v []))
       (bkl-set-meta v 2 42)
       (bkl-get-meta v))
    '(nil nil 42))
 
+; Test macros:
 (T '(begin
       (define x 10)
       (define m nil)
@@ -899,6 +893,28 @@
        (set! m (x 9 11)))
       [m x])
    [[9 11 9 11] 10])
+
+; Test $define!
+(T '(let ((o {x: 0}))
+      ($define! o (foo) 9)
+      (($foo o)))
+   9)
+(T '(let ((o {x: 0}))
+      ($define! o (foo) 9)
+      [(($foo o))])
+   [9])
+(T '(let ((o {x: 0}))
+      ($define! o (foo a b c)
+        9
+        ($!x: o (+ 1 ($x: o)))
+        (* a (+ ($x: o)
+                b
+                (* 2 c))))
+      [(($foo o) 1 2 3)
+       (($foo o) 4 5 6)
+       (($foo o) 8 8 8)
+       (($foo o) 9 9 9)])
+   [9 76 216 279])
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")

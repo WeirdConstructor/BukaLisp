@@ -266,16 +266,23 @@
           (.recycle-pos self key-adr)
           out-adr))
 
-    ($define! self (compile-set obj key eval-key? value code-pad)
+    ($define! self (compile-set-val obj key eval-key? val-adr code-pad)
       (let ((key-adr (if eval-key?
                        (.compile self key code-pad)
                        (.store-static-data self key)))
-            (obj-adr (.compile self obj code-pad))
-            (val-adr (.compile self value code-pad)))
+            (obj-adr (.compile self obj code-pad)))
           (.op-set code-pad obj-adr key-adr val-adr)
           (.recycle-pos self obj-adr)
           (.recycle-pos self key-adr)
           val-adr))
+
+    ($define! self (compile-set obj key eval-key? value code-pad)
+      (.compile-set-val self
+                        obj
+                        key
+                        eval-key?
+                        (.compile self value code-pad)
+                        code-pad))
 
     ($define! self (compile-func-apply atom code-pad)
       ; eval all items (func a b c) into temporary registers
@@ -508,7 +515,7 @@
        (lambda (atom self code-pad)
          (unless (eqv? (length atom) 2)
            (.error self "'include' needs exactly 1 argument" atom))
-         (define current-file (@0 (.get-debug-info self)))
+         (define current-file (.get-current-file self))
          (define current-dir (first (sys-path-split current-file)))
          (let ((include-file-path (str current-dir
                                        (sys-path-separator)
@@ -519,8 +526,10 @@
            (with-cleanup
              (begin
                (.push-define-name-info self "<toplevel>")
-               (.push-debug-info self read-data))
+               (.push-debug-info self read-data)
+               (.push-current-file self include-file-path))
              (begin
+               (.pop-current-file self)
                (.pop-debug-info self)
                (.pop-define-name-info self))
              (.compile-block self read-data code-pad)))))
@@ -634,6 +643,31 @@
                      (.recycle-pos self lambda-adr)))
                  bind-adr))
              (.error self "Can only define symbols as variable" atom)))))
+      ;----------------------------------------------------------------------------
+
+      (set-env-syntax new-env '$define!
+       (lambda (atom self code-pad)
+         (unless (> (length atom) 3)
+           (.error self "'$define!' needs at least 3 arguments" atom))
+         (unless (list? (@2 atom))
+           (.error self "'$define!' second argument needs to be a list" atom))
+         (do-each (v (@2 atom))
+           (unless (symbol? v)
+             (.error self
+                     "'$define!' parameter list may only contain symbols"
+                     (@2 atom))))
+         (let ((method-sym  (@0 (@2 atom)))
+               (lambda-adr  (.compile-lambda
+                             self
+                             (drop (@2 atom) 1)
+                             (drop atom 3)
+                             code-pad)))
+           (.compile-set-val self
+                             (@1 atom)
+                             method-sym
+                             #f
+                             lambda-adr
+                             code-pad))))
       ;----------------------------------------------------------------------------
 
       (set-env-syntax new-env 'return
@@ -918,6 +952,7 @@
 
     (.push-root-env compiler root-env)
     (.push-define-name-info compiler "<toplevel>")
+    (.push-current-file compiler name)
     (let ((code-pad    (.make-code-pad compiler))
           (ret-adr     nil))
       ; TODO: we need to calculate the actual sized pad we need in future!
@@ -933,7 +968,7 @@
       (.recycle-pos compiler ret-adr)
 ;      (displayln PAD: ($pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
-        (displayln prog)
+;        (displayln prog)
         (if only-compile
           prog
           (run-vm-prog prog (@1 root-env)))))))

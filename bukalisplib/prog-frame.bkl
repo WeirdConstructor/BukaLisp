@@ -2,6 +2,7 @@
  (lambda ()
    (let ((self { pad:               []
                  stack:             []
+                 cur-file-stack:    []
                  define-name-stack: []
                  debug-pos-stack:   [] }))
 
@@ -12,8 +13,17 @@
      ($define! self (pop-prog-frame)
        ($!pad: self (pop! ($stack: self))))
 
+     ($define! self (push-current-file path)
+       (push! ($cur-file-stack: self) path))
+
+     ($define! self (pop-current-file)
+       (pop! ($cur-file-stack: self)))
+
      ($define! self (push-define-name-info name)
        (push! ($define-name-stack: self) name))
+
+     ($define! self (get-current-file)
+       (last ($define-name-stack: self)))
 
      ($define! self (pop-define-name-info name)
        (pop! ($define-name-stack: self)))
@@ -52,7 +62,6 @@
        trace)
 
      ($define! self (get-debug-info)
-       (displayln DEB-I: ($debug-pos-stack: self))
        (unless (eqv? (length ($debug-pos-stack: self)) 0)
          (define info nil)
          (if (eqv? (length ($debug-pos-stack: self)) 1)
