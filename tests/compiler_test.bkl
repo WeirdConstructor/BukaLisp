@@ -18,58 +18,7 @@
 
 ;----------------------------------------------------------------------------
 
-(T '(let ((j (return (+ 9 10))))) 19) ; XXX: Should let be allowed to be empty?
-
-(T '{ b: 20 a: (return 9) x: 22 }
-   9)
-(T '(list? (return 10)) 10)
-(T '(empty? (return 11)) 11)
-;(T '(define-global ff (return 12)) 12)
-(T '(define ff2 (return 12)) 12)
-(T '(begin
-      (define ff2 12)
-      (set! ff2 (return 13)))
-   13)
-(T '((return 14) 22) 14)
-(T '(begin
-      (define x 2)
-      ((lambda () 2)
-       ((lambda ()
-          (set! x 16)))
-       (return x)))
-   16)
-(T '(begin
-      (define x 1)
-      (+ ((lambda ()
-            (set! x 15)))
-         (return x)))
-   15)
-(T '(begin
-       (define x 1)
-       (define y 2)
-       (+
-         ((lambda () (set! y 16)))
-         (+ ((lambda () (set! x 15)))
-            (return (+ x y)))))
-   31)
-(T '(begin
-      (let ((a 10) (b 20)) b)
-      (let ((c 30))
-        (let ((k 32)
-              (j (return (+ k 10))))))
-      44)
-   42)
-(T '(let ((x 11))
-      (let ((if (= (set! x 43) (return x)))) 12)
-      x)
-   43)
-(T '(if #t (return 44)) 44)
-(T '(if #f 10 (return 45)) 45)
-;(T '(begin
-;      (define X 10)
-;      (. (set! X 47) (return X)))
-;   47)
-(error X:)
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ;; test externally given environment executed inside VM:
@@ -286,6 +235,7 @@
 (T '(type f:) 'keyword)
 (T '(type "f") 'string)
 
+; Test 'length' primitive
 (T '(length [1 2 3]) 3)
 (T '(length []) 0)
 (T '(length '()) 0)
@@ -294,6 +244,15 @@
 (T '(length {y: 324 x: 12}) 2)
 (T '(length (let ((l [])) (@!9 l l))) 10)
 
+(T '(length (list 1 2 3)) 3)
+(T '(length (list)) 0)
+(T '(if (>  (length (list 1 2 3)) 3) "yes" "no") "no")
+(T '(if (>= (length (list 1 2 3)) 3) "yes" "no") "yes")
+(T '(begin (let ((c length)) (c [1 2 3 (define x 20)]))) 4)
+(T '(begin (length [1 2 3 (define x 20)]) x) 20)
+(T '(begin [1 2 3 (define x 20)] x) 20)
+
+; Test other primitives:
 (T '(first '(a b c)) 'a)
 (T '(first '()) 'nil)
 (T '(first [3]) '3)
@@ -313,6 +272,7 @@
 (T '(append [1 2 3] 1 a: { x: 12 } [5 5 5]) '(1 2 3 1 a: x: 12 5 5 5))
 (T '(append [1 2 3]) '(1 2 3))
 
+; Test system primitives:
 (T '(sys-slurp-file "foo.txt") "xxx\n")
 
 ; Test let TODO: Moar!
@@ -982,6 +942,85 @@
 (T '(let ((x empty?)) (x (list 1))) #false)
 (T '(let ((x empty?)) (x {}))       #true)
 (T '(let ((x empty?)) (x {a: 1}))   #false)
+
+; Test return anywhere:
+(T '(let ((j (return (+ 9 10))))) 19) ; XXX: Should let be allowed to be empty?
+
+(T '{ b: 20 a: (return 9) x: 22 }
+   9)
+(T '(list? (return 10)) 10)
+(T '(empty? (return 11)) 11)
+;(T '(define-global ff (return 12)) 12)
+(T '(define ff2 (return 12)) 12)
+(T '(begin
+      (define ff2 12)
+      (set! ff2 (return 13)))
+   13)
+(T '((return 14) 22) 14)
+(T '(begin
+      (define x 2)
+      ((lambda () 2)
+       ((lambda ()
+          (set! x 16)))
+       (return x)))
+   16)
+(T '(begin
+      (define x 1)
+      (+ ((lambda ()
+            (set! x 15)))
+         (return x)))
+   15)
+(T '(begin
+       (define x 1)
+       (define y 2)
+       (+
+         ((lambda () (set! y 16)))
+         (+ ((lambda () (set! x 15)))
+            (return (+ x y)))))
+   31)
+(T '(begin
+      (let ((a 10) (b 20)) b)
+      (let ((c 30))
+        (let ((k 32)
+              (j (return (+ k 10))))))
+      44)
+   42)
+(T '(let ((x 11))
+      (let ((if (= (set! x 43) (return x)))) 12)
+      x)
+   43)
+(T '(if #t (return 44)) 44)
+(T '(if #f 10 (return 45)) 45)
+;(T '(begin
+;      (define X 10)
+;      (. (set! X 47) (return X)))
+;   47)
+
+; Test quote
+(T ''(+ 1 2) '(+ 1 2))
+(T ''((3 4)) '((3 4)))
+(T ''(+ 1 (+ 2 3)) '(+ 1 (+ 2 3)))
+(T '   '     ( +     1 (+  2 3 )      ) '(+ 1 (+ 2 3)))
+(T ''(* 1 2) '(* 1 2))
+(T ''(** 1 2) '(** 1 2))
+(T ''(1 2 3) '(1 2 3))
+(T '''1 '(quote 1))
+(T '''(1 2 3) '(quote (1 2 3)))
+(T '(quote 7) '7)
+(T ''7 '7)
+(T '(quote (1 2 3)) '(1 2 3))
+(T ''(1 2 3) '(1 2 3))
+(T '(quote (1 2 (3 4))) '(1 2 (3 4)))
+(T ''(1 2 (3 4)) '(1 2 (3 4)))
+(T '(quote (10)) '(10))
+
+; Test apply
+(T '(apply + 1 2 3 []) '6)
+(T '(apply + 1 2 3 (list)) '6)
+(T '(apply + 1 (list 2 3)) '6)
+(T '(apply - 0 (list 1)) '-1)
+(T '(apply - (list 0 1)) '-1)
+(T '(apply str-join "," (list X: Y:)) '"X,Y")
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")

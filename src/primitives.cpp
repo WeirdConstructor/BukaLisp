@@ -539,15 +539,42 @@ START_PRIM()
 END_PRIM(sys-path-split)
 
 START_PRIM()
-    REQ_EQ_ARGC(apply, 2);
-
-    if (A1.m_type != T_VEC)
-        error("'apply' No argument list given.", A1);
+    REQ_GT_ARGC(apply, 1);
 
     if (!m_vm)
         error("Can't run 'apply' without VM.", A0);
 
-    out = m_vm->eval(A0, A1.m_d.vec);
+    if (args.m_len == 1)
+    {
+        AtomVec *av = m_rt->m_gc.allocate_vector(0);
+        out = m_vm->eval(A0, av);
+    }
+    else if (args.m_len == 2)
+    {
+        if (A1.m_type != T_VEC)
+            error("'apply' No argument list given.", A1);
+        out = m_vm->eval(A0, A1.m_d.vec);
+    }
+    else
+    {
+        if (args.m_data[args.m_len - 1].m_type != T_VEC)
+        {
+            error("'apply' last argument needs to be a list!",
+                  args.m_data[args.m_len - 1]);
+        }
+
+        AtomVec *av_last = args.m_data[args.m_len - 1].m_d.vec;
+        AtomVec *av =
+            m_rt->m_gc.allocate_vector(args.m_len + av_last->m_len);
+
+        for (size_t i = 1; i < args.m_len - 1; i++)
+            av->push(args.m_data[i]);
+
+        for (size_t i = 0; i < av_last->m_len; i++)
+            av->push(av_last->m_data[i]);
+
+        out = m_vm->eval(A0, av);
+    }
 END_PRIM(apply)
 
 START_PRIM()
