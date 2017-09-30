@@ -542,13 +542,24 @@ START_PRIM()
     REQ_EQ_ARGC(apply, 2);
 
     if (A1.m_type != T_VEC)
-        error("No argument list given.", A1);
+        error("'apply' No argument list given.", A1);
 
     if (!m_vm)
         error("Can't run 'apply' without VM.", A0);
 
     out = m_vm->eval(A0, A1.m_d.vec);
 END_PRIM(apply)
+
+START_PRIM()
+    REQ_EQ_ARGC(empty?, 1);
+    out.m_type = T_BOOL;
+    if (A0.m_type == T_VEC)
+        out.m_d.b = A0.m_d.vec->m_len == 0;
+    else if (A0.m_type == T_MAP)
+        out.m_d.b = A0.m_d.map->m_map.empty();
+    else
+        error("Expected map or list to 'empty?'", A0);
+END_PRIM(empty?)
 
 #if IN_INTERPRETER
 

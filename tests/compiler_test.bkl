@@ -18,7 +18,58 @@
 
 ;----------------------------------------------------------------------------
 
-;(error X:)
+(T '(let ((j (return (+ 9 10))))) 19) ; XXX: Should let be allowed to be empty?
+
+(T '{ b: 20 a: (return 9) x: 22 }
+   9)
+(T '(list? (return 10)) 10)
+(T '(empty? (return 11)) 11)
+;(T '(define-global ff (return 12)) 12)
+(T '(define ff2 (return 12)) 12)
+(T '(begin
+      (define ff2 12)
+      (set! ff2 (return 13)))
+   13)
+(T '((return 14) 22) 14)
+(T '(begin
+      (define x 2)
+      ((lambda () 2)
+       ((lambda ()
+          (set! x 16)))
+       (return x)))
+   16)
+(T '(begin
+      (define x 1)
+      (+ ((lambda ()
+            (set! x 15)))
+         (return x)))
+   15)
+(T '(begin
+       (define x 1)
+       (define y 2)
+       (+
+         ((lambda () (set! y 16)))
+         (+ ((lambda () (set! x 15)))
+            (return (+ x y)))))
+   31)
+(T '(begin
+      (let ((a 10) (b 20)) b)
+      (let ((c 30))
+        (let ((k 32)
+              (j (return (+ k 10))))))
+      44)
+   42)
+(T '(let ((x 11))
+      (let ((if (= (set! x 43) (return x)))) 12)
+      x)
+   43)
+(T '(if #t (return 44)) 44)
+(T '(if #f 10 (return 45)) 45)
+;(T '(begin
+;      (define X 10)
+;      (. (set! X 47) (return X)))
+;   47)
+(error X:)
 ;----------------------------------------------------------------------------
 
 ;; test externally given environment executed inside VM:
@@ -916,6 +967,21 @@
    33)
 (T '(return 32) 32)
 (T '{a: 10 x: (return 20)} 20)
+
+; Test predicates:
+(T '(list? (list))                  #true)
+(T '(let ((x list?)) (x (list)))    #true)
+(T '(list? { a: 1 })                #false)
+(T '(let ((x list?)) (x { a: 1 }))  #false)
+
+(T '(empty? (list))                 #true)
+(T '(empty? (list 1))               #false)
+(T '(empty? {})                     #true)
+(T '(empty? {a: 1})                 #false)
+(T '(let ((x empty?)) (x (list)))   #true)
+(T '(let ((x empty?)) (x (list 1))) #false)
+(T '(let ((x empty?)) (x {}))       #true)
+(T '(let ((x empty?)) (x {a: 1}))   #false)
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")
