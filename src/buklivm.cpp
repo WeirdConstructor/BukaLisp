@@ -626,11 +626,8 @@ Atom VM::eval(Atom callable, AtomVec *args)
                     // addresses when the later E_SET_D is maybe reallocating
                     // some address space we might be refering to.
                     Atom ret_val;
-                    {
-                        Atom *tmp = nullptr;
-                        E_GET(tmp, O);
-                        ret_val = *tmp;
-                    }
+                    E_GET(tmp, O);
+                    ret_val = *tmp;
 
                     // retrieve the continuation:
                     Atom *c = cont_stack->last();
