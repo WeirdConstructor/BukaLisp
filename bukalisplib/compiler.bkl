@@ -1,6 +1,4 @@
-(define primitive-table
-'{<= 7 symbol? 12 + 0 * 1 / 2 = 4 - 3 apply 54 < 5 append 47 keyword? 13 > 6 >= 8 first 44 exact? 16 null? 15 list 9 eqv? 10 map? 21 not 11 nil? 14 bkl-environment 57 inexact? 17 string? 18 boolean? 19 write-str 48 @! 24 list? 20 get-vm-modules 32 pop! 28 procedure? 22 @ 23 type 25 display 37 length 26 push! 27 make-vm-prog 29 bkl-prog-serialize 30 str-join 42 run-vm-prog 31 error 33 bkl-error 34 bkl-set-meta 35 bkl-get-meta 36 newline 38 eval 56 displayln 39 atom-id 40 str 41 last 43 take 45 drop 46 sys-slurp-file 49 bkl-gc-statistics 50 sys-path-separator 51 read-str 52 sys-path-split 53 empty? 55 invoke-compiler 58}
-)
+(define primitive-table (bkl-primitive-map))
 ;----------------------------------------------------------------------------
 
 (define inc-env-offs

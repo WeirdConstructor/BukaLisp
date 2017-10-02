@@ -588,6 +588,14 @@ START_PRIM()
         error("Expected map or list to 'empty?'", A0);
 END_PRIM(empty?)
 
+START_PRIM()
+    REQ_EQ_ARGC(bkl-primitive-map, 0);
+    out = Atom(T_MAP, m_rt->m_gc.allocate_map());
+    AtomVec *prim_sym_tbl = m_vm->get_primitive_symbol_table();
+    for (size_t i = 0; i < prim_sym_tbl->m_len; i++)
+        out.m_d.map->set(prim_sym_tbl->m_data[i], Atom(T_INT, i));
+END_PRIM(bkl-primitive-map)
+
 #if IN_INTERPRETER
 
 START_PRIM()
@@ -603,9 +611,9 @@ START_PRIM()
 END_PRIM(eval)
 
 START_PRIM()
-    REQ_EQ_ARGC(bkl-environment, 0);
+    REQ_EQ_ARGC(interaction-environment, 0);
     out = Atom(T_MAP, init_root_env());
-END_PRIM(bkl-environment)
+END_PRIM(interaction-environment)
 
 // (invoke-compiler code-name code only-compile root-env)
 // (invoke-compiler [code] code-name only-compile root-env)
@@ -653,11 +661,11 @@ START_PRIM()
 END_PRIM(eval)
 
 START_PRIM()
-    REQ_EQ_ARGC(bkl-environment, 0);
+    REQ_EQ_ARGC(interaction-environment, 0);
     GC_ROOT_VEC(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_vector(2);
     m_compiler_call(Atom(T_INT, 42), root_env, "env-gen", true);
     out = Atom(T_VEC, root_env);
-END_PRIM(bkl-environment)
+END_PRIM(interaction-environment)
 
 START_PRIM()
     REQ_GT_ARGC(invoke-compiler, 4);

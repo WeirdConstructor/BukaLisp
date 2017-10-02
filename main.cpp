@@ -926,7 +926,7 @@ void test_ieval_eval()
     TEST_EVAL("(eval 1)",                   "1");
     TEST_EVAL("(eval '(+ 1 2))",            "3");
     TEST_EVAL("(eval '(eval '(+ 1 2)))",    "3");
-    TEST_EVAL("(let ((env (bkl-environment))) "
+    TEST_EVAL("(let ((env (interaction-environment))) "
               "  (eval '(define x 12) env) "
               "  (eval 'x env))",
               "12");
@@ -947,7 +947,6 @@ int main(int argc, char *argv[])
         bool interpret  = false;
         bool i_trace    = false;
         bool i_force_gc = false;
-        bool i_ppt      = false;
         bool i_trace_vm = false;
 
         for (int i = 1; i < argc; i++)
@@ -963,8 +962,6 @@ int main(int argc, char *argv[])
                 i_trace = true;
             else if (arg == "-T")
                 i_trace_vm = true;
-            else if (arg == "-P")
-                i_ppt = true;
             else if (arg[0] == '-')
             {
                 std::cerr << "unknown option: " << argv[i] << std::endl;
@@ -1017,14 +1014,6 @@ int main(int argc, char *argv[])
             {
                 cerr << "TESTS FAIL, EXCEPTION: " << e.what() << endl;
             }
-        }
-        else if (i_ppt)
-        {
-            Runtime rt;
-            VM vm(&rt);
-            load_vm_modules(vm);
-            Interpreter i(&rt, &vm);
-            i.print_primitive_table();
         }
         else if (interpret && !input_file_path.empty())
         {

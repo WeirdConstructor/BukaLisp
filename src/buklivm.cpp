@@ -129,7 +129,9 @@ void VM::init_prims()
     m_prim_table->push(tmp); \
     (*tmp.m_d.func) = [this](AtomVec &args, Atom &out) {
 
-#define END_PRIM(name) };
+#define END_PRIM(name) \
+    }; \
+    m_prim_sym_table->push(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)));
 
     #include "primitives.cpp"
 }

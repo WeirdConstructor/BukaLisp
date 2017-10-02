@@ -59,7 +59,6 @@ AtomMap *Interpreter::init_root_env()
 
 #define END_PRIM(name) \
     }; \
-    m_prim_table->push(Atom(T_SYM, m_rt->m_gc.new_symbol(#name))); \
     root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
 
 #define IN_INTERPRETER 1
@@ -73,7 +72,6 @@ AtomMap *Interpreter::init_root_env()
 void Interpreter::init()
 {
     m_env_stack  = m_rt->m_gc.allocate_vector(0);
-    m_prim_table = m_rt->m_gc.allocate_vector(0);
     m_call_stack = m_rt->m_gc.allocate_vector(100);
 
     m_env_stack->push(Atom(T_MAP, init_root_env()));
@@ -101,17 +99,6 @@ void Interpreter::init()
                                        input_name, only_compile);
         });
     }
-}
-//---------------------------------------------------------------------------
-
-void Interpreter::print_primitive_table()
-{
-    AtomMap *m = m_rt->m_gc.allocate_map();
-    for (size_t i = 0; i < m_prim_table->m_len; i++)
-    {
-        m->set(m_prim_table->m_data[i], Atom(T_INT, i));
-    }
-    cout << Atom(T_MAP, m).to_write_str() << endl;
 }
 //---------------------------------------------------------------------------
 

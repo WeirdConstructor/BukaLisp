@@ -238,6 +238,7 @@ class VM
         PROG      *m_prog;
         VM        *m_vm;
         GC_ROOT_MEMBER_VEC(m_prim_table);
+        GC_ROOT_MEMBER_VEC(m_prim_sym_table);
         GC_ROOT_MEMBER_MAP(m_modules);
         bool       m_trace;
         std::function<Atom(Atom func, AtomVec *args)> m_interpreter_call;
@@ -254,13 +255,18 @@ class VM
               m_vm(this),
               m_trace(false),
               GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_prim_table),
+              GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_prim_sym_table),
               GC_ROOT_MEMBER_INITALIZE_MAP(rt->m_gc, m_modules)
         {
-            m_prim_table = rt->m_gc.allocate_vector(0);
-            m_modules    = rt->m_gc.allocate_map();
+            m_prim_table     = rt->m_gc.allocate_vector(0);
+            m_prim_sym_table = rt->m_gc.allocate_vector(0);
+            m_modules        = rt->m_gc.allocate_map();
 
             init_prims();
         }
+
+        AtomVec *get_primitive_symbol_table()
+        { return m_prim_sym_table; }
 
         void set_interpreter_call(
             const std::function<Atom(Atom func, AtomVec *args)> &func)

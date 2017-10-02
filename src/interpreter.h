@@ -36,7 +36,6 @@ class Interpreter
         VM             *m_vm;
         GC_ROOT_MEMBER_VEC(m_env_stack);
         GC_ROOT_MEMBER_VEC(m_call_stack);
-        GC_ROOT_MEMBER_VEC(m_prim_table);
         GC_ROOT_MEMBER(m_compiler_func);
         AtomMap        *m_modules;
         std::vector<Atom::PrimFunc *> m_primitives;
@@ -49,12 +48,10 @@ class Interpreter
               m_trace(false), m_vm(vm),
               m_force_always_gc(true), m_modules(nullptr),
               GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_env_stack),
-              GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_prim_table),
               GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_call_stack),
               GC_ROOT_MEMBER_INITALIZE(rt->m_gc, m_compiler_func)
         {
             m_env_stack  = nullptr;
-            m_prim_table = nullptr;
             m_call_stack = nullptr;
             init();
         }
@@ -63,18 +60,7 @@ class Interpreter
         {
             for (auto p : m_primitives)
                 delete p;
-
-            if (m_prim_table)
-            {
-                for (size_t i = 0; i < m_prim_table->m_len; i++)
-                {
-                    if (m_prim_table->m_data[i].m_type == T_PRIM)
-                        delete m_prim_table->m_data[i].m_d.func;
-                }
-            }
         }
-
-        void print_primitive_table();
 
         void init();
 
