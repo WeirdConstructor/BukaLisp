@@ -247,7 +247,12 @@ Atom VM::eval(Atom callable, AtomVec *args)
     env_stack->push(Atom(T_VEC, cur_env));
 
     cont_stack = m_rt->m_gc.allocate_vector(0);
-    cont_stack->push(callable);
+    {
+        AtomVec *call_frame = m_rt->m_gc.allocate_vector(6);
+        call_frame->set(0, callable);
+        call_frame->set(5, Atom());
+        cont_stack->push(Atom(T_VEC, call_frame));
+    }
 
 //    cout << "VM PROG: " << callable.to_write_str() << endl;
 
@@ -521,8 +526,8 @@ Atom VM::eval(Atom callable, AtomVec *args)
                     Atom cl(T_CLOS);
                     cl.m_d.vec = m_rt->m_gc.allocate_vector(2);
     //                std::cout << "NEW CLOS " << ((void *) cl.m_d.vec) << "@" << ((void *) cl.m_d.vec->m_data) << std::endl;
-                    cl.m_d.vec->set(0, prog); // XXX: m_data[0] = prog;
-                    cl.m_d.vec->set(1,        //      m_data[1] =
+                    cl.m_d.vec->set(0, prog);
+                    cl.m_d.vec->set(1,
                         Atom(T_VEC, m_rt->m_gc.clone_vector(env_stack)));
 
                     E_SET(O, cl);
@@ -581,25 +586,23 @@ Atom VM::eval(Atom callable, AtomVec *args)
                             error("Bad closure found", func);
 
                         alloc = true;
-                        AtomVec *cont = m_rt->m_gc.allocate_vector(6);
+                        AtomVec *call_frame = m_rt->m_gc.allocate_vector(6);
 
                         Atom prog(T_UD);
                         prog.m_d.ud = (UserData *) m_prog;
                         Atom pc(T_C_PTR);
                         pc.m_d.ptr = m_pc;
 
-                        cont->m_data[0] = prog;
-                        cont->m_data[1] = Atom(T_VEC, env_stack);
-                        cont->m_data[2] = pc;
-                        cont->m_data[3] = Atom(T_INT, P_O);
-                        cont->m_data[4] = Atom(T_INT, PE_O);
-                        // just for keepin a reference to the called function:
-                        cont->m_data[5] = func;
-                        cont->m_len = 6;
+                        call_frame->m_data[0] = func;
+                        call_frame->m_data[1] = prog;
+                        call_frame->m_data[2] = Atom(T_VEC, env_stack);
+                        call_frame->m_data[3] = pc;
+                        call_frame->m_data[4] = Atom(T_INT, P_O);
+                        call_frame->m_data[5] = Atom(T_INT, PE_O);
+                        call_frame->m_len = 6;
 
-                        // replace current function with continuation
-                        *cont_stack->last() = Atom(T_VEC, cont);
-                        cont_stack->push(func); // save the current function
+                        // save the current function
+                        cont_stack->push(Atom(T_VEC, call_frame));
 
                         m_prog   = dynamic_cast<PROG*>(func.m_d.vec->m_data[0].m_d.ud);
                         data     = m_prog->data_array();
@@ -629,7 +632,6 @@ Atom VM::eval(Atom callable, AtomVec *args)
                         ret_val = *tmp;
                     }
 
-                    cont_stack->pop(); // the current function can be discarded
                     // retrieve the continuation:
                     Atom *c = cont_stack->last();
                     if (!c || c->m_type == T_NIL)
@@ -639,23 +641,27 @@ Atom VM::eval(Atom callable, AtomVec *args)
                         break;
                     }
 
-                    Atom cont = *c;
+                    Atom call_frame = *c;
                     cont_stack->pop();
-                    if (cont.m_type != T_VEC || cont.m_d.vec->m_len < 4)
-                        error("Empty or bad continuation stack item!", cont);
+                    if (call_frame.m_type != T_VEC || call_frame.m_d.vec->m_len < 4)
+                        error("Empty or bad call frame stack item!", call_frame);
+
+                    Atom *cv = call_frame.m_d.vec->m_data;
+                    if (cv[1].m_type == T_NIL)
+                    {
+                        ret = ret_val;
+                        m_pc = &(m_prog->m_instructions[m_prog->m_instructions_len - 2]);
+                        break;
+                    }
 
                     env_stack->pop();
 
-                    Atom *cv = cont.m_d.vec->m_data;
+                    Atom proc    = cv[1];
+                    Atom envs    = cv[2];
+                    Atom pc      = cv[3];
+                    int32_t oidx = (int32_t) cv[4].m_d.i;
+                    int32_t eidx = (int32_t) cv[5].m_d.i;
 
-                    Atom proc    = cv[0];
-                    Atom envs    = cv[1];
-                    Atom pc      = cv[2];
-                    int32_t oidx = (int32_t) cv[3].m_d.i;
-                    int32_t eidx = (int32_t) cv[4].m_d.i;
-
-                    // save current function for gc:
-                    cont_stack->push(proc);
                     m_prog   = dynamic_cast<PROG*>(proc.m_d.ud);
                     data     = m_prog->data_array();
                     data_len = m_prog->data_array_len();
