@@ -594,14 +594,19 @@ START_PRIM()
     AtomVec *prim_sym_tbl = m_vm->get_primitive_symbol_table();
     for (size_t i = 0; i < prim_sym_tbl->m_len; i++)
         out.m_d.map->set(prim_sym_tbl->m_data[i], Atom(T_INT, i));
-END_PRIM(bkl-primitive-map)
+END_PRIM_DOC(bkl-primitive-map,
+"@internal procedure (bkl-primitive-map)\n"
+"\n"
+"Returns a map containing the names of the primitives and their\n"
+"indices for the byte code.\n"
+)
 
 START_PRIM()
-    REQ_EQ_ARGC(bkl-set-doc, 2);
+    REQ_EQ_ARGC(bkl-set-doc!, 2);
     m_vm->set_documentation(A0, A1);
     out = A1;
-END_PRIM_DOC(bkl-set-doc,
-"@documentation procedure (bkl-set-doc _func-name-sym-or-kw_ _doc-string_\n"
+END_PRIM_DOC(bkl-set-doc!,
+"@documentation procedure (bkl-set-doc! _func-name-sym-or-kw_ _doc-string_\n"
 "\n"
 "Stores _doc-string_ in the central documentation library.\n"
 "This function is mainly useful if you want to annotate your\n"
@@ -677,6 +682,8 @@ END_PRIM_DOC(?doc,
 "\n"
 "    (?doc ?doc:) ;=> [\"@documentation procedure (?doc ...\"];  \n"
 "\n"
+"\n"
+"See also: `bkl-set-doc!`\n"
 )
 
 #if IN_INTERPRETER

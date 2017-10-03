@@ -1024,19 +1024,19 @@
 
 ; Test bkl-doc documentation
 (T '(begin
-      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
       (?doc ?foobar-x:))
    ["foobar-xxx-yyy"]);
 (T '(begin
-      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
       (?doc xxx-test:))
    ["foobar-xxx-yyy"]);
 (T '(begin
-      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
       (?doc xxx-yyy:))
    []);
 (T '(begin
-      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
       (?doc *-yyy:))
    ["foobar-xxx-yyy"]);
 
