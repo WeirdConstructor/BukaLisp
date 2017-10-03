@@ -61,6 +61,10 @@ AtomMap *Interpreter::init_root_env()
     }; \
     root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
 
+#define END_PRIM_DOC(name, docstr) \
+    }; \
+    root_env->set(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)), tmp);
+
 #define IN_INTERPRETER 1
     #include "primitives.cpp"
 #undef IN_INTERPRETER

@@ -600,7 +600,15 @@ START_PRIM()
     REQ_EQ_ARGC(bkl-set-doc, 2);
     m_vm->set_documentation(A0, A1);
     out = A1;
-END_PRIM(bkl-set-doc)
+END_PRIM_DOC(bkl-set-doc,
+"@documentation procedure (bkl-set-doc _func-name-sym-or-kw_ _doc-string_\n"
+"\n"
+"Stores _doc-string_ in the central documentation library.\n"
+"This function is mainly useful if you want to annotate your\n"
+"own code with documenation. BukaLISP usually registers everything itself.\n"
+"\n"
+"See also: `doc?`\n"
+)
 
 START_PRIM()
     REQ_EQ_ARGC(?doc, 1);
@@ -648,7 +656,28 @@ START_PRIM()
         }
     }
     out = Atom(T_VEC, found);
-END_PRIM(?doc)
+END_PRIM_DOC(?doc,
+"@documenation procedure (?doc \"*_search-str_\")\n"
+"@documenation procedure (?doc \"?_search-str_\")\n"
+"@documenation procedure (?doc \"_search-str_\")\n"
+"\n"
+"This procedure retrieves documentation from the internal documentation\n"
+"database. It returns a list of all matching documentation strings\n"
+"\n"
+"If _search-str_ starts with a '*' the key (function name) and\n"
+"the documentation string for that key will be checked if they contain\n"
+"_search-str_.\n"
+"If _search-str_ starts with a '?' only the first line in the documentation\n"
+"will be checked if it contains _search-str_.\n"
+"Otherwise only the keys in the database will be checked whether they\n"
+"contain _search-str.\n"
+"\n"
+"Instead of strings you can also use symbols or keywords as search string,"
+"like this:\n"
+"\n"
+"    (?doc ?doc:) ;=> [\"@documentation procedure (?doc ...\"];  \n"
+"\n"
+)
 
 #if IN_INTERPRETER
 

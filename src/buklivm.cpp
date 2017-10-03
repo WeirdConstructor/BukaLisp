@@ -133,6 +133,11 @@ void VM::init_prims()
     }; \
     m_prim_sym_table->push(Atom(T_SYM, m_rt->m_gc.new_symbol(#name)));
 
+#define END_PRIM_DOC(name, docstr) \
+    }; \
+    m_prim_sym_table->push(Atom(T_SYM, m_rt->m_gc.new_symbol(#name))); \
+    m_vm->set_documentation(#name, docstr);
+
     #include "primitives.cpp"
 }
 //---------------------------------------------------------------------------
