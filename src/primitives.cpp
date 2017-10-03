@@ -130,13 +130,40 @@ START_PRIM()
     REQ_EQ_ARGC(nil?, 1);
     out = Atom(T_BOOL);
     out.m_d.b = A0.m_type == T_NIL;
-END_PRIM(nil?);
+END_PRIM_DOC(nil?,
+"@lists procedure (nil? _value_)\n"
+"\n"
+"Returns true if _value_ is the `nil` value.\n"
+"And only then.\n"
+"\n"
+"    (nil?   nil)     ;=> #t\n"
+"    (nil?   [])      ;=> #f\n"
+"    (nil?   '())     ;=> #f\n"
+"    (nil?   {})      ;=> #f\n"
+"    (nil?   0)       ;=> #f\n"
+"    (nil?   "")      ;=> #f\n"
+);
 
 START_PRIM()
     REQ_EQ_ARGC(null?, 1);
     out = Atom(T_BOOL);
-    out.m_d.b = A0.m_type == T_NIL;
-END_PRIM(null?);
+    out.m_d.b = A0.m_type == T_VEC && A0.m_d.vec->m_len == 0;
+END_PRIM_DOC(null?,
+"@lists (null? _list_)\n"
+"\n"
+"Returns `#t` if _list_ is an empty list.\n"
+"Same as `(empty? ...)`.\n"
+"\n"
+"But don't mix this up with `(nil? ...)`, which detects\n"
+"the `nil` value.\n"
+"\n"
+"    (null?  [1 2 3]) ;=> #f\n"
+"    (null?  '())     ;=> #t\n"
+"    (null?  [])      ;=> #t\n"
+"    (null?  "")      ;=> #t\n"
+"\n"
+"See also: `nil?`\n"
+);
 
 START_PRIM()
     REQ_EQ_ARGC(exact?, 1);
@@ -486,6 +513,14 @@ START_PRIM()
 END_PRIM(write-str);
 
 START_PRIM()
+    REQ_GT_ARGC(read-str, 1);
+    if (args.m_len > 1)
+        out = m_rt->read(A1.to_display_str(), A0.to_display_str());
+    else
+        out = m_rt->read("", A0.to_display_str());
+END_PRIM(read-str)
+
+START_PRIM()
     REQ_EQ_ARGC(sys-slurp-file, 1);
     if (   A0.m_type != T_STR
         && A0.m_type != T_SYM
@@ -498,12 +533,6 @@ START_PRIM()
 END_PRIM(sys-slurp-file)
 
 START_PRIM()
-    REQ_EQ_ARGC(bkl-gc-statistics, 0);
-    m_rt->m_gc.collect();
-    out = m_rt->m_gc.get_statistics();
-END_PRIM(bkl-gc-statistics)
-
-START_PRIM()
     REQ_EQ_ARGC(sys-path-separator, 0);
 #if defined(WIN32) || defined(_WIN32) 
     out = Atom(T_STR, m_rt->m_gc.new_symbol("\\"));
@@ -511,14 +540,6 @@ START_PRIM()
     out = Atom(T_STR, m_rt->m_gc.new_symbol("/"));
 #endif
 END_PRIM(sys-path-separator)
-
-START_PRIM()
-    REQ_GT_ARGC(read-str, 1);
-    if (args.m_len > 1)
-        out = m_rt->read(A1.to_display_str(), A0.to_display_str());
-    else
-        out = m_rt->read("", A0.to_display_str());
-END_PRIM(read-str)
 
 START_PRIM()
     REQ_EQ_ARGC(sys-path-split, 1);
@@ -575,7 +596,15 @@ START_PRIM()
 
         out = m_vm->eval(A0, av);
     }
-END_PRIM(apply)
+END_PRIM_DOC(apply,
+"@control procedure (apply _proc_ [_arg1_ ... _argN_] [...])\n"
+"\n"
+"Calls _proc_ with the elements of the appended lists as argument.\n"
+"If there are more arguments than _proc_ then the last argument\n"
+"always must be a list.\n"
+"\n"
+"    (apply str-join \",\" [\"X\" \"Y\"]) ;=> \"X,Y\"\n"
+)
 
 START_PRIM()
     REQ_EQ_ARGC(empty?, 1);
@@ -586,7 +615,28 @@ START_PRIM()
         out.m_d.b = A0.m_d.map->m_map.empty();
     else
         error("Expected map or list to 'empty?'", A0);
-END_PRIM(empty?)
+END_PRIM_DOC(empty?,
+"@lists (empty? _list_)\n"
+"\n"
+"Returns `#t` if _list_ is an empty list.\n"
+"Same as `(null? ...)`.\n"
+"\n"
+"    (empty?  [1 2 3]) ;=> #f\n"
+"    (empty?  '())     ;=> #t\n"
+"    (empty?  [])      ;=> #t\n"
+"    (empty?  "")      ;=> #t\n"
+)
+
+START_PRIM()
+    REQ_EQ_ARGC(bkl-gc-statistics, 0);
+    m_rt->m_gc.collect();
+    out = m_rt->m_gc.get_statistics();
+END_PRIM_DOC(bkl-gc-statistics,
+"@internal procedure (bkl-gc-statistics)\n"
+"\n"
+"Performs a garbage collection and returns some statistic values\n"
+"in a map.\n"
+)
 
 START_PRIM()
     REQ_EQ_ARGC(bkl-primitive-map, 0);
