@@ -240,6 +240,7 @@ class VM
         GC_ROOT_MEMBER_VEC(m_prim_table);
         GC_ROOT_MEMBER_VEC(m_prim_sym_table);
         GC_ROOT_MEMBER_MAP(m_modules);
+        GC_ROOT_MEMBER_MAP(m_documentation);
         bool       m_trace;
         std::function<Atom(Atom func, AtomVec *args)> m_interpreter_call;
         typedef std::function<Atom(Atom prog, AtomVec *root_env, const std::string &input_name, bool only_compile)> compiler_func;
@@ -256,11 +257,13 @@ class VM
               m_trace(false),
               GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_prim_table),
               GC_ROOT_MEMBER_INITALIZE_VEC(rt->m_gc, m_prim_sym_table),
-              GC_ROOT_MEMBER_INITALIZE_MAP(rt->m_gc, m_modules)
+              GC_ROOT_MEMBER_INITALIZE_MAP(rt->m_gc, m_modules),
+              GC_ROOT_MEMBER_INITALIZE_MAP(rt->m_gc, m_documentation)
         {
             m_prim_table     = rt->m_gc.allocate_vector(0);
             m_prim_sym_table = rt->m_gc.allocate_vector(0);
             m_modules        = rt->m_gc.allocate_map();
+            m_documentation  = rt->m_gc.allocate_map();
 
             init_prims();
         }
@@ -278,6 +281,24 @@ class VM
         {
             m_compiler_call = func;
         }
+
+        void set_documentation(
+            const Atom &sym,
+            Atom &doc_string)
+        {
+            m_documentation->set(sym, doc_string);
+        }
+
+        void set_documentation(
+            const std::string &func_name,
+            const std::string &doc_string)
+        {
+            set_documentation(
+                Atom(T_SYM, m_rt->m_gc.new_symbol(func_name)),
+                Atom(T_STR, m_rt->m_gc.new_symbol(doc_string)));
+        }
+
+        Atom get_documentation() { return Atom(T_MAP, m_documentation); }
 
         AtomMap *loaded_modules();
 

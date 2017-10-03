@@ -596,6 +596,60 @@ START_PRIM()
         out.m_d.map->set(prim_sym_tbl->m_data[i], Atom(T_INT, i));
 END_PRIM(bkl-primitive-map)
 
+START_PRIM()
+    REQ_EQ_ARGC(bkl-set-doc, 2);
+    m_vm->set_documentation(A0, A1);
+    out = A1;
+END_PRIM(bkl-set-doc)
+
+START_PRIM()
+    REQ_EQ_ARGC(?doc, 1);
+    const std::string search = A0.to_display_str();
+    if (search.size() <= 0)
+        error("'bkl-doc' can't deal with empty search strings!", A0);
+    Atom doc = m_vm->get_documentation();
+    AtomVec *found = m_rt->m_gc.allocate_vector(0);
+    for (auto &a : doc.m_d.map->m_map)
+    {
+        if (   a.first.m_type != T_SYM
+            && a.first.m_type != T_KW)
+            continue;
+        if (a.second.m_type != T_STR)
+            continue;
+        const std::string &funcname = a.first.m_d.sym->m_str;
+        const std::string &docstr   = a.second.m_d.sym->m_str;
+
+        if (search[0] == '*')
+        {
+            if (   docstr.find(search.substr(1))   != std::string::npos
+                || funcname.find(search.substr(1)) != std::string::npos)
+                found->push(a.second);
+        }
+        else if (search[0] == '?')
+        {
+            size_t p = docstr.find("\n");
+            if (p == std::string::npos)
+            {
+                if (docstr.find(search.substr(1))
+                    != std::string::npos)
+                    found->push(a.second);
+            }
+            else
+            {
+                if (docstr.substr(0, p).find(search.substr(1))
+                    != std::string::npos)
+                    found->push(a.second);
+            }
+        }
+        else
+        {
+            if (funcname.find(search) != std::string::npos)
+                found->push(a.second);
+        }
+    }
+    out = Atom(T_VEC, found);
+END_PRIM(?doc)
+
 #if IN_INTERPRETER
 
 START_PRIM()

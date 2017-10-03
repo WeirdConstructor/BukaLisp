@@ -1022,6 +1022,24 @@
 (T '(apply - (list 0 1)) '-1)
 (T '(apply str-join "," (list X: Y:)) '"X,Y")
 
+; Test bkl-doc documentation
+(T '(begin
+      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (?doc ?foobar-x:))
+   ["foobar-xxx-yyy"]);
+(T '(begin
+      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (?doc xxx-test:))
+   ["foobar-xxx-yyy"]);
+(T '(begin
+      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (?doc xxx-yyy:))
+   []);
+(T '(begin
+      (bkl-set-doc xxx-test-bkl: "foobar-xxx-yyy")
+      (?doc *-yyy:))
+   ["foobar-xxx-yyy"]);
+
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")
 ::
