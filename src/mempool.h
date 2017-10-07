@@ -73,13 +73,15 @@ class MemoryPool
             }
         };
 
+        SegmentGroup    m_tiny;
         SegmentGroup    m_small;
         SegmentGroup    m_medium;
         SegmentGroup    m_large;
 
     public:
         MemoryPool()
-            : m_small(1000, 10),
+            : m_tiny(1000,   2),
+              m_small(1000, 10),
               m_medium(300, 100),
               m_large(300, 500)
         {
@@ -93,7 +95,11 @@ class MemoryPool
             char *buf = nullptr;
             size_t segment_idx = 0;
 
-            if (block_len <= m_small.m_block_size)
+            if (block_len <= m_tiny.m_block_size)
+            {
+                return m_tiny.allocate();
+            }
+            else if (block_len <= m_small.m_block_size)
             {
                 return m_small.allocate();
             }
@@ -120,7 +126,11 @@ class MemoryPool
             Descriptor *d =
                 (Descriptor *) (((char *) mem) - sizeof(Descriptor));
 
-            if (d->size == m_small.m_block_size)
+            if (d->size == m_tiny.m_block_size)
+            {
+                m_tiny.free(mem);
+            }
+            else if (d->size == m_small.m_block_size)
             {
                 m_small.free(mem);
             }

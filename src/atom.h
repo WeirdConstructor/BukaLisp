@@ -254,6 +254,42 @@ struct Atom
     std::string to_display_str() const;
     std::string to_write_str() const;
 
+    void set_int(int64_t i)
+    {
+        m_type = T_INT;
+        m_d.i = i;
+    }
+
+    void set_clos(AtomVec *v)
+    {
+        m_type = T_CLOS;
+        m_d.vec = v;
+    }
+
+    void set_ud(UserData *ud)
+    {
+        m_type = T_UD;
+        m_d.ud = ud;
+    }
+
+    void set_vec(AtomVec *v)
+    {
+        m_type = T_VEC;
+        m_d.vec = v;
+    }
+
+    void set_ptr(void *ptr)
+    {
+        m_type = T_C_PTR;
+        m_d.ptr = ptr;
+    }
+
+    void set_bool(bool b)
+    {
+        m_type = T_BOOL;
+        m_d.b = b;
+    }
+
     bool inline is_false()
     {
         return     m_type == T_NIL
@@ -262,7 +298,9 @@ struct Atom
 
     Atom at(size_t i)
     {
-        if (m_type != T_VEC) return Atom();
+        if (   m_type != T_VEC
+            && m_type != T_CLOS)
+            return Atom();
         return m_d.vec->at(i);
     }
 
@@ -299,6 +337,8 @@ struct Atom
             case T_DBL:  return o.m_type == T_DBL
                                 && m_d.d == o.m_d.d;
             case T_VEC:  return o.m_type == T_VEC
+                                && m_d.vec == o.m_d.vec;
+            case T_CLOS:  return o.m_type == T_CLOS
                                 && m_d.vec == o.m_d.vec;
             case T_MAP:  return o.m_type == T_MAP
                                 && m_d.map == o.m_d.map;
@@ -370,9 +410,11 @@ struct Atom
                 return m_d.func == other.m_d.func;
 
             case T_VEC:
-            case T_MAP:
             case T_CLOS:
                 return m_d.vec == other.m_d.vec;
+
+            case T_MAP:
+                return m_d.map == other.m_d.map;
 
             case T_UD:
                 return m_d.ud == other.m_d.ud;
@@ -382,7 +424,7 @@ struct Atom
 
             default:
                 // pointer comparsion
-                return m_d.vec == other.m_d.vec;
+                return m_d.ptr == other.m_d.ptr;
         }
     }
 };
@@ -600,6 +642,7 @@ class GC
         std::vector<Sym *>              m_perm_syms;
         StrSymMap                       m_symtbl;
 
+#define GC_TINY_VEC_LEN      2
 #define GC_SMALL_VEC_LEN     10
 #define GC_MEDIUM_VEC_LEN    100
 #define GC_BIG_VEC_LEN       200
@@ -607,8 +650,10 @@ class GC
         std::vector<AtomVec *> m_gc_vec_stack;
         std::vector<AtomMap *> m_gc_map_stack;
 
+        AtomVec     *m_tiny_vectors;
         AtomVec     *m_small_vectors;
         AtomVec     *m_medium_vectors;
+        size_t       m_num_tiny_vectors;
         size_t       m_num_small_vectors;
         size_t       m_num_medium_vectors;
 
@@ -790,8 +835,10 @@ class GC
               m_syms(nullptr),
               m_userdata(nullptr),
               m_current_color(GC_COLOR_WHITE),
+              m_tiny_vectors(nullptr),
               m_small_vectors(nullptr),
               m_medium_vectors(nullptr),
+              m_num_tiny_vectors(0),
               m_num_small_vectors(0),
               m_num_medium_vectors(0),
               m_num_alive_syms(0),
@@ -840,6 +887,13 @@ class GC
                 cur->m_gc_color = GC_COLOR_FREE;
                 cur->m_len      = 0;
                 m_small_vectors = cur;
+            }
+            else if (cur->m_alloc >= GC_TINY_VEC_LEN)
+            {
+                cur->m_gc_next  = m_tiny_vectors;
+                cur->m_gc_color = GC_COLOR_FREE;
+                cur->m_len      = 0;
+                m_tiny_vectors = cur;
             }
             else
             {
@@ -974,7 +1028,7 @@ class GC
                 new_vec          = m_medium_vectors;
                 m_medium_vectors = m_medium_vectors->m_gc_next;
             }
-            else
+            else if (alloc_len > GC_TINY_VEC_LEN)
             {
                 if (!m_small_vectors)
                 {
@@ -984,6 +1038,17 @@ class GC
 
                 new_vec         = m_small_vectors;
                 m_small_vectors = m_small_vectors->m_gc_next;
+            }
+            else
+            {
+                if (!m_tiny_vectors)
+                {
+                    allocate_new_vectors(
+                        m_tiny_vectors, m_num_tiny_vectors, GC_TINY_VEC_LEN);
+                }
+
+                new_vec         = m_tiny_vectors;
+                m_tiny_vectors = m_tiny_vectors->m_gc_next;
             }
 
             new_vec->init(m_current_color, 0);
@@ -1061,6 +1126,12 @@ class GC
 
             gc_list_sweep<AtomVec>(
                 m_small_vectors,
+                dummy,
+                GC_COLOR_DELETE,
+                [this](AtomVec *cur) { delete cur; });
+
+            gc_list_sweep<AtomVec>(
+                m_tiny_vectors,
                 dummy,
                 GC_COLOR_DELETE,
                 [this](AtomVec *cur) { delete cur; });

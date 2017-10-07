@@ -49,7 +49,7 @@ class VMException : public std::exception
     X(DUMP_ENV_STACK,13) /*                                        */ \
     X(SET_RETURN,    14) /*                                        */ \
     X(CALL,          15) /*                                        */ \
-    X(NEW_CLOSURE,   16) /*                                        */ \
+    X(NEW_CLOSURE,   16) /* (O: closure A: VM-PROG B: is_coro?)    */ \
     X(BRNIF,         17) /*                                        */ \
     X(BRIF,          18) /*                                        */ \
     X(BR,            19) /*                                        */ \
@@ -59,6 +59,8 @@ class VMException : public std::exception
     X(ITER,          23) /*                                        */ \
     X(NEXT,          24) /*                                        */ \
     X(IKEY,          25) /*                                        */ \
+    X(YIELD,         26) /* (O: cont-val A: ret-val)               */ \
+    X(NEW_ARG_VEC,   27) /*                                        */ \
     X(ADD,          100) /*                                        */ \
     X(SUB,          101) /*                                        */ \
     X(MUL,          102) /*                                        */ \
@@ -159,6 +161,11 @@ class PROG : public UserData
 
         size_t data_array_len()   { return m_atom_data_len; }
         Atom *data_array()        { return m_atom_data; }
+        void get_data_array(Atom *&data, size_t &len)
+        {
+            data = m_atom_data;
+            len  = m_atom_data_len;
+        }
 
         void set_data_from(AtomVec *av)
         {

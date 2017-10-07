@@ -4,13 +4,22 @@
                  stack:             []
                  cur-file-stack:    []
                  define-name-stack: []
-                 debug-pos-stack:   [] }))
+                 debug-pos-stack:   []
+                 env-pos-stack:     [] }))
+
+     ($define! self (init-root-env-pos-allocation max-pos)
+       (push! ($env-pos-stack: self) [max-pos []]))
 
      ($define! self (push-prog-frame)
+       (push! ($env-pos-stack: self) [0 []])
        (push! ($stack: self) ($pad: self))
        ($!pad: self []))
 
+    ($define! self (cur-env-size)
+      (+ 1 (@0 (last ($env-pos-stack: self)))))
+
      ($define! self (pop-prog-frame)
+       (pop! ($env-pos-stack: self))
        ($!pad: self (pop! ($stack: self))))
 
      ($define! self (push-current-file path)
@@ -27,6 +36,29 @@
 
      ($define! self (pop-define-name-info name)
        (pop! ($define-name-stack: self)))
+
+    ($define! self (new-tmp-pos)
+      (let ((env-pos (last ($env-pos-stack: self)))
+            (free-tmp-pos-list (@1 env-pos)))
+        (if (> (length free-tmp-pos-list) 0)
+          [(pop! free-tmp-pos-list) 0 tmp:]
+          (let ((new-pos (@0 env-pos)))
+            (@!0 env-pos (+ new-pos 1))
+            [new-pos 0 tmp:]))))
+
+    ($define! self (new-pos)
+      (let ((env-pos (last ($env-pos-stack: self)))
+            (new-pos (@0 env-pos)))
+        (@!0 env-pos (+ 1 new-pos))
+        [new-pos 0]))
+
+    ($define! self (recycle-pos pos)
+      (when (eqv? (@2 pos) tmp:)
+        (push! (@1 (last ($env-pos-stack: self)))
+          (if (list? pos)
+            (@0 pos)
+            pos)))
+      pos)
 
      ($define! self (push-debug-info atom)
        (let ((meta-info (bkl-get-meta atom))

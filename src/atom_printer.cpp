@@ -99,7 +99,7 @@ void write_atom(const Atom &a, std::ostream &o)
 
 std::string write_atom(const Atom &a)
 {
-    std::stringstream ss; 
+    std::stringstream ss;
     write_atom(a, ss);
     return ss.str();
 }

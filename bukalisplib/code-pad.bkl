@@ -56,6 +56,9 @@
       ($define! self (op-return idx)
         (push-op RETURN: idx 0 0))
 
+      ($define! self (op-yield out-idx idx)
+        (push-op YIELD: out-idx idx 0))
+
       ($define! self (op-mov out-idx in-idx o)
         (push-op MOV: out-idx in-idx (if (nil? o) 0 o)))
 
@@ -74,6 +77,9 @@
       ($define! self (op-new-vec out-idx len)
         (push-op NEW_VEC: out-idx len 0))
 
+      ($define! self (op-new-arg-vec out-idx len arg-idx)
+        (push-op NEW_ARG_VEC: out-idx len arg-idx))
+
       ($define! self (op-new-map out-idx)
         (push-op NEW_MAP: out-idx 0 0))
 
@@ -86,8 +92,8 @@
       ($define! self (op-call out-idx func-idx argvec-idx)
         (push-op CALL: out-idx func-idx argvec-idx))
 
-      ($define! self (op-new-closure out-idx in-idx)
-        (push-op NEW_CLOSURE: out-idx in-idx 0))
+      ($define! self (op-new-closure out-idx in-idx is-coro-idx)
+        (push-op NEW_CLOSURE: out-idx in-idx is-coro-idx))
 
       ($define! self (op-pack-va out-idx env-pos-idx)
         (push-op PACK_VA: out-idx env-pos-idx 0))

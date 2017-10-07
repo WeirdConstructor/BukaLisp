@@ -262,8 +262,10 @@ Atom GC::get_statistics()
 
     size_t n_medium_bytes = 0;
     size_t n_small_bytes = 0;
+    size_t n_tiny_bytes = 0;
     size_t n_medium = 0;
     size_t n_small  = 0;
+    size_t n_tiny   = 0;
     AtomVec *mv = m_medium_vectors;
     while (mv)
     {
@@ -280,9 +282,19 @@ Atom GC::get_statistics()
         mv = mv->m_gc_next;
     }
 
+    mv = m_tiny_vectors;
+    while (mv)
+    {
+        n_tiny_bytes += sizeof(AtomVec) + mv->m_alloc * sizeof(Atom);
+        n_tiny++;
+        mv = mv->m_gc_next;
+    }
+
     BKLISP_GC_NEW_ST_ENTRY("medium-vector-pool",       n_medium);
     BKLISP_GC_NEW_ST_ENTRY("small-vector-pool",        n_small);
+    BKLISP_GC_NEW_ST_ENTRY("tiny-vector-pool",         n_tiny);
 
+    BKLISP_GC_NEW_ST_ENTRY("tiny-vector-pool-bytes",   n_tiny_bytes);
     BKLISP_GC_NEW_ST_ENTRY("small-vector-pool-bytes",  n_small_bytes);
     BKLISP_GC_NEW_ST_ENTRY("medium-vector-pool-bytes", n_medium_bytes);
     BKLISP_GC_NEW_ST_ENTRY("alive-vectors-bytes",      n_alive_vector_bytes);

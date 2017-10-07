@@ -18,6 +18,21 @@
 
 ;----------------------------------------------------------------------------
 
+;(T '((lambda (x) x) 5)
+;   5)
+
+#;(T '(let ((x 10))
+      (let ((x 20))
+        (let ((y x) (x 30))
+          [x y])))
+   [30 20])
+
+;(T '(begin (define x 0)
+;           (define (o a)
+;             (set! x (+ x a)))
+;           (for (i 1 1000000)
+;             (o 1)))
+;   1000000)
 ;(error X:)
 ;----------------------------------------------------------------------------
 
@@ -47,11 +62,20 @@
 
 ;----------------------------------------------------------------------------
 
+(T '((lambda (x) x) 5)
+   5)
+
+(T '((lambda (x y)
+       (+ 1 ((lambda () x))))
+     5)
+   6)
+
 (T '((lambda (x)
        ((lambda (y) (+ x y))
         10))
      5)
    15)
+
 (T '(begin (define x 0)
            (define (o a)
              (set! x (+ x a)))
@@ -609,6 +633,27 @@
        ((lambda (y) (+ 1 x y)) 10))
      5) 16)
 
+(T '(let ((x [])
+          (c 10))
+      (set! c (lambda (o) (push! x o)))
+      (c 1)
+      (c 2)
+      x)
+   [1 2])
+
+; Test recursive calling:
+(T '(let ((x [])
+          (c 11))
+      (set! c
+        (lambda (o)
+          (push! x o)
+          (when (eqv? o 0)
+            (return 11))
+          (c (- o 1))))
+      (c 2)
+      x)
+   [2 1 0])
+
 ; Test define
 (T '(begin (define x 10) x)     10)
 (T '(begin (define (x) 10) (x)) 10)
@@ -1039,6 +1084,101 @@
       (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
       (?doc *-yyy:))
    ["foobar-xxx-yyy"]);
+
+; Testing coroutines:
+(T '(let ((x 10)
+          (c (lambda coroutine: ()
+               (set! x 20)
+               (yield 21)
+               (set! x 22))))
+      [x (c) x (c)])
+   [10 21 20 22])
+
+(T '(let ((x 10)
+          (c (lambda coroutine: ()
+               (for (i 0 2)
+                 (yield i))
+               FF:)))
+      [(c) (c) (c) (c) (c) (c)])
+   [0 1 2 FF: 0 1])
+
+(T '(let ((x 10)
+          (mo (lambda ()
+                (for (i 0 2)
+                  (yield i))))
+          (c (lambda coroutine: ()
+               (mo)
+               (mo)
+               (yield OO:)
+               FF:)))
+      [(c) (c) (c) (c) (c) (c)
+       (c) (c) (c) (c)])
+   [0 1 2 0 1 2 OO: FF: 0 1])
+
+; Recursive coroutine calling of the same coroutine:
+; (Works, because the coroutine restores the last save point
+;  only once. We never should re-enter the same execution context
+;  twice, as the temporary work context registers are not correctly
+;  set. For re-callable continuations we need to save them with the stack!)
+(T '(let ((x [])
+          (c nil))
+      (set! c
+        (lambda coroutine: (o)
+          (push! x o)
+          (when (eqv? o rec:)
+            (push! x (yield XX:))
+            (push! x (c foo:))
+            (push! x (c foo:))
+            (push! x (c foo:)))
+          (when (eqv? o foo:)
+            (push! x (yield 10))
+            (push! x (yield 11))
+            (push! x (yield 12)))
+          END:))
+      (c rec:)
+      (c cont:)
+      x)
+   [rec: cont: foo: 10 foo: 11 foo: 12])
+
+; Test do-each
+(T '(let ((o []))
+      (do-each (x [1 2 3])
+        (push! o x))
+      o)
+   [1 2 3])
+
+(T '(let ((o []))
+      (do-each (x [])
+        (push! o x))
+      o)
+   [])
+
+(T '(let ((sum 0))
+      (do-each (v {a: 1 b: 2 c: 3 e: 5 f: 11})
+        (set! sum (+ sum v)))
+      sum)
+   22)
+
+(T '(let ((o []))
+      (do-each (k v [5 6 7])
+        (push! o k)
+        (push! o v))
+      o)
+   [0 5 1 6 2 7])
+
+(T '(let ((o []))
+      (do-each (k v {a: 12})
+        (push! o k)
+        (push! o v))
+      o)
+   [a: 12])
+
+(T '(let ((o []))
+      (do-each (k v {})
+        (push! o k)
+        (push! o v))
+      o)
+   [])
 
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")
