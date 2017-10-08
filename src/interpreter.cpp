@@ -519,7 +519,7 @@ Atom Interpreter::eval_field_get(Atom e, AtomVec *av)
     GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
 
     if (obj.m_type != T_MAP)
-        error("Can't set key on non map", obj);
+        error("Can't get key from non map", obj);
 
     return obj.at(key);
 }

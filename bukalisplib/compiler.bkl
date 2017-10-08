@@ -1,4 +1,9 @@
 (define primitive-table (bkl-primitive-map))
+(define REG-ROW-ACTIV 0)
+(define REG-ROW-DATA  1)
+(define REG-ROW-PRIM  2)
+(define REG-ROW-UPV   3)
+(define REG-ROW-ROOT  4)
 ;----------------------------------------------------------------------------
 
 (define inc-env-offs
@@ -241,7 +246,7 @@
       (push! ($env-stack: self) {}))
 
     ($define! self (pop-env)
-      (displayln POP-ENV: (last ($env-stack: self)))
+      #;(displayln POP-ENV: (last ($env-stack: self)))
       (pop! ($env-stack: self)))
 
     ($define! self (compile-get obj key eval-key? code-pad)
@@ -344,7 +349,7 @@
         it just needs to fetch the <up-idx> and map it down until it is back
         at <up-idx-n>.
       - The closure that needs to promote up-values scans it's environment
-        and emits a (SET-UPVALS: ((<up-idx> <idx>) ...)) operation AFTER
+        and emits a (NEW-UPVALS: ((<up-idx> <idx>) ...)) operation AFTER
         any PACK_VA, to set the values of the up-value registers before
         they are accessed.
       - Upon NEW_CLOSURE a list of mappings is set, that maps up-idx to up-idx2.
@@ -352,7 +357,7 @@
         it at up-idx2.
       - In CALL, instead of a complete env-stack-copy, the stored up-value-vector
         of NEW_CLOSURE is cloned and later (optionally) completed with a
-        (SET-UPVALS: ...).
+        (NEW-UPVALS: ...).
 
 
       Overheads:
@@ -373,11 +378,12 @@
          move all negative indicies to positive ones. Those are then used
          in a two-stage dereferencing:
 
-           Atom *reg_rows[3];
+           Atom *reg_rows[4];
            reg_rows[0] = <new activation register set>
            reg_rows[1] = <data register from VM-PROG>
            reg_rows[2] = <primitive table>
            reg_rows[3] = <up-values>
+           reg_rows[4] = <root-env>
 
          This might be much faster than the if/else cascade, at least I hope so.
     |#

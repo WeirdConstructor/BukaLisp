@@ -1,0 +1,229 @@
+;----------------------------------------------------------------------------
+(include local-env)
+
+(define make-binding-env-frame
+  (lambda (parent)
+    (let ((self             { is-root: #f })
+          (child            nil)
+          (loc-env          (make-local-env))
+          (top-env-map      loc-env)
+          (lambda-upvalues  []) ; This stores the original register idxes of locally
+                                ; defined/used up-values.
+                                ; While the adresses for local variables are mutated,
+                                ; we need to store the local adress of the
+                                ; variable: [upv-idx orig-idx]
+                                ; This creates a dead orig-idx for any variables that are
+                                ; not an argument. When we emit the "NEW-UPVALS" op,
+                                ; we only pass it the orig-idx which are smaller than
+                                ; the number of expected arguments (after PACK_VA).
+                                ; FIXME: This is not so easy, we need to emit a new upvalue for every
+                                ;        local-push/pop, so that when we write:
+                                ;              (for (i 1 10)
+                                ;                (let ((x i)) (lambda () x)))
+                                ;        We get a new upvalue each time we access x.
+                                ;        In any case, we know that X stores an up-value.
+                                ;        So we might be able to store up-values in
+                                ;        the registers as reference and access it
+                                ;        using a special adressing-type (REG-ROW-ACTIV-REG ?)
+                                ;        The VM then needs to automatically transform
+                                ;        the value in the register to an up-value when
+                                ;        (REG-ROW-ACTIV-REG idx) is accessed.
+                                ;        NEW_CLOSURE then captures the up-values. To pass
+                                ;        upvalues down one step more (without local use)
+                                ;        we need to cascade the "touch" of an upvalue down
+                                ;        the env-stack. to make this natural, it might help
+                                ;        to set the local upvalue-idx in each env-map (even local ones)
+                                ;        to be the variable "sym".
+                                ;        Here comes the special case: When we inherit an upvalue,
+                                ;        we store the register index in the parent with the local one.
+                                ; XXX: On another note: We could make arguments explicit, this way we could emit
+                                ;      a special PACK_VA that knows about any offset that might be neccessary.
+                                ;      I mean, we could pass the required upvalues as parameters?!
+          (inh-upvalues     []) ; Saves the inherited up-values from the parent.
+                                ; With the parent-upv-idx and our local upv-idx.
+                                ; Upon (NEW_CLOSURE ...) we pass an ordered list
+                                ; of parent-upv-idx that need to be saved with the
+                                ; closure.
+          (up-values        {})
+          (free-pos-list    [])
+          (pos-counter      0))
+
+      (unless (nil? parent)
+        (.set-child parent self))
+
+      ($define! self (set-child child)
+        (set! child child))
+      ; TODO: Add env-frame local stack of env-maps for (let ...) environments.
+      ;       These don't matter if we handle up-values, they only mask the
+      ;       any potential up-values. however, if we actually make upvalues, we
+      ;       need to store anything related to that not in the stack.
+      ;       (which is only interesting for caching and speed up lookup.)
+      ;
+      ;       ultimately, we have our own upvalue storage anyways!
+
+      ($define! self (define-var sym var)
+        (when (eqv? tmp: (@2 ($adr: var)))
+          (@!2 ($adr: var) fix:))
+        (.set loc-env sym var))
+
+      ($define! self (new-adr)
+        (if (empty? free-pos-list)
+          (let ((new-pos pos-counter))
+            (set! pos-counter (+ 1 pos-counter))
+            [REG-ROW-ACTIV new-pos fix: self])
+          (pop! free-pos-list)))
+
+      ($define! self (new-tmp-adr)
+        (let ((new-adr (.new-adr self)))
+          (@!2 new-adr tmp:)
+          new-adr))
+
+      ($define! self (push-local-env)
+        ; At the start of each local environment we need to
+        ; clear out the register that might contain an upvalue
+        ; from a previous iteration. otherwise we don't
+        ; generate a new binding for newly created closures
+        ; that capture that up-value.
+        (.push loc-env))
+
+      ($define! self (pop-local-env)
+        (.pop loc-env))
+
+      ($define! self (put-on-free-list adr)
+        (when (eqv? (@2 adr) tmp:)
+          (push! free-pos-list (@1 adr))))
+
+      ($define! self (recycle-adr adr)
+        (when (eqv? (@2 adr) tmp:)
+          (.put-on-free-list (@3 adr) adr)))
+
+      ($define! self (get-new-closure-saved-upvalues-from-parent)
+        #;(get the locally promoted up-values) nil)
+
+      ($define! self (get-required-upvalue-addrs)
+        #;(get the upvalues we need from parent) nil)
+
+;      ($define! self (lookup-upvalue-var sym)
+;        (if (nil? parent)
+;          (let ((v (@sym env-map)))
+;            (if (eqv? (@0 ($adr: v)) REG-ROW-UPV)
+;              v
+;              ; make-upvalue-at means we need to find a new free local upvalue-idx
+;              ; then we need to add a 
+;              (make-upvalue-at sym v)))
+;          (let ((v (.lookup-upvalue-var parent sym)))
+;            (define translate-to-my-upvalue (lambda (v)
+;                (allocate-upv-idx-for v)
+;                (@!sym top-env-map v)))
+;            (translate-to-my-upvalue v))))
+      ($define! self (add-local-lambda-upvalue adr sym)
+        (@!(@1 adr) lambda-upvalues [adr sym]))
+
+      ($define! self (get-lambda-upvalues)
+        lambda-upvalues)
+
+      ($define! self (make-upvalue-var sym v)
+        (let ((env-frame (@2 v))
+              (lok-v     (@1 v))
+              (lok-env   ($env: lok-v))
+              (var       (@0 v)))
+          (when (not (= (@0 ($adr: var)) 3))
+            (.set-here-defined-upvalue loc-env sym lok-env var)
+            (.add-local-lambda-upvalue env-frame ($adr: var) sym)
+            (@!0 ($adr: var) 3))
+          ; XXX: We need to trace the upvalue through all closures
+          ;      and translate it's first adr. value into the local one.
+          ;      For this however, we need to create a new ($adr: ...),
+          ;      for the corresponding lambda-level. This will break horribly
+          ;      I fear!
+          (displayln UPVALUE: lok-v)))
+
+      ($define! self (here-defined-upvalues)
+        (.here-defined-upvalues loc-env))
+
+      ($define! self (lookup-var-rec sym)
+        (define cur-env-var (.lookup loc-env sym))
+        (if (not (nil? cur-env-var))
+          [($var: cur-env-var) cur-env-var self]
+          (let ((up-env-var (.lookup-var-rec parent sym)))
+            (if (nil? up-env-var)
+              nil
+              up-env-var))))
+
+      ($define! self (lookup-var sym)
+        (let ((v (.lookup-var-rec self sym)))
+          (when (and
+                  (not (eqv? self (@2 v)))
+                  (eqv? var: ($type: (@0 v))))
+            (.make-upvalue-var self sym v))
+          (@0 v))))))
+
+(define nvar (lambda (adr) { adr: [0 adr] type: var: }))
+
+;  (#lambda: ((0 x) (1 y)) () (#set-data: 10)
+;   (#new-upv: (0 x))
+;   (#mov: (2 g) (#data: 0))
+;   (#new-upv: (2 g))
+;   (#lambda: ((0 f)) (0 2)
+;    (#ins-upv: (1 2))
+;    (#add: (#var: [3 1]) (#var: [3 2]) (#var: [0 0]))))
+
+(define e (make-binding-env-frame))
+(.define-var e 'x (nvar 0))
+(.define-var e 'y (nvar 1))
+  (.push-local-env e)
+  (.define-var e 'g (nvar 2))
+  (define e2 (make-binding-env-frame e))
+    (.define-var e2 'f (nvar 0))
+    (displayln PLUS:
+               [(.lookup-var e2 'x)
+                (.lookup-var e2 'g)
+                (.lookup-var e2 'f)])
+;    (displayln CUR: (.here-defined-upvalues e))
+(.pop-local-env e)
+;(displayln CUR:   (.here-defined-upvalues e))
+;(displayln OUTER: (.get-lambda-upvalues e))
+;(displayln INNER: (.get-lambda-upvalues e2))
+
+;  (#lambda: ((0 x) (1 y)) () (#set-data: 10 20)
+;              vvvvv - ausgabe von (lambda ...)
+;   (#new-upv: (0 x))
+;   (#mov: (2 g) (#data: 0))
+;              vvvvv - ausgabe von (let ...)
+;   (#new-upv: (2 g))
+;   (#call:
+;                      vvvvv - erfassung von env, ausgabe von (lambda ...) nach body-compilation
+;    (#lambda: ((0 f)) (0 2)
+;     (#new-upv: (0 f))
+;                vvvvv - erfassung von env, ausgabe von (lambda ...) nach body-compilation
+;     (#ins-upv: (1 2))
+;     (#lambda: ((0 l)) (1 2 0)
+;      (#ins-upv: (1 2 3))
+;      (#add:
+;       (#var: [3 1])
+;       (#var: [3 2])
+;       (#var: [3 3])
+;       (#var: [3 0]))))
+;    (#data: 1)))
+
+;(lambda (x y)
+;  (let ((g 10))
+;    ((lambda (f)
+;      (lambda (l)
+;        (+ x g f l)))) 20))
+;(define e (make-binding-env-frame))
+;(.define-var e 'x (nvar 0))
+;(.define-var e 'y (nvar 1))
+;  (.push-local-env e)
+;  (.define-var e 'g (nvar 2))
+;  (define e2 (make-binding-env-frame e))
+;  (.define-var e2 'f (nvar 0))
+;  (define e3 (make-binding-env-frame e2))
+;  (.define-var e3 'l (nvar 0))
+;(displayln E: (.here-defined-upvalues e))
+;(displayln E2: (.here-defined-upvalues e2))
+;(displayln PLUS:
+;           [(.lookup-var e3 'x)
+;            (.lookup-var e3 'g)
+;            (.lookup-var e3 'f)
+;            (.lookup-var e3 'l)])

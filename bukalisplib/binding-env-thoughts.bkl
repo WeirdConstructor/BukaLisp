@@ -1,0 +1,40 @@
+(lambda (x y)
+  (let ((g 10))
+    (lambda (f)
+      (+ x g f))))
+=>
+  (#lambda: ((0 x) (1 y)) () (#set-data: 10)
+   (#new-upv: (0 x))
+   (#mov: (2 g) (#data: 0))
+   (#new-upv: (2 g))
+   (#lambda: ((0 f)) (0 2)
+    (#ins-upv: (1 2))
+    (#add: (#var: [3 1]) (#var: [3 2]) (#var: [0 0]))))
+;----------------------------------------------------------------------------
+
+(lambda (x y)
+  (let ((g 10))
+    ((lambda (f)
+      (lambda (l)
+        (+ x g f l)))) 20))
+=>
+  (#lambda: ((0 x) (1 y)) () (#set-data: 10 20)
+              vvvvv - ausgabe von (lambda ...)
+   (#new-upv: (0 x))
+   (#mov: (2 g) (#data: 0))
+              vvvvv - ausgabe von (let ...)
+   (#new-upv: (2 g))
+   (#call:
+                      vvvvv - erfassung von env, ausgabe von (lambda ...) nach body-compilation
+    (#lambda: ((0 f)) (0 2)
+     (#new-upv: (0 f))
+                vvvvv - erfassung von env, ausgabe von (lambda ...) nach body-compilation
+     (#ins-upv: (1 2))
+     (#lambda: ((0 l)) (1 2 0)
+      (#ins-upv: (1 2 3))
+      (#add:
+       (#var: [3 1])
+       (#var: [3 2])
+       (#var: [3 3])
+       (#var: [3 0]))))
+    (#data: 1)))
