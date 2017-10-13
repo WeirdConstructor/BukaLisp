@@ -9,6 +9,7 @@ namespace bukalisp
 {
 
 std::string write_atom(const Atom &a);
+std::string write_atom_pp(const Atom &a);
 
 }
 

@@ -1,0 +1,241 @@
+(include transformator)
+
+;----------------------------------------------------------------------------
+
+(define lookup-in-env
+  (lambda (env sym transform-src-env-fn env-stck)
+    (if (nil? env)
+      nil
+      (let ((v (@sym env)))
+        (if (nil? v)
+          (lookup-in-env (@" PARENT " env)
+                         sym
+                         transform-src-env-fn
+                         (begin
+                           (push! env-stck env)
+                           env-stck))
+          (begin
+            (when (not (nil? transform-src-env-fn))
+              (transform-src-env-fn sym v env env-stck))
+            v))))))
+;----------------------------------------------------------------------------
+
+(define stage1-transformator-quote
+  (lambda (data ctx gtx)
+    (find-transform-match
+      [[nil?      (lambda (ctx arg T gtx) ['#1#nil])]
+       [boolean?  (lambda (ctx arg T gtx) ['#1#data arg])]
+       [number?   (lambda (ctx arg T gtx) ['#1#data arg])]
+       [symbol?   (lambda (ctx arg T gtx) ['#1#data arg])]
+       [keyword?  (lambda (ctx arg T gtx) ['#1#data arg])]
+       [string?   (lambda (ctx arg T gtx) ['#1#data arg])]
+       [map?
+         (lambda (ctx arg T gtx)
+           (let ((map-out ['#1#map]))
+             (do-each (k v arg)
+               (push! (.S1-T-Q gtx ctx k))
+               (push! (.S1-T-Q gtx ctx v)))))]
+       [list?
+         (lambda (ctx arg T gtx)
+           (append '#1#list
+                   (map (lambda (v)
+                          (.S1-T-Q gtx ctx v))
+                        arg)))]]
+      data
+      ctx
+      gtx)))
+;----------------------------------------------------------------------------
+
+(define annotate-upvalue-use
+  (lambda (sym var src-env env-stck)
+    (unless (@" IS-ROOT-ENVf" src-env)
+      (define found-lambda-head #f)
+      (define lambda-upv-list nil)
+      (do-each (e env-stck)
+        (when (not (nil? (@" LAMBDA-UPV " e)))
+          (when (eqv? (@0 var) var:)
+            (@!(@1 var) (@" LAMBDA-UPV " e) #t))
+          (set! found-lambda-head #t)))
+      (when (and found-lambda-head
+                 (eqv? (@0 var) var:))
+        (when (nil? (@" UPV " src-env))
+          (@!" UPV " src-env {}))
+        (@!(@1 var) (@" UPV " src-env) #t)))))
+;----------------------------------------------------------------------------
+
+(define keys-in-map
+  (lambda (m)
+    (define keys [])
+    (do-each (k v m)
+      (push! keys k))
+    keys))
+
+(define found-upv-in-env?
+  (lambda (env)
+    (not (or (nil? (@" UPV " env))
+             (= (length (@" UPV " env)) 0)))))
+
+(define upvalues-in-env
+  (lambda (env)
+    #;(displayln UPV: (@" UPV " env))
+    (keys-in-map (@" UPV " env))))
+;----------------------------------------------------------------------------
+
+(define stage1-transformator
+  (lambda (data root-env gtx)
+    (@!'S1-T-Q gtx (lambda (ctx v)
+                     (stage1-transformator-quote v ctx gtx)))
+    (@!'S1-T   gtx (lambda (ctx v)
+                     (stage1-transformator v ctx gtx)))
+    (find-transform-match
+      [[nil?      (lambda (ctx arg T gtx) ['#1#nil])]
+       [boolean?  (lambda (ctx arg T gtx) ['#1#data arg])]
+       [number?   (lambda (ctx arg T gtx) ['#1#data arg])]
+       [string?   (lambda (ctx arg T gtx) ['#1#data arg])]
+       [keyword?  (lambda (ctx arg T gtx) ['#1#data arg])]
+       [map?
+         (lambda (ctx arg T gtx)
+           (define o-map ['#1#map])
+           (do-each (k v arg)
+             (push! o-map (.AM gtx [(T ctx k) (T ctx v)])))
+           o-map)]
+       [symbol?
+         (lambda (ctx arg T gtx)
+           (let ((value (lookup-in-env (env: ctx) arg annotate-upvalue-use [])))
+             (when (nil? value)
+               (error (str "Access undefined variable '" arg "'")
+                      (last (meta-stack: gtx))))
+             (case (@0 value)
+               ((var:)     ['#1#var (@1 value) (@2 value)])
+               ((prim:)    ['#1#prim (@1 value)])
+               ((syntax:)
+                (error "Variable contains syntax directive, can't use it here" value))
+               ((macro:)
+                (error "Variable contains macro, can't use it here" value))
+               (else
+                 (error "Variable contains non representable value" value)))))]
+       [list?
+         (lambda (ctx arg T gtx)
+           (case (type (@0 arg))
+             ((keyword)
+              (when (> (length arg) 2)
+                (error "Get by keyword can only have one argument (the map)"
+                       arg))
+              ['#1#get (T ctx (@0 arg)) (T ctx (@1 arg))])
+             ((list)
+              ['#1#apply
+               (T ctx (@0 arg))
+               (.AM gtx (map (lambda (v) (T ctx v))
+                             (drop arg 1)))])
+             ((symbol)
+              (let ((value (lookup-in-env (env: ctx) (@0 arg) annotate-upvalue-use [])))
+                (when (nil? value)
+                  (error (str "Access undefined variable '" (@0 arg) "'")
+                         (last (meta-stack: gtx))))
+                (case (@0 value)
+                  ((syntax:) ((@1 value) ctx arg T gtx))
+                  ((macro:)
+                   (let ((transformed (apply (@1 value) (drop arg 1))))
+                     (T ctx transformed)))
+                  ((prim:)
+                   (if (nil? (@2 value))
+                     ['#1#apply
+                      (.AM gtx ['#1#prim (@1 value)])
+                      (.AM gtx (map (lambda (v) (T ctx v))
+                                    (drop arg 1)))]
+                     ((@2 value) ctx arg T gtx)))
+                  ((var:)
+                   ['#1#apply
+                    (.AM gtx ['#1#var (@1 value) (@2 value)])
+                    (.AM gtx (map (lambda (v) (T ctx v))
+                                  (drop arg 1)))])
+                  (else
+                    (error "Unknown content in env" [arg value])))))
+             ;          ((number)
+             ;           ['#data (@0 arg)])
+             (else (error "Unknown element type in front of list"
+                          (type (@0 arg))
+                          arg))))]]
+      data
+      root-env
+      gtx)))
+;----------------------------------------------------------------------------
+
+(define gtx-gensym
+  (lambda (gtx name)
+    (let ((sym (string->symbol (str name "_" (var-counter: gtx)))))
+      (@!var-counter: gtx (+ 1 (var-counter: gtx)))
+      sym)))
+
+(define cpassign
+  (lambda (m k v)
+    (let ((om {}))
+      (do-each (k_ v_ m)
+        (@!k_ om v_))
+      (@!k om v)
+      om)))
+;----------------------------------------------------------------------------
+
+(define s1-begin
+  (lambda (T ctx exprs)
+    (if (= (length exprs) 0)
+      (T ctx nil)
+      (if (= (length exprs) 1)
+        (T ctx (@0 exprs))
+        (append '#1#begin
+                (map (lambda (v)
+                       (T ctx v))
+                     exprs))))))
+;----------------------------------------------------------------------------
+
+(define parse-lambda-params
+  (lambda (params error-fn)
+    (if (symbol? params)
+      { varargs-param: params args: [] }
+      (if (list? params)
+        (begin
+          (define found-dot? #f)
+          (define args [])
+          (define va-arg nil)
+          (do-each (s params)
+            (if (symbol? s)
+              (if found-dot?
+                (if (nil? va-arg)
+                  (set! va-arg s)
+                  (error-fn "There can only be one vararg parameter" s))
+                (if (eqv? s '.)
+                  (set! found-dot? #t)
+                  (push! args s)))
+              (error-fn "Function parameter is not a symbol" s)))
+          {varargs-param: va-arg
+          args:          args})
+        (error-fn "Function parameter is neither a list or a symbol" params)))))
+;----------------------------------------------------------------------------
+
+(define S1-ROOT-ENV {})
+(define add-syntax
+  (lambda (sym fn)
+    (@!sym S1-ROOT-ENV [syntax: fn])))
+
+(include "compiler2_syntax")
+
+(do-each (k v (bkl-primitive-map))
+  (@!k S1-ROOT-ENV [prim: [v k]]))
+
+(define add-optimized-prim
+  (lambda (root-env prim-k compile-func)
+    (let ((var (@prim-k root-env)))
+      (when (nil? var)
+        (error "Unknown primitive to optimize" prim-k))
+      (@!2 var compile-func))))
+
+(include "compiler2_opt_prim")
+
+(@!" IS-ROOT-ENV " S1-ROOT-ENV #t)
+
+(define spawn-root-env
+  (lambda ()
+    (define root-env {})
+    (do-each (k v S1-ROOT-ENV)
+      (@!k root-env v))
+    root-env))

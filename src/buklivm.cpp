@@ -184,6 +184,35 @@ AtomMap *VM::loaded_modules()
 }
 //---------------------------------------------------------------------------
 
+#define CHECK_ARITY(arity, argc)             \
+    ((((arity).m_type == T_NIL)              \
+       || ((arity).m_d.i == (argc))) ? 0     \
+    : ((arity).m_d.i < 0)                    \
+    ? (((argc) < -((arity).m_d.i)) ? -1 : 0) \
+    : ((arity).m_d.i > (argc)) ? -1          \
+    : ((arity).m_d.i < (argc)) ? 1           \
+    : 0)
+//---------------------------------------------------------------------------
+
+void VM::report_arity_error(Atom &arity, size_t argc)
+{
+    int err = CHECK_ARITY(arity, argc);
+    int exp = (int) abs(arity.m_d.i);
+    if (err < 0)
+    {
+        error("lambda call with too few arguments, expected "
+              + to_string(exp) + " but got",
+              Atom(T_INT, argc));
+    }
+    else if (err > 0)
+    {
+        error("lambda call with too many arguments, expected "
+              + to_string(exp) + " but got",
+              Atom(T_INT, argc));
+    }
+}
+//---------------------------------------------------------------------------
+
 Atom VM::eval(Atom callable, AtomVec *args)
 {
     using namespace std::chrono;
@@ -204,12 +233,15 @@ Atom VM::eval(Atom callable, AtomVec *args)
     }
     else if (callable.m_type == T_CLOS)
     {
-        if (   callable.m_d.vec->m_len == 3
+        if (   callable.m_d.vec->m_len == 4
             && callable.m_d.vec->m_data[0].m_type == T_UD)
         {
+            // TODO FIXME: Support calling corutines here!
             prog = dynamic_cast<PROG*>(callable.m_d.vec->m_data[0].m_d.ud);
             pc   = &(prog->m_instructions[0]);
             env_stack = callable.m_d.vec->m_data[1].m_d.vec;
+            if (CHECK_ARITY(callable.m_d.vec->m_data[3], args->m_len) != 0)
+                report_arity_error(callable.m_d.vec->m_data[3], args->m_len);
         }
         else if (callable.m_d.vec->m_len == 3)
         {
@@ -604,15 +636,18 @@ Atom VM::eval(Atom callable, AtomVec *args)
                         error("VM can't make closure from non VM-PROG", prog);
 
                     E_GET(tmp, B);
-                    bool is_coroutine = !tmp->is_false();
+                    if (tmp->m_type != T_VEC)
+                        error("Can't create closure without info", *tmp);
+                    bool is_coroutine = !(tmp->at(0).is_false());
 
-                    Atom cl(T_CLOS, m_rt->m_gc.allocate_vector(3));
-                    cl.m_d.vec->m_len = 3;
+                    Atom cl(T_CLOS, m_rt->m_gc.allocate_vector(4));
+                    cl.m_d.vec->m_len = 4;
     //                std::cout << "NEW CLOS " << ((void *) cl.m_d.vec) << "@" << ((void *) cl.m_d.vec->m_data) << std::endl;
                     cl.m_d.vec->m_data[0].set_ud(prog.m_d.ud);
                     cl.m_d.vec->m_data[1].set_vec(
                         m_rt->m_gc.clone_vector(env_stack));
                     cl.m_d.vec->m_data[2].set_bool(is_coroutine);
+                    cl.m_d.vec->m_data[3] = tmp->at(1);
 
                     E_SET(O, cl);
                     break;
@@ -664,10 +699,15 @@ Atom VM::eval(Atom callable, AtomVec *args)
                     }
                     else if (func.m_type == T_CLOS)
                     {
-                        if (func.m_d.vec->m_len < 2)
+                        if (func.m_d.vec->m_len < 4)
                             error("Bad closure found", func);
                         if (func.m_d.vec->m_data[0].m_type != T_UD)
                             error("Bad closure found", func);
+
+                        if (CHECK_ARITY(func.m_d.vec->m_data[3],
+                                        argv.m_d.vec->m_len) != 0)
+                            report_arity_error(func.m_d.vec->m_data[3],
+                                               argv.m_d.vec->m_len);
 
                         alloc = true;
                         // save the current execution context:

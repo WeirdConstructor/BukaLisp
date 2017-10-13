@@ -178,6 +178,12 @@ START_PRIM()
 END_PRIM(inexact?);
 
 START_PRIM()
+    REQ_EQ_ARGC(number?, 1);
+    out = Atom(T_BOOL);
+    out.m_d.b = A0.m_type == T_DBL || A0.m_type == T_INT;
+END_PRIM(number?);
+
+START_PRIM()
     REQ_EQ_ARGC(string?, 1);
     out = Atom(T_BOOL);
     out.m_d.b = A0.m_type == T_STR;
@@ -424,6 +430,34 @@ START_PRIM()
 END_PRIM(str-join)
 
 START_PRIM()
+    REQ_EQ_ARGC(symbol->string, 1)
+    if (A0.m_type != T_SYM)
+        error("'symbol->string' expected symbol as argument", A0);
+    out = Atom(T_STR, A0.m_d.sym);
+END_PRIM(symbol->string)
+
+START_PRIM()
+    REQ_EQ_ARGC(keyword->string, 1)
+    if (A0.m_type != T_KW)
+        error("'keyword->string' expected keyword as argument", A0);
+    out = Atom(T_STR, A0.m_d.sym);
+END_PRIM(keyword->string)
+
+START_PRIM()
+    REQ_EQ_ARGC(string->symbol, 1)
+    if (A0.m_type != T_STR)
+        error("'string->symbol' expected string as argument", A0);
+    out = Atom(T_SYM, A0.m_d.sym);
+END_PRIM(string->symbol)
+
+START_PRIM()
+    REQ_EQ_ARGC(string->keyword, 1)
+    if (A0.m_type != T_STR)
+        error("'string->keyword' expected string as argument", A0);
+    out = Atom(T_KW, A0.m_d.sym);
+END_PRIM(string->keyword)
+
+START_PRIM()
     REQ_EQ_ARGC(last, 1);
     if (A0.m_type != T_VEC)
         error("Can't 'last' on a non-list", A0);
@@ -513,12 +547,22 @@ START_PRIM()
 END_PRIM(write-str);
 
 START_PRIM()
+    REQ_EQ_ARGC(pp-str, 1);
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(A0.to_write_str(true)));
+END_PRIM(pp-str);
+
+START_PRIM()
     REQ_GT_ARGC(read-str, 1);
     if (args.m_len > 1)
         out = m_rt->read(A1.to_display_str(), A0.to_display_str());
     else
         out = m_rt->read("", A0.to_display_str());
 END_PRIM(read-str)
+
+START_PRIM()
+    REQ_EQ_ARGC(size, 1);
+    out = Atom(T_INT, (int64_t) A0.size());
+END_PRIM(size)
 
 START_PRIM()
     REQ_EQ_ARGC(sys-slurp-file, 1);

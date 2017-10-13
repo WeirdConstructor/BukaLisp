@@ -1,0 +1,56 @@
+(add-optimized-prim
+  S1-ROOT-ENV
+  '@
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 3)
+      (error "'@' requires exactly 2 arguments" args))
+    ['#1#get (T ctx (@1 args)) (T ctx (@2 args))]))
+
+(add-optimized-prim
+  S1-ROOT-ENV
+  '@!
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 4)
+      (error "'@!' requires exactly 3 arguments" args))
+    ['#1#set field: (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))]))
+
+(define make-assoc-tree
+  (lambda (operation ctx args T gtx)
+    (let ((out-pair [operation]))
+      (do-each (v (drop args 1))
+        (if (= (length out-pair) 3)
+          (set! out-pair [operation out-pair (T ctx v)])
+          (push! out-pair (T ctx v))))
+      out-pair)))
+
+(define make-left-assoc-tree
+  (lambda (operation neutral)
+    (set! neutral ['#1#data neutral])
+    (lambda (ctx args T gtx)
+      (case (- (length args) 1)
+        ((0) [operation neutral           neutral])
+        ((1) [operation neutral (T ctx (@1 args))])
+        (else (make-assoc-tree operation ctx args T gtx))))))
+
+(define make-left-assoc-tree-min-2
+  (lambda (operation)
+    (lambda (ctx args T gtx)
+      (when (< (length args) 3)
+        (error (str "Operation requires at least 2 arguments") args))
+      (let ((out-pair [operation]))
+        (do-each (v (drop args 1))
+          (if (= (length out-pair) 3)
+            (set! out-pair [operation out-pair (T ctx v)])
+            (push! out-pair (T ctx v))))
+        out-pair))))
+
+(add-optimized-prim S1-ROOT-ENV '+ (make-left-assoc-tree '#1#add    0))
+(add-optimized-prim S1-ROOT-ENV '- (make-left-assoc-tree '#1#sub    0))
+(add-optimized-prim S1-ROOT-ENV '* (make-left-assoc-tree '#1#mul    1))
+(add-optimized-prim S1-ROOT-ENV '/ (make-left-assoc-tree '#1#div    1))
+(add-optimized-prim S1-ROOT-ENV '=  (make-left-assoc-tree-min-2 '#1#eq))
+(add-optimized-prim S1-ROOT-ENV '<  (make-left-assoc-tree-min-2 '#1#lt))
+(add-optimized-prim S1-ROOT-ENV '>  (make-left-assoc-tree-min-2 '#1#gt))
+(add-optimized-prim S1-ROOT-ENV '<= (make-left-assoc-tree-min-2 '#1#le))
+(add-optimized-prim S1-ROOT-ENV '>= (make-left-assoc-tree-min-2 '#1#ge))
+

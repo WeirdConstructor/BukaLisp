@@ -45,8 +45,6 @@ AtomMap *Interpreter::init_root_env()
     DEF_SYNTAX(case);
     DEF_SYNTAX(.);
     DEF_SYNTAX($define!);
-    DEF_SYNTAX($!);
-    DEF_SYNTAX($);
     DEF_SYNTAX(displayln-time);
     DEF_SYNTAX(include);
     DEF_SYNTAX(with-cleanup);
@@ -416,11 +414,7 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
             }
         }
         else
-        {
-            env_map->set(bnd_spec->m_data[0], Atom());
-            env_map->set(bnd_spec->m_data[1], ds);
-            last = eval_begin(e, av, 2);
-        }
+            error("'do-each' can't iterate on non list or map", ds);
     }
     else
     {
@@ -443,10 +437,7 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
             }
         }
         else
-        {
-            env_map->set(bnd_spec->m_data[0], ds);
-            last = eval_begin(e, av, 2);
-        }
+            error("'do-each' can't iterate on non list or map", ds);
     }
 
     return last;
@@ -505,18 +496,18 @@ Atom Interpreter::eval_case(Atom e, AtomVec *av)
 
 Atom Interpreter::eval_field_get(Atom e, AtomVec *av)
 {
-    if (av->m_len < 3)
+    if (av->m_len < 2)
     {
-        error("'$' map field needs at least 2 arguments: "
-              "the key and the map", e);
+        error("keyword map access field needs at least 1 arguments: "
+              "the map", e);
     }
 
-    GC_ROOT(m_rt->m_gc, key) = av->m_data[1];
-    if (   key.m_type != T_SYM
-        && key.m_type != T_STR
-        && key.m_type != T_KW)
-        key = eval(key);
-    GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[2]);
+    GC_ROOT(m_rt->m_gc, key) = av->m_data[0];
+//    if (   key.m_type != T_SYM
+//        && key.m_type != T_STR
+//        && key.m_type != T_KW)
+//        key = eval(key);
+    GC_ROOT(m_rt->m_gc, obj) = eval(av->m_data[1]);
 
     if (obj.m_type != T_MAP)
         error("Can't get key from non map", obj);
@@ -672,6 +663,19 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
             AtomVecPush avp_env(m_env_stack, Atom(T_MAP, am_bind_env));
 
             AtomVec *binds = lambda_form.m_d.vec->m_data[1].m_d.vec;
+
+            if (binds->m_len > av->m_len)
+            {
+                error("lambda call with too few arguments, "
+                      "expected following number",
+                      Atom(T_INT, binds->m_len));
+            }
+            else if (binds->m_len < av->m_len)
+            {
+                error("lambda call with too many arguments, "
+                      "expected following number",
+                      Atom(T_INT, binds->m_len));
+            }
 
             // TODO: Refactor for (apply ...)?
             for (size_t i = 0; i < binds->m_len; i++)
@@ -849,8 +853,6 @@ Atom Interpreter::eval(Atom e)
                 else if (s == "do-each")  ret = eval_do_each(e, av);
                 else if (s == "case")     ret = eval_case(e, av);
                 else if (s == ".")        ret = eval_dot_call(e, av);
-                else if (s == "$")        ret = eval_field_get(e, av);
-                else if (s == "$!")       ret = eval_field_set(e, av);
                 else if (s == "$define!") ret = eval_meth_def(e, av);
                 else if (s == "include")  ret = eval_include(e, av);
                 else if (s == "with-cleanup")
@@ -882,6 +884,11 @@ Atom Interpreter::eval(Atom e)
             else if (first.m_type == T_CLOS)
             {
                 ret = call(first, av, true);
+                break;
+            }
+            else if (first.m_type == T_KW)
+            {
+                ret = eval_field_get(first, av);
                 break;
             }
             else

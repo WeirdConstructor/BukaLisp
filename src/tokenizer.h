@@ -155,29 +155,14 @@ class Tokenizer
             {
                 char c = m_u8buf.first_byte(true);
 
-                if (charClass(c, " ,\t\r\n\v\f"))
+                if (charClass(c, " \t\r\n\v\f"))
                 {
                     if (c == '\n') m_cur_line++;
-                }
-                else if (c == '$' && m_u8buf.match_prefix("define!"))
-                {
-                    m_u8buf.skip_bytes(7);
-                    push(Token("$define!"));
-                }
-                else if (c == '$' && m_u8buf.match_prefix("^!"))
-                {
-                    m_u8buf.skip_bytes(2);
-                    push(Token("$^!"));
                 }
                 else if (c == '@' && m_u8buf.match_prefix("^!"))
                 {
                     m_u8buf.skip_bytes(2);
                     push(Token("@^!"));
-                }
-                else if (c == '$' && m_u8buf.first_byte() == '!')
-                {
-                    m_u8buf.skip_bytes(1);
-                    push(Token("$!"));
                 }
                 else if (c == '@' && m_u8buf.first_byte() == '!')
                 {
@@ -292,7 +277,7 @@ class Tokenizer
                         if (c == '\n') m_cur_line++;
                     }
                 }
-                else if (charClass(c, "[]{}()'`~^@$."))
+                else if (charClass(c, "[]{}()'`~^@.,"))
                 {
                     push(Token(c));
                 }

@@ -1,3 +1,70 @@
+#|
+
+Step to be able to split up closure flat transformation:
+
+
+(lambda (a b c)
+  (let ((g 10))
+    ((lambda (f)
+      (lambda (l)
+        (+ f l g a)))
+     10)))
+
+
+=>
+
+(#lambda (a b c)
+ (#mk-upval a)
+ (#set g (#static-data 10))
+ (#mk-upval g)
+ (#apply
+  (#lambda (f) (g a)
+   (#lambda (l) (g a f)
+    (#syntax-+ f l g a)))
+  (#static-data 10)))
+
+- Why does it help?
+  - Because all up-valuesa are declared at (#lambda ...)
+    This means, we can assign dedicated up-value positions from the
+    start and emit assignment/closure definitions from start of the
+    compilation of the corresponding lambda - without cumbersome
+    stuff.
+
+=>
+
+(#new-closure { args: ((0 0) (0 1) (0 2))
+                data: ()
+                upv:  () }
+  (#mk-upval-at (0 0) (3 0))
+  (#set-at (0 3) (#static-data 10))
+  (#mk-upval-at (0 3) (3 1))
+  (#apply
+   (#new-closure
+      { args: ((0 0))
+        data: ()
+        upv: ((3 1) (3 0)) }
+      ; a at (3 0) becomes (3 1), and g (3 1) becomes (3 0)
+    (#mk-upval-at ((0 0) (3 2)))
+    (#new-closure { args: ((0 0)) data: ()
+                    upv: ((3 0) (3 1) (3 2)) }
+      (#syntax-+ (3 2) (0 0) (3 0) (3 1))))))
+
+What we need is a nice way to express these transformations.
+All while we preserve the debug-positions of the previous lists/vectors.
+
+=>
+
+- stage 1: syntax check and variable and data replacement:
+  (let ((x ...))
+    (+ x 10))
+  => (#syntax-+ (#var 0) (#static-data 10))
+(transform '(+ 1 (* 2 3))
+   ('+ (lambda (input args transform) ; XXX: Add 'env' argument, for variable lookup!
+         ($N input (#syntax-+ (transform args)))))
+   (number? (lambda (input args transform)
+              (#static-data input))))
+
+|#
 (define primitive-table (bkl-primitive-map))
 (define REG-ROW-ACTIV 0)
 (define REG-ROW-DATA  1)
@@ -61,7 +128,7 @@
       (let ((val-adr (adr-create-func)))
         (when (>= (@1 val-adr) 0)
           (define tmp-adr (.new-tmp-pos compiler))
-          (.op-mov code-pad tmp-adr val-adr)
+          (.op-mov code-pad tmp-adr val-adr nil)
           (.recycle-pos compiler val-adr)
           (set! val-adr tmp-adr))
         (push! arg-adr-vec (@0 val-adr))
@@ -79,22 +146,22 @@
 ;----------------------------------------------------------------------------
 
 (define compile-quote-dispatch-map
- { (type nil) (lambda (atom self code-pad)
+ { (type nil) (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'exact     (lambda (atom self code-pad)
+   'exact     (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'inexact   (lambda (atom self code-pad)
+   'inexact   (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'keyword   (lambda (atom self code-pad)
+   'keyword   (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'boolean   (lambda (atom self code-pad)
+   'boolean   (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'string    (lambda (atom self code-pad)
+   'string    (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'symbol    (lambda (atom self code-pad)
+   'symbol    (lambda (atom self code-pad _)
                 (.store-static-data self atom))
 
-   'map       (lambda (atom self code-pad)
+   'map       (lambda (atom self code-pad _)
                 (let ((ret-adr (.new-tmp-pos self)))
                   (.op-new-map code-pad ret-adr)
                   (do-each (k v atom)
@@ -105,7 +172,7 @@
                       (.recycle-pos self v-adr)))
                   ret-adr))
 
-   'list      (lambda (atom self code-pad)
+   'list      (lambda (atom self code-pad _)
                 (let ((vec-adr (.new-tmp-pos self))
                       (arg-collector (make-argument-collector self code-pad)))
                   (do-each (a atom)
@@ -117,20 +184,20 @@
 ;----------------------------------------------------------------------------
 
 (define compile-expr-dispatch-map
- { (type nil) (lambda (atom self code-pad)
+ { (type nil) (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'exact     (lambda (atom self code-pad)
+   'exact     (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'inexact   (lambda (atom self code-pad)
+   'inexact   (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'keyword   (lambda (atom self code-pad)
+   'keyword   (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'boolean   (lambda (atom self code-pad)
+   'boolean   (lambda (atom self code-pad _)
                 (.store-static-data self atom))
-   'string    (lambda (atom self code-pad)
+   'string    (lambda (atom self code-pad _)
                 (.store-static-data self atom))
 
-   'map       (lambda (atom self code-pad)
+   'map       (lambda (atom self code-pad _)
                 (let ((ret-adr (.new-tmp-pos self)))
                   (.op-new-map code-pad ret-adr)
                   (do-each (k v atom)
@@ -141,7 +208,7 @@
                       (.recycle-pos self v-adr)))
                   ret-adr))
 
-   'symbol    (lambda (atom self code-pad)
+   'symbol    (lambda (atom self code-pad _)
                 (let ((var (.lookup self atom)))
                   (when (nil? var)
                     (.error self "Undefined variable" atom))
@@ -160,7 +227,7 @@
                     (else
                       (.error self "Not a value binding variable" atom)))))
 
-   'list      (lambda (atom self code-pad)
+   'list      (lambda (atom self code-pad _)
                 (case (type (@0 atom))
                   ((symbol)
                    (let ((var (.lookup self (@0 atom))))
@@ -182,6 +249,11 @@
                          (.error self "Bad variable type" var)))))
                   ((list)
                    (.compile-func-apply self atom code-pad))
+                  ((keyword)
+                   (begin
+                     (unless (eqv? (length atom) 2)
+                       (.error self "keyword map access needs exactly 1 arguments (the map)" atom))
+                     (.compile-get self (@1 atom) (@0 atom) #f code-pad)))
                   (else
                     (.error self "Invalid atom type at start of list" atom))))})
 ;                (do-each (a atom)
@@ -218,8 +290,8 @@
 
 (define hook-compiler-methods
   (lambda (self)
-    ($!env-stack:     self [])
-    ($!macro-compiler: self [])
+    (@!env-stack:     self [])
+    (@!macro-compiler: self [])
 
     ($define! self (error msg atom)
       (bkl-error
@@ -233,21 +305,21 @@
       (>= (@1 adr) 0))
 
     ($define! self (define-var sym var-type)
-      (let ((cur-env (last ($env-stack: self))))
+      (let ((cur-env (last (env-stack: self))))
         (@!sym cur-env var-type)))
 
     ($define! self (lookup sym)
-      (recursive-lookup ($env-stack: self) 0 sym))
+      (recursive-lookup (env-stack: self) 0 sym nil))
 
     ($define! self (push-prog-env)
-      (push! ($env-stack: self) { " NEW-LEVEL " #t }))
+      (push! (env-stack: self) { " NEW-LEVEL " #t }))
 
     ($define! self (push-env)
-      (push! ($env-stack: self) {}))
+      (push! (env-stack: self) {}))
 
     ($define! self (pop-env)
-      #;(displayln POP-ENV: (last ($env-stack: self)))
-      (pop! ($env-stack: self)))
+      #;(displayln POP-ENV: (last (env-stack: self)))
+      (pop! (env-stack: self)))
 
     ($define! self (compile-get obj key eval-key? code-pad)
       (let ((out-adr (.new-tmp-pos self))
@@ -299,98 +371,12 @@
           (.recycle-pos self argvec-adr)
           ret-adr)))
 
-    #|
-      ;;; For upvalues:
-      ;;; - env stores adresses in (<idxtype> <idx>) form, variables/parameters
-      ;;;   get (0 <idx>)
-      ;;; - if some child node is compiled and accesses the variable, it promotes
-      ;;;   it into an up-value and sets (-3 <up-idx> <idx>)
-      ;;;   XXX: how to get <up-idx> it's not defined at this point due to temporaries!
-      ;;;   (for this the compile-lambda needs to find out the maximum used <idx>,
-      ;;;    which needs to be tracked in prog-frame)
-      ;;;   - additionally it needs to record the usage of the (<up-idx>) in all
-      ;;;     environments it passed. XXX: How does it refer to the upvalue, the
-      ;;;     index is not known due to pending compilations!
-      ;;;     => FIXME: We need to rethink all this with a separate up-value register
-      ;;;        in mind!
-      ;;;        That should be like a data-register, which is caputed upon NEW_CLOSURE
-      ;;;        and loaded into 'upvalues' in the VM.
-      ;;; - this procedure, after everything is compiled and put into a new code-pad,
-      ;;;   generates an optional (SET_UPV: ...) operation,
-      ;;;   that moves (0 <idx>) to (-3 <up-idx>) by modifying the original address
-      ;;;   list/pair.
-      ;;;   Once the earlier saved code-pad is emitted into a VM-PROG, the addresses
-      ;;;   will magically fit and operate on the up-value.
-      ;;;
-      ;;; - A compiled lambda stores all referred to up-values.
-      ;;; NEW_CLOSURE operation gets a new parameter (stored just right after
-      ;;; the PROG in memory) that lists all 
-
-
-      ------------------------------------------------------
-
-      - env stores adresses in (<idxtype> <idx>) form, variables/parameters
-        get (0 <idx>)
-      - if a child node needs an upvalue while compiling (becaue lookup
-        passes the environment border) it changes the (0 <idx>) into
-        (-3 <up-idx> <idx>) and stores in a mapping, that the local variable 'X
-        was promoted into a local up-value.
-        - <up-idx> is computed from the current list of (local) upvalues.
-        - when walking towards its own environment downwards again, it needs
-          to add the genreated up-value to all intermediate (and it's own)
-          closure. For this, it creates a new <up-idx2> in the local
-          environment, and stores a mapping, for all subsequent accesses.
-          The mapping records the transformation of the <up-idx> into <up-idx2>
-          in the new closure. This repeats for all further nestes closures
-          (<up-idx2> to <up-idx3> ...).
-          On the lowest level it has <up-idx-n> and uses that for addressing
-          that variable (the result of this retrieval might be cached).
-      - if a child node encounters that the accesses value is alread an upvalue,
-        it just needs to fetch the <up-idx> and map it down until it is back
-        at <up-idx-n>.
-      - The closure that needs to promote up-values scans it's environment
-        and emits a (NEW-UPVALS: ((<up-idx> <idx>) ...)) operation AFTER
-        any PACK_VA, to set the values of the up-value registers before
-        they are accessed.
-      - Upon NEW_CLOSURE a list of mappings is set, that maps up-idx to up-idx2.
-        The NEW_CLOSURE operation then fetches the up-value at up-idx and stores
-        it at up-idx2.
-      - In CALL, instead of a complete env-stack-copy, the stored up-value-vector
-        of NEW_CLOSURE is cloned and later (optionally) completed with a
-        (NEW-UPVALS: ...).
-
-
-      Overheads:
-      => We add a small overhead upon function-call to generate and copy
-         the up-values.
-      => The new up-value-register saves unneccesary cloning of env-stack.
-         In case of simple closures, with just one level, we just replace
-         one clone with another clone.
-      => We might save one indirection for using a new addressing mode (-3)
-         instead of relative environment offsets.
-      => Environment don't need to be copied upon NEW_CLOSURE anymore, just
-         the up-values.
-      => We save some memory, as some variables are not kept alive by closures
-         anymore.
-      => There is potential to move the up-value-register to an offset-idx
-         into the current register.
-      => LATER: We should kill the if/if else-cascade in E_SET/E_GET and
-         move all negative indicies to positive ones. Those are then used
-         in a two-stage dereferencing:
-
-           Atom *reg_rows[4];
-           reg_rows[0] = <new activation register set>
-           reg_rows[1] = <data register from VM-PROG>
-           reg_rows[2] = <primitive table>
-           reg_rows[3] = <up-values>
-           reg_rows[4] = <root-env>
-
-         This might be much faster than the if/else cascade, at least I hope so.
-    |#
     ($define! self (compile-lambda parameters body code-pad is-coroutine)
       (.push-prog-frame self)
       (.push-prog-env self)
       (define dot-var-adr  #f)
+      (define arity nil)
+      (define req-param-count 0)
       (do-each (var parameters)
         (unless (symbol? var)
           (.error self "Can't use non symbol in lambda parameter list" var))
@@ -401,10 +387,16 @@
           (begin
             (if (eqv? var '.)
               (set! dot-var-adr #t)
-              (.define-var self var [var: (@0 (.new-pos self))])))))
-      (when dot-var-adr
-        (unless (list? dot-var-adr)
-          (.error self "'.' must follow a symbol" parameters)))
+              (begin
+                (set! req-param-count (+ 1 req-param-count))
+                (.define-var self var [var: (@0 (.new-pos self))]))))))
+      (if dot-var-adr
+        (begin
+          (unless (list? dot-var-adr)
+            (.error self "'.' must follow a symbol" parameters))
+          (when (> req-param-count 0)
+            (set! arity (- 0 req-param-count))))
+        (set! arity req-param-count))
       (let ((lambda-code-pad (.make-code-pad self)))
         (when dot-var-adr
           (.op-pack-va lambda-code-pad dot-var-adr dot-var-adr))
@@ -418,7 +410,7 @@
                 code-pad
                 ret-adr
                 (.store-static-data self new-prog)
-                (.store-static-data self is-coroutine))
+                (.store-static-data self [is-coroutine arity]))
               ret-adr)))))
 
     ($define! self (compile-one-branch-condition
@@ -434,7 +426,7 @@
              (cond-adr       (.compile self condition-atom code-pad))
              (cond-ret-adr   (.new-tmp-pos self)))
          (.op-load-nil     code-pad cond-ret-adr)
-         (.op-mov          branch-pad cond-ret-adr branch-ret-adr)
+         (.op-mov          branch-pad cond-ret-adr branch-ret-adr nil)
          (if negated?
            (.op-brif  code-pad (.count-ops branch-pad) cond-adr)
            (.op-brnif code-pad (.count-ops branch-pad) cond-adr))
@@ -457,18 +449,18 @@
       (with-cleanup
         (.push-debug-info self atom)
         (.pop-debug-info self)
-        (type-dispatch atom compile-expr-dispatch-map self code-pad)))
+        (type-dispatch atom compile-expr-dispatch-map self code-pad nil)))
 
     ($define! self (compile-quote atom code-pad)
       (with-cleanup
         (.push-debug-info self atom)
         (.pop-debug-info self)
-        (type-dispatch atom compile-quote-dispatch-map self code-pad)))
+        (type-dispatch atom compile-quote-dispatch-map self code-pad nil)))
 
     ($define! self (push-root-env root-env)
-      (push! ($env-stack: self) (@0 root-env))
+      (push! (env-stack: self) (@0 root-env))
       (define max-pos
-       (find-max-number-in-values -1 (@0 root-env) (lambda (k v)
+       (find-max-number-in-values -1 (@0 root-env) (lambda (k v m)
                                                      (if (eqv? var: (@0 v))
                                                        (@1 v)
                                                        -1))))
@@ -516,8 +508,11 @@
                          (lambda (a)
                            (push! recycle-addrs a)
                            a))
-                       (.op-mov code-pad out-adr (add-recylcle
-                                                   (.compile self (@1 atom) code-pad)))
+                       (.op-mov code-pad
+                                out-adr
+                                (add-recylcle
+                                  (.compile self (@1 atom) code-pad))
+                                nil)
                        (do-each (v (drop atom 2))
                          (op-func code-pad
                                   out-adr
@@ -532,27 +527,32 @@
       (make-bin-op-syntax
        '+
        (lambda (code-pad out-adr a-adr b-adr)
-         (.op-add code-pad out-adr a-adr b-adr)))
+         (.op-add code-pad out-adr a-adr b-adr))
+       #f)
 
       (make-bin-op-syntax
        '-
        (lambda (code-pad out-adr a-adr b-adr)
-         (.op-sub code-pad out-adr a-adr b-adr)))
+         (.op-sub code-pad out-adr a-adr b-adr))
+       #f)
 
       (make-bin-op-syntax
        '*
        (lambda (code-pad out-adr a-adr b-adr)
-         (.op-mul code-pad out-adr a-adr b-adr)))
+         (.op-mul code-pad out-adr a-adr b-adr))
+       #f)
 
       (make-bin-op-syntax
        '/
        (lambda (code-pad out-adr a-adr b-adr)
-         (.op-div code-pad out-adr a-adr b-adr)))
+         (.op-div code-pad out-adr a-adr b-adr))
+       #f)
 
       (make-bin-op-syntax
        '%
        (lambda (code-pad out-adr a-adr b-adr)
-         (.op-mod code-pad out-adr a-adr b-adr)))
+         (.op-mod code-pad out-adr a-adr b-adr))
+       #f)
 
       (make-bin-op-syntax
        '=
@@ -657,11 +657,11 @@
                    (.push-define-name-info self (str "(let " (@0 bind-pair) ")"))
                    (.pop-define-name-info self)
                    (let ((val-adr (.compile self (@1 bind-pair) code-pad)))
-                     (.op-mov code-pad var-adr val-adr)
+                     (.op-mov code-pad var-adr val-adr nil)
                      (.recycle-pos self val-adr)))))
              (let ((ret-adr (.compile-block self (drop atom 2) code-pad)))
                (begin
-                 (.op-mov code-pad out-adr ret-adr)
+                 (.op-mov code-pad out-adr ret-adr nil)
                  (.recycle-pos self ret-adr))
                (.pop-env self)
                out-adr)))))
@@ -679,7 +679,7 @@
            (let ((var-adr [(@1 (@1 var)) (@0 var)])
                  (val-adr (.compile self (@2 atom) code-pad)))
              (when (eqv? (@0 (@1 var)) var:)
-               (.op-mov code-pad var-adr val-adr)
+               (.op-mov code-pad var-adr val-adr nil)
                (.recycle-pos self val-adr)
                var-adr)))))
       ;----------------------------------------------------------------------------
@@ -706,7 +706,7 @@
                  (begin (.pop-debug-info self)
                         (.pop-define-name-info self))
                  (let ((val-adr (.compile self (@2 atom) code-pad)))
-                   (.op-mov code-pad bind-adr val-adr)
+                   (.op-mov code-pad bind-adr val-adr nil)
                    (.recycle-pos self val-adr)))
                bind-adr))
            (if (list? (@1 atom))
@@ -728,8 +728,9 @@
                    (let ((lambda-adr (.compile-lambda self
                                                       lambda-params
                                                       (drop atom 2)
-                                                      code-pad)))
-                     (.op-mov code-pad bind-adr lambda-adr)
+                                                      code-pad
+                                                      #f)))
+                     (.op-mov code-pad bind-adr lambda-adr nil)
                      (.recycle-pos self lambda-adr)))
                  bind-adr))
              (.error self "Can only define symbols as variable" atom)))))
@@ -751,7 +752,8 @@
                              self
                              (drop (@2 atom) 1)
                              (drop atom 3)
-                             code-pad)))
+                             code-pad
+                             #f)))
            (.compile-set-val self
                              (@1 atom)
                              method-sym
@@ -791,8 +793,8 @@
                  (true-ret-adr  (.compile self (@2 atom) true-pad))
                  (false-ret-adr (.compile self (@3 atom) false-pad))
                  (cond-ret-adr  (.new-tmp-pos self)))
-             (.op-mov true-pad  cond-ret-adr true-ret-adr)
-             (.op-mov false-pad cond-ret-adr false-ret-adr)
+             (.op-mov true-pad  cond-ret-adr true-ret-adr nil)
+             (.op-mov false-pad cond-ret-adr false-ret-adr nil)
              (.op-brnif               code-pad (+ 1 (.count-ops true-pad)) cond-adr)
              (.append-code-pad        code-pad true-pad)
              (.op-br                  code-pad (.count-ops false-pad))
@@ -850,7 +852,7 @@
                (iter-adr      (.new-pos self))
                (body-pad      (.make-code-pad self)))
            (.define-var self iter-name [var: (@0 iter-adr)])
-           (.op-mov code-pad iter-adr start-val-adr)
+           (.op-mov code-pad iter-adr start-val-adr nil)
            (define body-ret-adr
                    (.compile-block self (drop atom 2) body-pad))
            ; XXX: iter-adr is implicitly passed with cond-res-adr, as the
@@ -862,7 +864,7 @@
            (.op-brnif  code-pad
                        (- 0 (+ 2 (.count-ops body-pad)))
                        cond-res-adr)
-           (.op-mov    code-pad for-ret-adr body-ret-adr)
+           (.op-mov    code-pad for-ret-adr body-ret-adr nil)
            ; cleanup:
            (.pop-env self)
            for-ret-adr)))
@@ -916,34 +918,34 @@
          (.compile-quote self (@1 atom) code-pad)))
       ;----------------------------------------------------------------------------
 
-      (set-env-syntax new-env '$
-       (lambda (atom self code-pad)
-         (unless (eqv? (length atom) 3)
-           (.error self "'$' needs exactly 2 arguments" atom))
-         (.compile-get self
-                       (@2 atom)
-                       (@1 atom)
-                       (not
-                        (or (symbol?  (@1 atom))
-                            (keyword? (@1 atom))
-                            (string?  (@1 atom))))
-                       code-pad)))
-      ;----------------------------------------------------------------------------
-
-      (set-env-syntax new-env '$!
-       (lambda (atom self code-pad)
-         (unless (eqv? (length atom) 4)
-           (.error self "'$!' needs exactly 2 arguments" atom))
-         (.compile-set self
-                       (@2 atom)
-                       (@1 atom)
-                       (not
-                        (or (symbol?  (@1 atom))
-                            (keyword? (@1 atom))
-                            (string?  (@1 atom))))
-                       (@3 atom)
-                       code-pad)))
-      ;----------------------------------------------------------------------------
+;      (set-env-syntax new-env '$
+;       (lambda (atom self code-pad)
+;         (unless (eqv? (length atom) 3)
+;           (.error self "'$' needs exactly 2 arguments" atom))
+;         (.compile-get self
+;                       (@2 atom)
+;                       (@1 atom)
+;                       (not
+;                        (or (symbol?  (@1 atom))
+;                            (keyword? (@1 atom))
+;                            (string?  (@1 atom))))
+;                       code-pad)))
+;      ;----------------------------------------------------------------------------
+;
+;      (set-env-syntax new-env '$!
+;       (lambda (atom self code-pad)
+;         (unless (eqv? (length atom) 4)
+;           (.error self "'$!' needs exactly 2 arguments" atom))
+;         (.compile-set self
+;                       (@2 atom)
+;                       (@1 atom)
+;                       (not
+;                        (or (symbol?  (@1 atom))
+;                            (keyword? (@1 atom))
+;                            (string?  (@1 atom))))
+;                       (@3 atom)
+;                       code-pad)))
+;      ;----------------------------------------------------------------------------
 
       (set-env-syntax-prim new-env '@
        (lambda (atom self code-pad)
@@ -1019,7 +1021,7 @@
            (define body-op-count (.count-ops body-pad))
            (.op-br  code-pad (+ 2 body-op-count))
            (.append-code-pad code-pad body-pad)
-           (.op-mov code-pad ret-adr body-ret-adr)
+           (.op-mov code-pad ret-adr body-ret-adr nil)
            (.op-next  code-pad ok-adr val-adr iter-adr)
            (when with-key?
              (.op-ikey code-pad key-adr iter-adr))
@@ -1036,6 +1038,8 @@
 ;----------------------------------------------------------------------------
 
 (lambda (name data debug-info-unused only-compile root-env)
+  (if (not (list? data))
+    (set! data [data]))
   (let ((compiler (make-prog-frame)))
     (hook-compiler-methods compiler)
 ;    (displayln PROG-IN: name )
@@ -1067,7 +1071,7 @@
 ;      (.op-dump-env-stack code-pad)
       (.op-set-return code-pad ret-adr)
       (.recycle-pos compiler ret-adr)
-;      (displayln PAD: ($pad: compiler))
+;      (displayln PAD: (pad: compiler))
       (let ((prog (.to-vm-prog compiler code-pad)))
 ;        (displayln prog)
         (if only-compile

@@ -313,6 +313,8 @@ class VM
 
         void set_trace(bool t) { m_trace = t; }
 
+        void report_arity_error(Atom &arity, size_t argc);
+
         BukaLISPException &add_stack_trace_error(BukaLISPException &e)
         {
             Atom info = get_current_debug_info();

@@ -1,0 +1,283 @@
+(include compiler2)
+
+(define s1-transform
+ (lambda (val)
+   (let ((root-env (spawn-root-env)))
+     (stage1-transformator
+      val
+      {env:         root-env
+       include-dir: "bukalisplib"}
+      {root-env:    root-env
+       var-counter: 0}))))
+
+;
+;(stage1-transformator
+; '(begin (define x x)
+;         (define (f a b) (set! a 10) a)
+;         10
+;         x
+;         (+ 1 2)
+;         (when (= 1 2) 20))
+; {env: root-env}
+; { root-env: root-env var-counter: 0 })
+
+(define T
+  (lambda (code expected)
+    (let ((r (s1-transform code)))
+      (if (eqv? (write-str r) (write-str expected))
+        (displayln (str "OK - " code))
+        (error (str "Test failed: " code ", returned:\n" (pp-str r) "\n!=\n" (pp-str expected)))))))
+
+;----------------------------------------------------------------------------
+
+
+;(T '(lambda ()
+;      (let ((x 20) (y 2))
+;        (lambda (b) x)
+;        y))
+;  '(#1#lambda (nil () nil nil)
+;    (#1#let (x_0 y_1)
+;     (#1#create-upv let: (x_0)
+;      (#1#begin
+;       (#1#set! (var: x_0 x) (#1#data 20))
+;       (#1#set! (var: y_1 y) (#1#data 2))
+;       (#1#begin
+;        (#1#lambda (nil (b_2) nil (x_0))
+;         (#1#var x_0 x))
+;        (#1#var y_1 y)))))))
+;(error X:)
+;----------------------------------------------------------------------------
+
+(T '1       '(#1#data 1))
+(T '"foo" '(#1#data "foo"))
+(T ''foo  '(#1#data foo))
+(T 'foo:  '(#1#data foo:))
+
+(T '(map? 1)
+   '(#1#apply
+     (#1#prim (22 map?))
+     ((#1#data 1))))
+(T '(let ((a +)) (a 1 2))
+    '(#1#let (a_0)
+      (#1#begin
+       (#1#set! (var: a_0 a) (#1#prim (0 +)))
+       (#1#apply (#1#var a_0 a)
+        ((#1#data 1) (#1#data 2))))))
+(T '(begin
+      (define x 10)
+      x)
+   '(#1#begin
+     (#1#define x_0 (#1#data 10))
+     (#1#var x_0 x)))
+(T '(begin
+      (define x 10)
+      (set! x 20)
+      x)
+   '(#1#begin
+     (#1#define x_0 (#1#data 10))
+     (#1#set! (#1#var x_0 x) (#1#data 20))
+     (#1#var x_0 x)))
+(T '(begin
+      (define (x a b) b)
+      x)
+    '(#1#begin
+      (#1#define x_0 (#1#lambda (x (a_1 b_2) nil nil)
+                     (#1#var b_2 b)))
+      (#1#var x_0 x)))
+(T '(if #t 1 2)
+   '(#1#if
+     (#1#data #true)
+     (#1#data 1)
+     (#1#data 2)))
+(T '(if #t 1)
+   '(#1#if (#1#data #true) (#1#data 1) (#1#nil)))
+(T '(when #f 22)
+   '(#1#if (#1#data #false) (#1#data 22) (#1#nil)))
+(T '(when #f 22 33)
+   '(#1#if (#1#data #false) (#1#begin (#1#data 22) (#1#data 33)) (#1#nil)))
+(T '(unless #f 33)
+   '(#1#if (#1#not (#1#data #false)) (#1#data 33) (#1#nil)))
+
+; Test lambda expressions:
+(T '(lambda (x) (lambda (y) (+ x y)))
+   '(#1#lambda (nil (x_0) nil nil)
+     (#1#create-upv lambda: (x_0)
+      (#1#lambda (nil (y_1) nil (x_0))
+       (#1#add (#1#var x_0 x) (#1#var y_1 y))))))
+(T '(lambda (x) (lambda (v) (lambda (y) (+ x y v))))
+   '(#1#lambda (nil (x_0) nil nil)
+     (#1#create-upv lambda: (x_0)
+      (#1#lambda (nil (v_1) nil (x_0))
+       (#1#create-upv lambda: (v_1)
+        (#1#lambda (nil (y_2) nil (x_0 v_1))
+         (#1#add
+          (#1#add (#1#var x_0 x) (#1#var y_2 y)) (#1#var v_1 v))))))))
+(T '(lambda x x)
+   '(#1#lambda (nil () x_0 nil) (#1#var x_0 x)))
+(T '(lambda (. x) x)
+   '(#1#lambda (nil () x_0 nil) (#1#var x_0 x)))
+(T '(lambda (y . x) x)
+   '(#1#lambda (nil (y_0) x_1 nil) (#1#var x_1 x)))
+(T '(lambda (a y . x) x)
+   '(#1#lambda (nil (a_0 y_1) x_2 nil) (#1#var x_2 x)))
+(T '(define (foo . x)
+      x)
+   '(#1#define foo_0 (#1#lambda (foo () x_1 nil) (#1#var x_1 x))))
+
+; Test quoting:
+(T ''1 '(#1#data 1))
+(T ''(1 2 3) '(#1#list (#1#data 1) (#1#data 2) (#1#data 3)))
+(T ''(1 ,(+ 1 2) 3)
+   '(#1#list (#1#data 1)
+     (#1#list (#1#data unquote)
+      (#1#list (#1#data +)
+               (#1#data 1)
+               (#1#data 2)))
+     (#1#data 3)))
+(T ''"foo" '(#1#data "foo"))
+(T ''foo:  '(#1#data foo:))
+(T '(begin 1 (return 2) 2)
+   '(#1#begin (#1#data 1) (#1#return #1#data 2) (#1#data 2)))
+(T '(begin 1 (yield 2) 2)
+   '(#1#begin (#1#data 1) (#1#yield #1#data 2) (#1#data 2)))
+(T '(@1 [1 2])
+   '(#1#get (#1#data 1)
+     (#1#apply (#1#prim (9 list))
+      ((#1#data 1)
+       (#1#data 2)))))
+(T '(@!1 [1 2] x:)
+   '(#1#set field: (#1#data 1)
+     (#1#apply (#1#prim (9 list))
+      ((#1#data 1)
+       (#1#data 2)))
+     (#1#data x:)))
+(T '(let ((x 10)) x)
+   '(#1#let (x_0)
+     (#1#begin
+      (#1#set! (var: x_0 x) (#1#data 10))
+      (#1#var x_0 x))))
+(T '(let ((x 10) (y (+ x 10))) (+ x y))
+  '(#1#let (x_0 y_1)
+    (#1#begin
+     (#1#set! (var: x_0 x) (#1#data 10))
+     (#1#set! (var: y_1 y)
+      (#1#add (#1#var x_0 x)
+       (#1#data 10)))
+     (#1#add (#1#var x_0 x)
+      (#1#var y_1 y)))))
+(T '(include "c2_test_incl.bkl")
+   '(#1#begin
+     (#1#data test-include:)
+     (#1#apply (#1#prim (42 str))
+               ((#1#data x:)
+                (#1#apply (#1#prim (42 str))
+                          ((#1#data f:)
+                           (#1#data y:)))
+                (#1#data "foobar")))))
+
+; Test upvalue calculations:
+(T '(lambda ()
+      (let ((x 20) (y 2))
+        (lambda (b) x)
+        y))
+  '(#1#lambda (nil () nil nil)
+    (#1#let (x_0 y_1)
+     (#1#create-upv let: (x_0)
+      (#1#begin
+       (#1#set! (var: x_0 x) (#1#data 20))
+       (#1#set! (var: y_1 y) (#1#data 2))
+       (#1#begin
+        (#1#lambda (nil (b_2) nil (x_0))
+         (#1#var x_0 x))
+        (#1#var y_1 y)))))))
+
+(T '(lambda (x)
+      (lambda (b)
+        x))
+   '(#1#lambda (nil (x_0) nil nil)
+     (#1#create-upv lambda: (x_0)
+      (#1#lambda (nil (b_1) nil (x_0))
+       (#1#var x_0 x)))))
+
+; Testing error debug info (line numbers):
+(let ((inc-trans (s1-transform '(include "c2_test_incl.bkl"))))
+  #;(displayln (bkl-get-meta (@1 (@2 (@2 inc-trans)))))
+  (when (not (= (@1 (@0 (bkl-get-meta (@1 inc-trans)))) 1))
+    (error "Include file first statement wrong line (c2_test_incl.bkl)"))
+  (when (not (= (@1 (@0 (bkl-get-meta (@2 inc-trans)))) 2))
+    (error "Include file second statement wrong line (c2_test_incl.bkl)"))
+  (when (not (= (@1 (@0 (bkl-get-meta (@1 (@2 (@2 inc-trans)))))) 3))
+    (error "Include deep statement wrong line (c2_test_incl.bkl)")))
+
+; Test macros:
+(T '(let ((k 11))
+      (define-macro (x a b)
+                    ['quote [a b a b]])
+      (x 9 k))
+   '(#1#let (k_0)
+     (#1#begin (#1#set! (var: k_0 k) (#1#data 11))
+      (#1#begin
+       (#1#nil)
+       (#1#list (#1#data 9) (#1#data k) (#1#data 9) (#1#data k))))))
+
+; Test macros:
+(T '(begin
+     (define-macro (x a b)
+      ['+ a b])
+     (x 9 (x 1 2)))
+   '(#1#begin
+     (#1#nil)
+      (#1#add (#1#data 9)
+       (#1#add (#1#data 1) (#1#data 2)))))
+
+; Test primitive optimizations:
+(T '(+ 1 2)      '(#1#add (#1#data 1) (#1#data 2)))
+(T '(+ 1)        '(#1#add (#1#data 0) (#1#data 1)))
+(T '(+ 1 2 3)    '(#1#add (#1#add (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(- 1 2 3)    '(#1#sub (#1#sub (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(- 2)        '(#1#sub (#1#data 0) (#1#data 2)))
+(T '(* 1 2 3)    '(#1#mul (#1#mul (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(* 2)        '(#1#mul (#1#data 1) (#1#data 2)))
+(T '(/ 1 2 3)    '(#1#div (#1#div (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(/ 2)        '(#1#div (#1#data 1) (#1#data 2)))
+(T '(= 1 2 3)    '(#1#eq (#1#eq (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(= 1 2)      '(#1#eq (#1#data 1) (#1#data 2)))
+(T '(< 1 2 3)    '(#1#lt (#1#lt (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(< 1 2)      '(#1#lt (#1#data 1) (#1#data 2)))
+(T '(> 1 2 3)    '(#1#gt (#1#gt (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(> 1 2)      '(#1#gt (#1#data 1) (#1#data 2)))
+(T '(<= 1 2 3)   '(#1#le (#1#le (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(<= 1 2)     '(#1#le (#1#data 1) (#1#data 2)))
+(T '(>= 1 2 3)   '(#1#ge (#1#ge (#1#data 1) (#1#data 2)) (#1#data 3)))
+(T '(>= 1 2)     '(#1#ge (#1#data 1) (#1#data 2)))
+
+; Test result from list as function for apply:
+(T '((let ((x @)) x) x: { x: 10 })
+   '(#1#apply (#1#let (x_0)
+               (#1#begin (#1#set! (var: x_0 x) (#1#prim (24 @)))
+                (#1#var x_0 x)))
+     ((#1#data x:) (#1#map ((#1#data x:) (#1#data 10))))))
+
+; Test map:
+(T '{} '(#1#map))
+(T '{1 1} '(#1#map ((#1#data 1) (#1#data 1))))
+
+; Test get keyword from map
+(T '(@x: { x: 10 }) '(#1#get (#1#data x:) (#1#map ((#1#data x:) (#1#data 10)))))
+(T '(x: { x: 10 })  '(#1#get (#1#data x:) (#1#map ((#1#data x:) (#1#data 10)))))
+
+; Test method definition
+(T '($define! {} (foo) 0)
+   '(#1#set method: (#1#data foo)
+     (#1#map)
+     (#1#lambda (foo () nil nil) (#1#data 0))))
+(T '($define! {} (foo a b c) (+ a b c))
+   '(#1#set method: (#1#data foo)
+     (#1#map)
+     (#1#lambda (foo (a_0 b_1 c_2) nil nil)
+      (#1#add (#1#add (#1#var a_0 a) (#1#var b_1 b))
+       (#1#var c_2 c)))))
+
+;(displayln (bkl-gc-statistics))
+(displayln "ALL OK")
+::

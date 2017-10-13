@@ -252,7 +252,9 @@ struct Atom
              :                   m_d.d; }
 
     std::string to_display_str() const;
-    std::string to_write_str() const;
+    std::string to_write_str(bool pretty = false) const;
+    size_t size() const;
+    bool is_simple() const;
 
     void set_int(int64_t i)
     {

@@ -1,6 +1,6 @@
 (define VM-EVAL
-  (lambda (code expected env)
-    (when (nil? env) (set! env [{} []]))
+  (lambda (code expected)
+    (define env [{} []])
     (invoke-compiler [code] code #f env)))
 
 (VM-EVAL '(begin

@@ -8,12 +8,12 @@
       (error (str "Test failed: " what ", got: "
                   ret " != " expected " (expected)")))))
 
-(define test ($test *M*))
+(define test (@'test *M*))
 
 (define *id (lambda (val)
-  (lambda () ((@2 ($identity test)) val))))
+  (lambda () ((@2 (@'identity test)) val))))
 
-(T (lambda () ((@2 ($isInited test))))
+(T (lambda () ((@2 (@'isInited test))))
    #t "module initialized");
 
 (T (*id x:)             x:                      "identity keyword")
@@ -30,16 +30,16 @@
 (T (*id 12345678987654321) 12345678987654321    "identity int 64bit")
 (T (*id if)             "#<syntax:if>"          "identity special value (syntax)")
 
-(T (lambda () (str ((@2 ($getCPtr test)))))
+(T (lambda () (str ((@2 (@'getCPtr test)))))
                         "#<cpointer:12356789>"  "get c pointer")
 
-(define VVPtr ((@2 ($getVVPtr test))))
+(define VVPtr ((@2 (@'getVVPtr test))))
 (T (lambda ()
      (str ((*id VVPtr))))
                         "#<userdata:vv:CCC>"    "get vv pointer")
 
 (T (lambda()
-     ((@2 ($call test))
+     ((@2 (@'call test))
       (lambda (a b) [a b])
       12 42))
    [12 42]
@@ -47,14 +47,14 @@
 
 (T (lambda()
      (for (i 1 10000)
-       ((@2 ($call test))
+       ((@2 (@'call test))
         (lambda (a b) [a b])
         12 42)))
    [12 42]
    "calling function from module (lots of)")
 
 (T (lambda()
-     ((@2 ($call test))
+     ((@2 (@'call test))
       +
       12 42))
    54

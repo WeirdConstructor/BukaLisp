@@ -1,6 +1,6 @@
 (define root-env [{} []])
 
-(define t
+(define t-env
   (lambda (code expected env)
     (when (nil? env) (set! env [{} []]))
     (let ((r (invoke-compiler code code #f env)))
@@ -8,13 +8,22 @@
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
-(define T
+(define t
+  (lambda (code expected)
+    (t-env code expected nil)))
+
+
+(define T-env
   (lambda (code expected env)
     (when (nil? env) (set! env [{} []]))
     (let ((r (invoke-compiler [code] code #f env)))
       (if (eqv? (write-str r) (write-str expected))
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
+
+(define T
+  (lambda (code expected)
+    (T-env code expected nil)))
 
 ;----------------------------------------------------------------------------
 
@@ -39,7 +48,7 @@
 ;; test externally given environment executed inside VM:
 ;(let ((my-env []))
 ;  (T '(begin 1) 1 my-env)
-;  ($!l (@0 my-env) [var: (length (@1 my-env))])
+;  (@!l (@0 my-env) [var: (length (@1 my-env))])
 ;  (push! (@1 my-env) 12)
 ;  (displayln my-env)
 ;  (T '(begin
@@ -51,7 +60,7 @@
 ;(let ((my-env [])
 ;      (func (invoke-compiler ['(displayln foo-out: (+ 10 20))] "test-code x" #t root-env)))
 ;  (T '(begin 1) 1 my-env)
-;  ($!xxx (@0 my-env) [var: (length (@1 my-env))])
+;  (@!xxx (@0 my-env) [var: (length (@1 my-env))])
 ;  (push! (@1 my-env) func)
 ;  (T '(begin
 ;		(define k 10)
@@ -67,7 +76,7 @@
 
 (T '((lambda (x y)
        (+ 1 ((lambda () x))))
-     5)
+     5 nil)
    6)
 
 (T '((lambda (x)
@@ -188,6 +197,7 @@
 (T '(not '()) #false)
 (T '(not #f) #true)
 
+; Testing predicates
 (T '(symbol? 'a) #true)
 (T '(symbol? a:) #false)
 (T '(symbol? 1) #false)
@@ -208,6 +218,18 @@
 (T '(inexact? nil) #false)
 (T '(inexact? 123) #false)
 (T '(inexact? 1.0) #true)
+
+(T '(number? 'x)            #false)
+(T '(number? x:)            #false)
+(T '(number? [1 2 3])       #false)
+(T '(number? { a: 1 b: 2 }) #false)
+(T '(number? [])            #false)
+(T '(number? {})            #false)
+(T '(number? #true)         #false)
+(T '(number? #false)        #false)
+(T '(number? nil)           #false)
+(T '(number? 1)             #true)
+(T '(number? "abc")         #false)
 
 (T '(string? 1) #false)
 (T '(string? a:) #false)
@@ -233,6 +255,90 @@
 (T '(procedure? (lambda (x) x)) #true)
 ;(T '(procedure? if) #false)
 (T '(procedure? '()) #false)
+
+(T '(symbol? 'x)             '#true)
+(T '(symbol? x:)             '#false)
+(T '(symbol? [1 2 3])        '#false)
+(T '(symbol? { a: 1 b: 2 })  '#false)
+(T '(symbol? [])             '#false)
+(T '(symbol? {})             '#false)
+(T '(symbol? #true)          '#false)
+(T '(symbol? #false)         '#false)
+(T '(symbol? nil)            '#false)
+(T '(symbol? 1)              '#false)
+(T '(symbol? "abc")          '#false)
+
+(T '(keyword? 'x)            '#false)
+(T '(keyword? x:)            '#true)
+(T '(keyword? [1 2 3])       '#false)
+(T '(keyword? { a: 1 b: 2 }) '#false)
+(T '(keyword? {})            '#false)
+(T '(keyword? [])            '#false)
+(T '(keyword? #true)         '#false)
+(T '(keyword? #false)        '#false)
+(T '(keyword? nil)           '#false)
+(T '(keyword? 1)             '#false)
+(T '(keyword? "abc")         '#false)
+
+(T '(list? 'x)               '#false)
+(T '(list? x:)               '#false)
+(T '(list? [1 2 3])          '#true)
+(T '(list? { a: 1 b: 2 })    '#false)
+(T '(list? [])               '#true)
+(T '(list? {})               '#false)
+(T '(list? #true)            '#false)
+(T '(list? #false)           '#false)
+(T '(list? nil)              '#false)
+(T '(list? 1)                '#false)
+(T '(list? "abc")            '#false)
+
+(T '(map? 'x)                '#false)
+(T '(map? x:)                '#false)
+(T '(map? [1 2 3])           '#false)
+(T '(map? { a: 1 b: 2 })     '#true)
+(T '(map? [])                '#false)
+(T '(map? {})                '#true)
+(T '(map? #true)             '#false)
+(T '(map? #false)            '#false)
+(T '(map? nil)               '#false)
+(T '(map? 1)                 '#false)
+(T '(map? "abc")             '#false)
+
+(T '(string? 'x)             '#false)
+(T '(string? x:)             '#false)
+(T '(string? [1 2 3])        '#false)
+(T '(string? { a: 1 b: 2 })  '#false)
+(T '(string? [])             '#false)
+(T '(string? {})             '#false)
+(T '(string? #true)          '#false)
+(T '(string? #false)         '#false)
+(T '(string? nil)            '#false)
+(T '(string? 1)              '#false)
+(T '(string? "abc")          '#true)
+
+(T '(boolean? 'x)            '#false)
+(T '(boolean? x:)            '#false)
+(T '(boolean? [1 2 3])       '#false)
+(T '(boolean? { a: 1 b: 2 }) '#false)
+(T '(boolean? [])            '#false)
+(T '(boolean? {})            '#false)
+(T '(boolean? #true)         '#true)
+(T '(boolean? #false)        '#true)
+(T '(boolean? nil)           '#false)
+(T '(boolean? 1)             '#false)
+(T '(boolean? "abc")         '#false)
+
+(T '(nil? 'x)                '#false)
+(T '(nil? x:)                '#false)
+(T '(nil? [1 2 3])           '#false)
+(T '(nil? { a: 1 b: 2 })     '#false)
+(T '(nil? [])                '#false)
+(T '(nil? {})                '#false)
+(T '(nil? #true)             '#false)
+(T '(nil? #false)            '#false)
+(T '(nil? nil)               '#true)
+(T '(nil? 1)                 '#false)
+(T '(nil? "abc")             '#false)
 
 ; Test (type ...):
 (T '(let ((m { 'nil 1234 }))
@@ -320,7 +426,7 @@
 
 (T '((lambda (x)   (+ x 1)) 1.5) 2.5)
 (T '((lambda (x y) (+ (* x y) 1)) 1.5 4) 7.0)
-(T '((lambda (x y) (+ (* x y) 1)) 1.5 4 e: r: g:) 7.0)
+(T '((lambda (x y _ _ _) (+ (* x y) 1)) 1.5 4 e: r: g:) 7.0)
 (T '((lambda (x)
        ((lambda (y) (+ x y))
         10))
@@ -673,7 +779,7 @@
 (T '((lambda (. x) x) 1 2 3)        [1 2 3])
 (T '((lambda (a . x) [a x]) 1 2 3)  [1 [2 3]])
 (T '((lambda (a . x) [a x]) 1)      [1 []])
-(T '((lambda (a . x) [a x]))        [nil []])
+(T '((lambda (a . x) [a x]) nil)    [nil []])
 (T '(begin
       (define (x a . v) [a v])
       (x 1 2 3))
@@ -686,31 +792,31 @@
       (x 1 2 3))
    [1 [2 3]])
 
-(t "(define x 13.3)" 13.3 root-env)
-(t "x"               13.3 root-env)
-(t "(define y x)"    13.3 root-env)
-(t "(+ x y)"         26.6 root-env)
+(t-env "(define x 13.3)" 13.3 root-env)
+(t-env "x"               13.3 root-env)
+(t-env "(define y x)"    13.3 root-env)
+(t-env "(+ x y)"         26.6 root-env)
 
 ; test externally given environment executed inside VM:
 (let ((my-env []))
-  (T '(begin 1) 1 my-env)
-  ($!l (@0 my-env) [var: (length (@1 my-env))])
+  (T-env '(begin 1) 1 my-env)
+  (@!'l (@0 my-env) [var: (length (@1 my-env))])
   (push! (@1 my-env) 12)
-  (T '(begin
-        (define k 10)
-        ((lambda () l)))
+  (T-env '(begin
+            (define k 10)
+            ((lambda () l)))
      12 my-env))
 
 ; test recursive calling into VM:
 (let ((my-env [])
       (func (invoke-compiler ['(displayln foo-out: (+ 10 20))] "test-code x" #t root-env)))
-  (T '(begin 1) 1 my-env)
-  ($!xxx (@0 my-env) [var: (length (@1 my-env))])
+  (T-env '(begin 1) 1 my-env)
+  (@!'xxx (@0 my-env) [var: (length (@1 my-env))])
   (push! (@1 my-env) func)
-  (T '(begin
-		(define k 10)
-		((lambda () (run-vm-prog xxx [])))
-		(+ 12.345 k))
+  (T-env '(begin
+            (define k 10)
+            ((lambda () (run-vm-prog xxx [])))
+            (+ 12.345 k))
 	 22.345
 	 my-env))
 
@@ -889,8 +995,8 @@
 
 (T '(let ((x 2) (v [1 2 3])) (@x v)) 3)
 
-(T '($x  {'x 10}) 10)
-(T '(let ((m {'x 10})) ($!x m 12) m) {'x 12})
+(T '(@'x {'x 10}) 10)
+(T '(let ((m {'x 10})) (@!'x m 12) m) {'x 12})
 
 ; Test eval
 (T '(eval 1)                    1)
@@ -933,23 +1039,23 @@
 ; Test $define!
 (T '(let ((o {x: 0}))
       ($define! o (foo) 9)
-      (($foo o)))
+      ((@'foo o)))
    9)
 (T '(let ((o {x: 0}))
       ($define! o (foo) 9)
-      [(($foo o))])
+      [((@'foo o))])
    [9])
 (T '(let ((o {x: 0}))
       ($define! o (foo a b c)
         9
-        ($!x: o (+ 1 ($x: o)))
-        (* a (+ ($x: o)
+        (@!x: o (+ 1 (x: o)))
+        (* a (+ (x: o)
                 b
                 (* 2 c))))
-      [(($foo o) 1 2 3)
-       (($foo o) 4 5 6)
-       (($foo o) 8 8 8)
-       (($foo o) 9 9 9)])
+      [((@'foo o) 1 2 3)
+       ((@'foo o) 4 5 6)
+       ((@'foo o) 8 8 8)
+       ((@'foo o) 9 9 9)])
    [9 76 216 279])
 
 ; Test return:
@@ -987,6 +1093,19 @@
 (T '(let ((x empty?)) (x (list 1))) #false)
 (T '(let ((x empty?)) (x {}))       #true)
 (T '(let ((x empty?)) (x {a: 1}))   #false)
+
+; Test (size)
+(T '(size nil)      0)
+(T '(size [])       0)
+(T '(size {})       0)
+(T '(size {a: 1})   2)
+(T '(size [1])      1)
+(T '(size [[]])     1)
+(T '(size fooo:)    4)
+(T '(size "fooo")   4)
+(T '(size 'fooo)    4)
+(T '(size [1 2 3 4 [5 6 7 8] 9]) 10)
+(T '(size [1 2 3 4 {a: 5 b: 6 c: 7 d: 8} 9]) 14)
 
 ; Test return anywhere:
 (T '(let ((j (return (+ 9 10))))) 19) ; XXX: Should let be allowed to be empty?

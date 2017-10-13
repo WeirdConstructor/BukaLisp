@@ -1,0 +1,7 @@
+(define map
+  (lambda (fn data)
+    (define out [])
+    (do-each (v data)
+      (push! out (fn v)))
+    out))
+

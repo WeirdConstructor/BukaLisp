@@ -1,0 +1,5 @@
+(begin
+  (define x 0)
+  (define (inc a) (set! x (+ x a)))
+  (for (i 1 10000000)
+    (inc 1)))

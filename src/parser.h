@@ -268,6 +268,17 @@ class Parser
                         case ')': log_error("unexpected ')'", t); return false;
                         case ']': log_error("unexpected ']'", t); return false;
                         case '}': log_error("unexpected '}'", t); return false;
+                        case ',':
+                        {
+                            m_tok.next();
+                            debug_token(t);
+                            M_BUILDER(start_list());
+                            M_BUILDER(atom_symbol("unquote"));
+                            bool b = parse();
+                            debug_token(t);
+                            M_BUILDER(end_list());
+                            return b;
+                        }
                         case '\'':
                         {
                             m_tok.next();

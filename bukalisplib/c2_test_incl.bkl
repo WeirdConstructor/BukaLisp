@@ -1,0 +1,4 @@
+test-include:
+(str x:
+     (str f: y:)
+     "foobar")

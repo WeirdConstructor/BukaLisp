@@ -763,17 +763,17 @@ void test_ieval_index_procs()
     TEST_EVAL("(@2 [1 2 3])",       "3");
     TEST_EVAL("(@3 [1 2 3])",       "nil");
 
-    TEST_EVAL("($xxx:     {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
-    TEST_EVAL("($\"xxx\"  {a: 123 'b 444 \"xxx\" 3.4})",               "3.4");
-    TEST_EVAL("($'a       {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
-    TEST_EVAL("($a:       {a: 123 'b 444 \"xxx\" 3.4})",               "123");
-    TEST_EVAL("($\"b\"    {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
-    TEST_EVAL("($'b       {a: 123 'b 444 \"xxx\" 3.4})",               "444");
-    TEST_EVAL("(let ((key xxx:)) ($((lambda () key)) {a: 123 'b 444 xxx: 3.4}))", "3.4");
+    TEST_EVAL("(xxx:      {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
+    TEST_EVAL("(@\"xxx\"  {a: 123 'b 444 \"xxx\" 3.4})",               "3.4");
+    TEST_EVAL("(@'a       {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
+    TEST_EVAL("(@a:       {a: 123 'b 444 \"xxx\" 3.4})",               "123");
+    TEST_EVAL("(@\"b\"    {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
+    TEST_EVAL("(@'b       {a: 123 'b 444 \"xxx\" 3.4})",               "444");
+    TEST_EVAL("(let ((key xxx:)) (@((lambda () key)) {a: 123 'b 444 xxx: 3.4}))", "3.4");
     TEST_EVAL("(let ((key xxx:)) (@key               {a: 123 'b 444 xxx: 3.4}))", "3.4");
 
-    TEST_EVAL("(let ((m {})) ($!x m 123) m)",                               "{x 123}");
-    TEST_EVAL("(let ((m {})) ($!x: m 123) ($!'x m 344) [($x: m) ($'x m) ($x m)])", "(123 344 344)");
+    TEST_EVAL("(let ((m {})) (@!'x m 123) m)",                              "{x 123}");
+    TEST_EVAL("(let ((m {})) (@!x: m 123) (@!'x m 344) [(x: m) (@'x m) (@'x m)])", "(123 344 344)");
 
     TEST_EVAL("(let ((v (list))) (@!0 v 2) (@!10 v 99) v)",
               "(2 nil nil nil nil nil nil nil nil nil 99)");
@@ -831,11 +831,11 @@ void test_ieval_loops()
               "  l)",
               "((0 2) (1 4) (2 6))");
 
-    TEST_EVAL("(let ((l [])) "
-              "  (do-each (k v 123) "
-              "    (push! l [k (* v 2)])) "
-              "  l)",
-              "((nil 246))");
+//    TEST_EVAL("(let ((l [])) "
+//              "  (do-each (k v 123) "
+//              "    (push! l [k (* v 2)])) "
+//              "  l)",
+//              "((nil 246))");
 
     TEST_EVAL("(let ((sum 0)) "
               "  (do-each (k v { a: 123 x: 999 'z 323 }) "

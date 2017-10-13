@@ -1,0 +1,99 @@
+(include util)
+;  (let ((x ...))
+;    (+ x 10))
+;  => (#syntax-+ (#var 0) (#static-data 10))
+;(transform '(+ 1 (* 2 3))
+;   (['+] (lambda (input args transform) ; XXX: Add 'env' argument, for variable lookup!
+;         ($N input (#syntax-+ (transform args)))))
+;   (number? (lambda (input args transform)
+;              (#static-data input))))
+;
+
+(define find-transform-match
+ (lambda (match-struct data leaf-ctx global-ctx)
+  (let ((data-meta-di   (bkl-get-meta data))
+        (T              (lambda (leaf-ctx data)
+                          (let ((r (find-transform-match
+                                    match-struct data leaf-ctx global-ctx)))
+                            (when (nil? r)
+                              (error "No transformation found" data))
+                            r))))
+    (when (nil? (meta-stack: global-ctx))
+      (@!meta-stack: global-ctx []))
+    (when (nil? (@'AM global-ctx))
+      (@!'AM
+       global-ctx
+       (lambda (data)
+         (define debug-info (last (meta-stack: global-ctx)))
+         (when (and (list? data)
+                    #;(or (nil? (bkl-get-meta data))
+                        (nil? (@0 (bkl-get-meta data))))
+                    (not (nil? debug-info)))
+;           (displayln "APPLY META: " debug-info data)
+           (bkl-set-meta data 0 debug-info))
+         data)))
+    (define do-pop? #f)
+    (with-cleanup
+      (unless (nil? data-meta-di)
+        (push! (meta-stack: global-ctx) (@0 data-meta-di))
+        (set! do-pop? #t))
+      (when do-pop? (pop! (meta-stack: global-ctx)))
+      (.AM global-ctx
+        (let ((found? #f)
+              (ret nil)
+              (idx 0))
+;          (displayln META-STACK: (meta-stack: global-ctx) data)
+          (while (and (< idx (length match-struct))
+                      (not found?))
+            (let ((m (@idx match-struct))
+                  (match-templ    (@0 m))
+                  (match-lambda   (@1 m)))
+              (when (nil? match-lambda)
+                (error "No match-lambda in find-transform-match" m))
+              (set! idx (+ idx 1))
+              (case (type match-templ)
+                ((procedure)
+                 (when (match-templ data)
+                   (set! ret (match-lambda leaf-ctx data T global-ctx))
+                   (set! found? #t)))
+                ((symbol)
+                 (when (and (list? data) (eqv? match-templ (@0 data)))
+                   (set! ret (match-lambda leaf-ctx (drop data 1) T global-ctx)
+                   (set! found? #t)))))))
+          (unless found?
+            (error "Couldn't find transformation for " data))
+          ret))))))
+;
+;(define make-transform
+; (lambda (match-struct)
+;   (define transform
+;    (lambda (prog)
+;      (let ((end #f)
+;            (ret nil))
+;        (do-each (v match-struct)
+;          (unless end
+;            (if (symbol? (@0 v))
+;              (if (eqv? (@0 v) (@0 prog))
+;              (if (procedure? (@0 v))
+;                (when ((@0 v) prog)
+;                  (set! end #t)
+;              ))))))))
+
+(define test-transformator
+  (lambda ()
+    (define o
+      (find-transform-match
+        [['+
+          (lambda (ctx args T AM MS GCTX)
+            (append PLUS: [(AM [XX:])] (map (lambda (v) (T ctx v)) args)))]
+         [symbol?
+           (lambda (ctx arg T AM MS GCTX)
+             (@arg ctx))]
+         [exact?
+           (lambda (ctx arg T AM MS GCTX)
+             arg)]]
+        '(+ 1 2 3 x
+            (+ 4 5))
+        {'x 44}))
+    (displayln o)
+    (displayln (bkl-get-meta o))))

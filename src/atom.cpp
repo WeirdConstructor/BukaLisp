@@ -18,9 +18,95 @@ MemoryPool<Atom> g_atom_array_pool;
 
 //---------------------------------------------------------------------------
 
-std::string Atom::to_write_str() const
+size_t count_elements(const Atom &a)
 {
-     return write_atom(*this);
+    std::vector<Atom> to_count;
+    to_count.push_back(a);
+
+    size_t s = 0;
+
+    while (!to_count.empty())
+    {
+        Atom at = to_count.back();
+        to_count.pop_back();
+        switch (at.m_type)
+        {
+            case T_VEC:
+            case T_CLOS:
+                s++;
+                for (size_t i = 0; i < at.m_d.vec->m_len; i++)
+                    to_count.push_back(at.m_d.vec->m_data[i]);
+                break;
+            case T_MAP:
+                s++;
+                for (UnordAtomMap::iterator i = at.m_d.map->m_map.begin();
+                     i != at.m_d.map->m_map.end();
+                     i++)
+                {
+                    to_count.push_back(i->first);
+                    to_count.push_back(i->second);
+                }
+                break;
+            default:
+                s++;
+                break;
+        }
+    }
+
+    s--; // don't count the initial list/map that was pushed
+    return s;
+}
+//---------------------------------------------------------------------------
+
+bool Atom::is_simple() const
+{
+    switch (m_type)
+    {
+        case T_UD:
+        case T_VEC:
+        case T_CLOS:
+        case T_MAP:
+            return false;
+    }
+    return true;
+}
+//---------------------------------------------------------------------------
+
+size_t Atom::size() const
+{
+    switch (m_type)
+    {
+        case T_NIL:     return 0;
+        case T_INT:     return sizeof(m_d.i);
+        case T_BOOL:    return sizeof(m_d.b);
+        case T_DBL:     return sizeof(m_d.d);
+        case T_PRIM:    return sizeof(m_d.func);
+        case T_UD:      return sizeof(m_d.ud);
+        case T_C_PTR:   return sizeof(m_d.ptr);
+
+        case T_VEC:
+        case T_CLOS:
+        case T_MAP:
+            return count_elements(*this);
+
+        case T_SYNTAX:
+        case T_SYM:
+        case T_KW:
+        case T_STR:
+            return m_d.sym->m_str.size();
+
+        default:
+            return 0;
+    }
+}
+//---------------------------------------------------------------------------
+
+std::string Atom::to_write_str(bool pretty) const
+{
+    if (pretty)
+        return write_atom_pp(*this);
+    else
+        return write_atom(*this);
 }
 
 //---------------------------------------------------------------------------
