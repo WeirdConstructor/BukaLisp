@@ -261,6 +261,10 @@
 ; Test map:
 (T '{} '(#1#map))
 (T '{1 1} '(#1#map ((#1#data 1) (#1#data 1))))
+(T ''{1 1} '(#1#map ((#1#data 1) (#1#data 1))))
+(T '{(+ 1 2) 1}  '(#1#map ((#1#add (#1#data 1) (#1#data 2)) (#1#data 1))))
+(T ''{(+ 1 2) 1} '(#1#map ((#1#list (#1#data +) (#1#data 1) (#1#data 2))
+                           (#1#data 1))))
 
 ; Test get keyword from map
 (T '(@x: { x: 10 }) '(#1#get (#1#data x:) (#1#map ((#1#data x:) (#1#data 10)))))

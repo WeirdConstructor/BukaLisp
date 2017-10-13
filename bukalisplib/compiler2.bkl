@@ -31,10 +31,13 @@
        [string?   (lambda (ctx arg T gtx) ['#1#data arg])]
        [map?
          (lambda (ctx arg T gtx)
-           (let ((map-out ['#1#map]))
+           (let ((o-map ['#1#map]))
              (do-each (k v arg)
-               (push! (.S1-T-Q gtx ctx k))
-               (push! (.S1-T-Q gtx ctx v)))))]
+               (push!
+                 o-map
+                 (.AM gtx [(.S1-T-Q gtx ctx k)
+                           (.S1-T-Q gtx ctx v)])))
+             o-map))]
        [list?
          (lambda (ctx arg T gtx)
            (append '#1#list
