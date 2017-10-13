@@ -175,15 +175,13 @@
         (let ((compiled-body (s1-begin T new-ctx (drop args 2))))
           (push! body compiled-body)
           (if (found-upv-in-env? new-env)
-            (begin
-              (do-each (defined-var
-                         (only-in-first
-                           (upvalues-in-env new-env)
-                           let-new-var-names))
-                (push! let-new-var-names defined-var))
-              ['#1#let
+            ['#1#let
+             (append
                let-new-var-names
-               ['#1#create-upv let: (upvalues-in-env new-env) body]])
+               (only-in-first
+                 (upvalues-in-env new-env)
+                 let-new-var-names))
+             ['#1#create-upv let: (upvalues-in-env new-env) body]]
             ['#1#let let-new-var-names body]))))))
 ;----------------------------------------------------------------------------
 
