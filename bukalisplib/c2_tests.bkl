@@ -39,8 +39,8 @@
 ;    (#1#let (x_0 y_1)
 ;     (#1#create-upv let: (x_0)
 ;      (#1#begin
-;       (#1#set! (var: x_0 x) (#1#data 20))
-;       (#1#set! (var: y_1 y) (#1#data 2))
+;       (#1#set! (#1#var x_0 x) (#1#data 20))
+;       (#1#set! (#1#var y_1 y) (#1#data 2))
 ;       (#1#begin
 ;        (#1#lambda (nil (b_2) nil (x_0))
 ;         (#1#var x_0 x))
@@ -60,29 +60,30 @@
 (T '(let ((a +)) (a 1 2))
     '(#1#let (a_0)
       (#1#begin
-       (#1#set! (var: a_0 a) (#1#prim (0 +)))
+       (#1#set! (#1#var a_0 a) (#1#prim (0 +)))
        (#1#apply (#1#var a_0 a)
         ((#1#data 1) (#1#data 2))))))
 (T '(begin
       (define x 10)
       x)
    '(#1#begin
-     (#1#define x_0 (#1#data 10))
+     (#1#set! (#1#var x_0 x) (#1#data 10))
      (#1#var x_0 x)))
 (T '(begin
       (define x 10)
       (set! x 20)
       x)
    '(#1#begin
-     (#1#define x_0 (#1#data 10))
+     (#1#set! (#1#var x_0 x) (#1#data 10))
      (#1#set! (#1#var x_0 x) (#1#data 20))
      (#1#var x_0 x)))
 (T '(begin
       (define (x a b) b)
       x)
     '(#1#begin
-      (#1#define x_0 (#1#lambda (x (a_1 b_2) nil nil)
-                     (#1#var b_2 b)))
+      (#1#set! (#1#var x_0 x)
+       (#1#lambda (x (a_1 b_2) nil nil)
+        (#1#var b_2 b)))
       (#1#var x_0 x)))
 (T '(if #t 1 2)
    '(#1#if
@@ -122,7 +123,8 @@
    '(#1#lambda (nil (a_0 y_1) x_2 nil) (#1#var x_2 x)))
 (T '(define (foo . x)
       x)
-   '(#1#define foo_0 (#1#lambda (foo () x_1 nil) (#1#var x_1 x))))
+   '(#1#set! (#1#var foo_0 foo)
+     (#1#lambda (foo () x_1 nil) (#1#var x_1 x))))
 
 ; Test quoting:
 (T ''1 '(#1#data 1))
@@ -154,13 +156,13 @@
 (T '(let ((x 10)) x)
    '(#1#let (x_0)
      (#1#begin
-      (#1#set! (var: x_0 x) (#1#data 10))
+      (#1#set! (#1#var x_0 x) (#1#data 10))
       (#1#var x_0 x))))
 (T '(let ((x 10) (y (+ x 10))) (+ x y))
   '(#1#let (x_0 y_1)
     (#1#begin
-     (#1#set! (var: x_0 x) (#1#data 10))
-     (#1#set! (var: y_1 y)
+     (#1#set! (#1#var x_0 x) (#1#data 10))
+     (#1#set! (#1#var y_1 y)
       (#1#add (#1#var x_0 x)
        (#1#data 10)))
      (#1#add (#1#var x_0 x)
@@ -177,6 +179,28 @@
 
 ; Test upvalue calculations:
 (T '(lambda ()
+      (define y 20)
+      (lambda () y))
+   '(#1#lambda (nil () nil nil)
+     (#1#let (y_0)
+      (#1#create-upv
+      lambda:
+      (y_0)
+      (#1#begin (#1#set! (#1#var y_0 y) (#1#data 20))
+       (#1#lambda (nil () nil (y_0)) (#1#var y_0 y)))))))
+
+(T '(let ((x 10))
+      (define y 20)
+      (lambda () y))
+   '(#1#let (x_0 y_1)
+     (#1#create-upv
+      let:
+      (y_1)
+      (#1#begin (#1#set! (#1#var x_0 x) (#1#data 10))
+       (#1#begin (#1#set! (#1#var y_1 y) (#1#data 20))
+        (#1#lambda (nil () nil (y_1)) (#1#var y_1 y)))))))
+
+(T '(lambda ()
       (let ((x 20) (y 2))
         (lambda (b) x)
         y))
@@ -184,8 +208,8 @@
     (#1#let (x_0 y_1)
      (#1#create-upv let: (x_0)
       (#1#begin
-       (#1#set! (var: x_0 x) (#1#data 20))
-       (#1#set! (var: y_1 y) (#1#data 2))
+       (#1#set! (#1#var x_0 x) (#1#data 20))
+       (#1#set! (#1#var y_1 y) (#1#data 2))
        (#1#begin
         (#1#lambda (nil (b_2) nil (x_0))
          (#1#var x_0 x))
@@ -215,7 +239,7 @@
                     ['quote [a b a b]])
       (x 9 k))
    '(#1#let (k_0)
-     (#1#begin (#1#set! (var: k_0 k) (#1#data 11))
+     (#1#begin (#1#set! (#1#var k_0 k) (#1#data 11))
       (#1#begin
        (#1#nil)
        (#1#list (#1#data 9) (#1#data k) (#1#data 9) (#1#data k))))))
@@ -254,7 +278,7 @@
 ; Test result from list as function for apply:
 (T '((let ((x @)) x) x: { x: 10 })
    '(#1#apply (#1#let (x_0)
-               (#1#begin (#1#set! (var: x_0 x) (#1#prim (24 @)))
+               (#1#begin (#1#set! (#1#var x_0 x) (#1#prim (24 @)))
                 (#1#var x_0 x)))
      ((#1#data x:) (#1#map ((#1#data x:) (#1#data 10))))))
 

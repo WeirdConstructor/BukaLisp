@@ -76,6 +76,18 @@
     (append '#1#yield (T ctx (@1 args)))))
 ;----------------------------------------------------------------------------
 
+(define only-in-first
+ (lambda (a b)
+   (define out [])
+   (do-each (v a)
+     (define found? #f)
+     (do-each (w b)
+       (if (eqv? v w) (set! found? #t)))
+     (unless found?
+       (push! out v)))
+   out))
+;----------------------------------------------------------------------------
+
 (add-syntax
   'lambda
   (lambda (ctx args T gtx)
@@ -116,10 +128,15 @@
                      [[lambda-name new-args nil    lambda-upv]]
                      [[lambda-name new-args va-arg lambda-upv]]))
           (if (found-upv-in-env? new-env)
-            [['#1#create-upv
-              lambda:
-              (upvalues-in-env new-env)
-              compiled-body]]
+            (let ((defined-upvalues
+                   (only-in-first (upvalues-in-env new-env) new-args))
+                  (upv-body ['#1#create-upv
+                             lambda:
+                             (upvalues-in-env new-env)
+                             compiled-body]))
+              (if (> (length defined-upvalues) 0)
+                [['#1#let defined-upvalues upv-body]]
+                [upv-body]))
             [compiled-body]))))))
 ;----------------------------------------------------------------------------
 
@@ -150,7 +167,7 @@
             (@!bind-name new-env var-t)
             (push! let-new-var-names new-var-name)
             (push! body (.AM gtx ['#1#set!
-                                  var-t
+                                  (append '#1#var (drop var-t 1))
                                   (T (cpassign
                                        new-ctx
                                        lambda-name: bind-name)
@@ -158,9 +175,15 @@
         (let ((compiled-body (s1-begin T new-ctx (drop args 2))))
           (push! body compiled-body)
           (if (found-upv-in-env? new-env)
-            ['#1#let
-             let-new-var-names
-             ['#1#create-upv let: (upvalues-in-env new-env) body]]
+            (begin
+              (do-each (defined-var
+                         (only-in-first
+                           (upvalues-in-env new-env)
+                           let-new-var-names))
+                (push! let-new-var-names defined-var))
+              ['#1#let
+               let-new-var-names
+               ['#1#create-upv let: (upvalues-in-env new-env) body]])
             ['#1#let let-new-var-names body]))))))
 ;----------------------------------------------------------------------------
 
@@ -174,12 +197,11 @@
                     (error (str "'define' needs exactly 2 arguments if "
                                 "first is a symbol")
                            args))
-                  (@!var-name (env: ctx)
-                              [var: new-var-name var-name])
-                  ['#1#define
-                   new-var-name
-                   (T (cpassign ctx lambda-name: var-name)
-                      (@2 args))]))
+                  (let ((var [var: new-var-name var-name]))
+                    (@!var-name (env: ctx) var)
+                    ['#1#set! (append '#1#var (drop var 1))
+                     (T (cpassign ctx lambda-name: var-name)
+                        (@2 args))])))
       ((list) (unless (> (length args) 2)
                 (error (str "'define' for function define needs "
                             "at least 3 arguments")
@@ -191,11 +213,10 @@
                               "of symbols")
                          (@1 args))))
               (let ((func-name    (@0 (@1 args)))
-                    (new-var-name (gtx-gensym gtx func-name)))
-                (@!func-name (env: ctx)
-                             [var: new-var-name func-name])
-                ['#1#define
-                 new-var-name
+                    (new-var-name (gtx-gensym gtx func-name))
+                    (var [var: new-var-name func-name]))
+                (@!func-name (env: ctx) var)
+                ['#1#set! (append '#1#var (drop var 1))
                  (T (cpassign ctx lambda-name: func-name)
                     (.AM gtx
                          (append
@@ -254,16 +275,16 @@
   '$define!
   (lambda (ctx args T gtx)
      (unless (> (length args) 3)
-       (.error self "'$define!' needs at least 3 arguments" atom))
+       (error "'$define!' needs at least 3 arguments" atom))
      (unless (list? (@2 args))
-       (.error self "'$define!' second argument needs to be a list" atom))
+       (error "'$define!' second argument needs to be a list" atom))
      (unless (> (length (@2 args)) 0)
-       (.error self "'$define!' second argument list needs at least 1 symbol" atom))
+       (error "'$define!' second argument list needs at least 1 symbol" atom))
      (do-each (v (@2 args))
        (unless (symbol? v)
-         (.error self
-                 "'$define!' parameter list may only contain symbols"
-                 (@2 args))))
+         (error
+           "'$define!' parameter list may only contain symbols"
+           (@2 args))))
     ['#1#set method:
      ['#1#data (first (@2 args))]
      (T ctx (@1 args))
@@ -274,3 +295,35 @@
             'lambda
             (.AM gtx [(drop (@2 args) 1)])
             (drop args 3))))]))
+
+(add-syntax
+  'do-each
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 2)
+      (error "'do-each' needs at least 2 arguments" atom))
+    (define iter-desc (@1 atom))
+    (unless (list? iter-desc)
+      (error
+        (str "first argument to 'do-each' "
+             "needs to be an iteration description list")
+        atom))
+    (when (< (length iter-desc) 2)
+      (error
+        "iteration description must be at least 2 elements long"
+        iter-desc))
+    (when (> (length iter-desc) 3)
+      (error
+        "iteration description too long (2 or 3 elements allowed)"
+        iter-desc))
+    (unless (symbol? (@0 iter-desc))
+      (error
+        "key bind name of iteration description must be a symbol"
+        iter-desc));
+    (define obj-atom (@1 iter-desc))
+    (when (eqv? (length iter-desc) 3)
+      (define obj-atom (@2 iter-desc))
+      (unless (symbol? (@1 iter-desc))
+        (error "value bind name of iteration description must be a symbol"
+               iter-desc)))
+;    ['#1#iter 
+    ))
