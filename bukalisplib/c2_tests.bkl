@@ -45,7 +45,9 @@
 ;        (#1#lambda (nil (b_2) nil (x_0))
 ;         (#1#var x_0 x))
 ;        (#1#var y_1 y)))))))
-(error X:)
+
+
+;(error X:)
 ;----------------------------------------------------------------------------
 
 (T '1       '(#1#data 1))
@@ -67,24 +69,24 @@
       (define x 10)
       x)
    '(#1#begin
-     (#1#set! (#1#var x_0 x) (#1#data 10))
-     (#1#var x_0 x)))
+     (#1#set! (#1#glob-var x) (#1#data 10))
+     (#1#glob-var x)))
 (T '(begin
       (define x 10)
       (set! x 20)
       x)
    '(#1#begin
-     (#1#set! (#1#var x_0 x) (#1#data 10))
-     (#1#set! (#1#var x_0 x) (#1#data 20))
-     (#1#var x_0 x)))
+     (#1#set! (#1#glob-var x) (#1#data 10))
+     (#1#set! (#1#glob-var x) (#1#data 20))
+     (#1#glob-var x)))
 (T '(begin
       (define (x a b) b)
       x)
     '(#1#begin
-      (#1#set! (#1#var x_0 x)
-       (#1#lambda (x (a_1 b_2) nil nil)
-        (#1#var b_2 b)))
-      (#1#var x_0 x)))
+      (#1#set! (#1#glob-var x)
+       (#1#lambda (x (a_0 b_1) nil nil)
+        (#1#var b_1 b)))
+      (#1#glob-var x)))
 (T '(if #t 1 2)
    '(#1#if
      (#1#data #true)
@@ -123,8 +125,8 @@
    '(#1#lambda (nil (a_0 y_1) x_2 nil) (#1#var x_2 x)))
 (T '(define (foo . x)
       x)
-   '(#1#set! (#1#var foo_0 foo)
-     (#1#lambda (foo () x_1 nil) (#1#var x_1 x))))
+   '(#1#set! (#1#glob-var foo)
+     (#1#lambda (foo () x_0 nil) (#1#var x_0 x))))
 
 ; Test quoting:
 (T ''1 '(#1#data 1))
@@ -316,6 +318,72 @@
      (#1#apply (#1#prim (42 str))
       ((#1#data "x") (#1#data "y")))
      (#1#map)))
+
+; Test global defines:
+(T '(define x   10)
+   '(#1#set! (#1#glob-var x) (#1#data 10)))
+(T '(begin
+      (define x 10)
+      (define y 10)
+      (let ((x 20))
+        (lambda () x y)))
+   '(#1#begin (#1#set! (#1#glob-var x) (#1#data 10))
+     (#1#set! (#1#glob-var y) (#1#data 10))
+     (#1#let (x_0)
+      (#1#create-upv
+       let:
+       (x_0)
+       (#1#begin (#1#set! (#1#var x_0 x) (#1#data 20))
+        (#1#lambda (nil () nil (x_0))
+         (#1#begin (#1#var x_0 x) (#1#glob-var y))))))))
+(T '(define (x) x)
+   '(#1#set! (#1#glob-var x)
+     (#1#lambda (x () nil nil) (#1#glob-var x))))
+(T '(begin
+      (define x 10)
+      x)
+   '(#1#begin (#1#set! (#1#glob-var x) (#1#data 10))
+     (#1#glob-var x)))
+
+; Test do-each with global variables and stuff to test them:
+(T '(do-each (i v [1 2 3 4])
+      (+ i 1)
+      (- v 20))
+   '(#1#let (i_0 v_1)
+     (#1#begin
+      (#1#set! (#1#var i_0 i) (#1#nil))
+      (#1#set! (#1#var v_1 v) (#1#nil))
+      (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
+       (#1#apply (#1#prim (9 list))
+        ((#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4)))
+       (#1#begin (#1#add (#1#var i_0 i) (#1#data 1))
+        (#1#sub (#1#var v_1 v) (#1#data 20)))))))
+(T '(begin
+      (define x 10)
+      (do-each (i v [])
+        (lambda () (+ x v))))
+   '(#1#begin (#1#set! (#1#glob-var x) (#1#data 10))
+     (#1#let (i_0 v_1)
+      (#1#create-upv
+       let:
+       (v_1)
+       (#1#begin (#1#set! (#1#var i_0 i) (#1#nil))
+        (#1#set! (#1#var v_1 v) (#1#nil))
+        (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
+         (#1#apply (#1#prim (9 list)) ())
+         (#1#lambda (nil () nil (v_1))
+          (#1#add (#1#glob-var x) (#1#var v_1 v)))))))))
+(T '(do-each (i v [1 2 3 4])
+      (lambda () (* 2 i)))
+   '(#1#let (i_0 v_1)
+      (#1#create-upv let: (i_0)
+       (#1#begin (#1#set! (#1#var i_0 i) (#1#nil))
+        (#1#set! (#1#var v_1 v) (#1#nil))
+        (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
+         (#1#apply (#1#prim (9 list))
+          ((#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4)))
+         (#1#lambda (nil () nil (i_0))
+          (#1#mul (#1#data 2) (#1#var i_0 i))))))))
 
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")

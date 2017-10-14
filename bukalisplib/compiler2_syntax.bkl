@@ -140,6 +140,39 @@
             [compiled-body]))))))
 ;----------------------------------------------------------------------------
 
+(define compile-let-block
+  (lambda (ctx T gtx var-binds body-compile-func)
+    (let ((new-env           { " PARENT " (env: ctx) })
+          (new-ctx           (cpassign ctx env: new-env))
+          (let-new-var-names [])
+          (body              (.AM gtx ['#1#begin]))
+          (out-form          ['#1#let let-new-var-names body]))
+      (do-each (bind-pair var-binds)
+        (let ((bind-name    (@0 bind-pair))
+              (new-var-name (gtx-gensym gtx bind-name))
+              (var-t        [var: new-var-name bind-name]))
+          (@!bind-name new-env var-t)
+          (push! let-new-var-names new-var-name)
+          (push! body (.AM gtx ['#1#set!
+                                (append '#1#var (drop var-t 1))
+                                (T (cpassign
+                                     new-ctx
+                                     lambda-name: bind-name)
+                                   (@1 bind-pair))]))))
+      (let ((compiled-body
+             (body-compile-func new-ctx T gtx)))
+        (push! body compiled-body)
+        (if (found-upv-in-env? new-env)
+          ['#1#let
+           (append
+             let-new-var-names
+             (only-in-first
+               (upvalues-in-env new-env)
+               let-new-var-names))
+           ['#1#create-upv let: (upvalues-in-env new-env) body]]
+          ['#1#let let-new-var-names body])))))
+;----------------------------------------------------------------------------
+
 (add-syntax
   'let
   (lambda (ctx args T gtx)
@@ -155,51 +188,38 @@
           (error "'let' binding pair needs exactly 2 elements" bind-pair))
         (unless (symbol? (@0 bind-pair))
           (error "'let' binding pair must contain a symbol as first element" bind-pair)))
-      (let ((new-env           { " PARENT " (env: ctx) })
-            (new-ctx           (cpassign ctx env: new-env))
-            (let-new-var-names [])
-            (body              (.AM gtx ['#1#begin]))
-            (out-form          ['#1#let let-new-var-names body]))
-        (do-each (bind-pair var-binds)
-          (let ((bind-name    (@0 bind-pair))
-                (new-var-name (gtx-gensym gtx bind-name))
-                (var-t        [var: new-var-name bind-name]))
-            (@!bind-name new-env var-t)
-            (push! let-new-var-names new-var-name)
-            (push! body (.AM gtx ['#1#set!
-                                  (append '#1#var (drop var-t 1))
-                                  (T (cpassign
-                                       new-ctx
-                                       lambda-name: bind-name)
-                                     (@1 bind-pair))]))))
-        (let ((compiled-body (s1-begin T new-ctx (drop args 2))))
-          (push! body compiled-body)
-          (if (found-upv-in-env? new-env)
-            ['#1#let
-             (append
-               let-new-var-names
-               (only-in-first
-                 (upvalues-in-env new-env)
-                 let-new-var-names))
-             ['#1#create-upv let: (upvalues-in-env new-env) body]]
-            ['#1#let let-new-var-names body]))))))
+      (compile-let-block
+       ctx T gtx
+       var-binds
+       (lambda (ctx T gtx)
+         (s1-begin T ctx (drop args 2)))))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
   'define
   (lambda (ctx args T gtx)
+    (define is-root-env?
+      (@" IS-ROOT-ENV " (env: ctx)))
     (case (type (@1 args))
-      ((symbol) (let ((var-name     (@1 args))
-                      (new-var-name (gtx-gensym gtx var-name)))
-                  (unless (= (length args) 3)
-                    (error (str "'define' needs exactly 2 arguments if "
-                                "first is a symbol")
-                           args))
-                  (let ((var [var: new-var-name var-name]))
-                    (@!var-name (env: ctx) var)
-                    ['#1#set! (append '#1#var (drop var 1))
-                     (T (cpassign ctx lambda-name: var-name)
-                        (@2 args))])))
+      ((symbol) (unless (= (length args) 3)
+                  (error (str "'define' needs exactly 2 arguments if "
+                              "first is a symbol")
+                         args))
+                (let ((var-name (@1 args))
+                      (var        nil)
+                      (var-s1-sym nil))
+                  (if is-root-env?
+                    (begin
+                      (set! var-s1-sym '#1#glob-var)
+                      (set! var [glob-var: var-name]))
+                    (begin
+                      (set! var-s1-sym '#1#var)
+                      (let ((new-var-name (gtx-gensym gtx var-name)))
+                        (set! var [var: new-var-name var-name]))))
+                  (@!var-name (env: ctx) var)
+                  ['#1#set! (append var-s1-sym (drop var 1))
+                   (T (cpassign ctx lambda-name: var-name)
+                      (@2 args))]))
       ((list) (unless (> (length args) 2)
                 (error (str "'define' for function define needs "
                             "at least 3 arguments")
@@ -210,11 +230,19 @@
                               "first argument be a list only "
                               "of symbols")
                          (@1 args))))
-              (let ((func-name    (@0 (@1 args)))
-                    (new-var-name (gtx-gensym gtx func-name))
-                    (var [var: new-var-name func-name]))
+              (let ((func-name      (@0 (@1 args)))
+                    (var-s1-sym     nil)
+                    (var            nil))
+                (if is-root-env?
+                  (begin
+                    (set! var-s1-sym '#1#glob-var)
+                    (set! var [glob-var: func-name]))
+                  (begin
+                    (set! var-s1-sym '#1#var)
+                    (let ((new-var-name (gtx-gensym gtx func-name)))
+                      (set! var [var: new-var-name func-name]))))
                 (@!func-name (env: ctx) var)
-                ['#1#set! (append '#1#var (drop var 1))
+                ['#1#set! (append var-s1-sym (drop var 1))
                  (T (cpassign ctx lambda-name: func-name)
                     (.AM gtx
                          (append
@@ -299,13 +327,13 @@
   'do-each
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'do-each' needs at least 2 arguments" atom))
-    (define iter-desc (@1 atom))
+      (error "'do-each' needs at least 2 arguments" args))
+    (define iter-desc (@1 args))
     (unless (list? iter-desc)
       (error
         (str "first argument to 'do-each' "
              "needs to be an iteration description list")
-        atom))
+        args))
     (when (< (length iter-desc) 2)
       (error
         "iteration description must be at least 2 elements long"
@@ -319,13 +347,30 @@
         "key bind name of iteration description must be a symbol"
         iter-desc));
     (define obj-atom (@1 iter-desc))
-    (when (eqv? (length iter-desc) 3)
-      (define obj-atom (@2 iter-desc))
-      (unless (symbol? (@1 iter-desc))
-        (error "value bind name of iteration description must be a symbol"
-               iter-desc)))
-;    ['#1#iter 
-    ))
+    (if (eqv? (length iter-desc) 3)
+      (begin
+        (define obj-atom (@2 iter-desc))
+        (unless (symbol? (@1 iter-desc))
+          (error "value bind name of iteration description must be a symbol"
+                 iter-desc))
+        (define obj (T ctx obj-atom))
+        (compile-let-block
+          ctx T gtx
+          (.AM gtx [[(@0 iter-desc) nil]
+                    [(@1 iter-desc) nil]])
+          (lambda (ctx T gtx)
+            ['#1#do-each
+             [(T ctx (@0 iter-desc))
+              (T ctx (@1 iter-desc))]
+             obj
+             (s1-begin T ctx (drop args 2))])))
+      ;TODO FIXME: Global variables should not be an up value!
+      ;            But how do we prevent namespace collisions?
+      ;            (#1#var vs #1#glob-var!)
+      ;            For that we need to add the corresponding
+      ;            code everywhere!
+      (begin
+        ))))
 ;----------------------------------------------------------------------------
 
 (add-syntax

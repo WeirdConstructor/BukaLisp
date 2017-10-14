@@ -17,7 +17,7 @@
           (begin
             (when (not (nil? transform-src-env-fn))
               (transform-src-env-fn sym v env env-stck))
-            v))))))
+            [v env]))))))
 ;----------------------------------------------------------------------------
 
 (define stage1-transformator-quote
@@ -51,7 +51,7 @@
 
 (define annotate-upvalue-use
   (lambda (sym var src-env env-stck)
-    (unless (@" IS-ROOT-ENVf" src-env)
+    (unless (@" IS-ROOT-ENV " src-env)
       (define found-lambda-head #f)
       (define lambda-upv-list nil)
       (do-each (e env-stck)
@@ -104,13 +104,15 @@
            o-map)]
        [symbol?
          (lambda (ctx arg T gtx)
-           (let ((value (lookup-in-env (env: ctx) arg annotate-upvalue-use [])))
+           (let ((lookup-res (lookup-in-env (env: ctx) arg annotate-upvalue-use []))
+                 (value (@0 lookup-res)))
              (when (nil? value)
                (error (str "Access undefined variable '" arg "'")
                       (last (meta-stack: gtx))))
              (case (@0 value)
-               ((var:)     ['#1#var (@1 value) (@2 value)])
-               ((prim:)    ['#1#prim (@1 value)])
+               ((var:)      ['#1#var (@1 value) (@2 value)])
+               ((glob-var:) ['#1#glob-var (@1 value)])
+               ((prim:)     ['#1#prim (@1 value)])
                ((syntax:)
                 (error "Variable contains syntax directive, can't use it here" value))
                ((macro:)
@@ -131,7 +133,8 @@
                (.AM gtx (map (lambda (v) (T ctx v))
                              (drop arg 1)))])
              ((symbol)
-              (let ((value (lookup-in-env (env: ctx) (@0 arg) annotate-upvalue-use [])))
+              (let ((lookup-res (lookup-in-env (env: ctx) (@0 arg) annotate-upvalue-use []))
+                    (value (@0 lookup-res)))
                 (when (nil? value)
                   (error (str "Access undefined variable '" (@0 arg) "'")
                          (last (meta-stack: gtx))))
@@ -152,10 +155,13 @@
                     (.AM gtx ['#1#var (@1 value) (@2 value)])
                     (.AM gtx (map (lambda (v) (T ctx v))
                                   (drop arg 1)))])
+                  ((glob-var:)
+                   ['#1#apply
+                    (.AM gtx ['#1#glob-var (@1 value)])
+                    (.AM gtx (map (lambda (v) (T ctx v))
+                                  (drop arg 1)))])
                   (else
                     (error "Unknown content in env" [arg value])))))
-             ;          ((number)
-             ;           ['#data (@0 arg)])
              (else (error "Unknown element type in front of list"
                           (type (@0 arg))
                           arg))))]]
