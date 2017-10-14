@@ -370,6 +370,15 @@
       ;            For that we need to add the corresponding
       ;            code everywhere!
       (begin
+        (define obj (T ctx obj-atom))
+        (compile-let-block
+          ctx T gtx
+          (.AM gtx [[(@0 iter-desc) nil]])
+          (lambda (ctx T gtx)
+            ['#1#do-each
+             [(T ctx (@0 iter-desc))]
+             obj
+             (s1-begin T ctx (drop args 2))]))
         ))))
 ;----------------------------------------------------------------------------
 

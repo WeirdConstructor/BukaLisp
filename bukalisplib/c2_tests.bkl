@@ -31,22 +31,6 @@
 ;----------------------------------------------------------------------------
 
 
-;(T '(lambda ()
-;      (let ((x 20) (y 2))
-;        (lambda (b) x)
-;        y))
-;  '(#1#lambda (nil () nil nil)
-;    (#1#let (x_0 y_1)
-;     (#1#create-upv let: (x_0)
-;      (#1#begin
-;       (#1#set! (#1#var x_0 x) (#1#data 20))
-;       (#1#set! (#1#var y_1 y) (#1#data 2))
-;       (#1#begin
-;        (#1#lambda (nil (b_2) nil (x_0))
-;         (#1#var x_0 x))
-;        (#1#var y_1 y)))))))
-
-
 ;(error X:)
 ;----------------------------------------------------------------------------
 
@@ -384,6 +368,14 @@
           ((#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4)))
          (#1#lambda (nil () nil (i_0))
           (#1#mul (#1#data 2) (#1#var i_0 i))))))))
+
+(T '(do-each (v {a: 10})
+      v)
+   '(#1#let (v_0)
+     (#1#begin (#1#set! (#1#var v_0 v) (#1#nil))
+      (#1#do-each ((#1#var v_0 v))
+       (#1#map ((#1#data a:) (#1#data 10)))
+       (#1#var v_0 v)))))
 
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")
