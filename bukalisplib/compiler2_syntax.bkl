@@ -293,6 +293,7 @@
             'lambda
             (.AM gtx [(drop (@2 args) 1)])
             (drop args 3))))]))
+;----------------------------------------------------------------------------
 
 (add-syntax
   'do-each
@@ -325,3 +326,24 @@
                iter-desc)))
 ;    ['#1#iter 
     ))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  '.
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 2)
+      (error "method call needs at least 2 arguments (method & object)" args))
+    (let ((method-name (@1 args))
+          (obj         (@2 args))
+          (m-args      (drop args 3)))
+      (unless (or (symbol? method-name)
+                  (keyword? method-name)
+                  (string? method-name))
+        (set! method-name (T ctx method-name)))
+      (append
+        '#1#method-call
+        [method-name]
+        [(T ctx obj)]
+        (.AM gtx (map (lambda (v) (T ctx v)) m-args))))))
+;----------------------------------------------------------------------------
+

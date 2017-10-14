@@ -45,7 +45,7 @@
 ;        (#1#lambda (nil (b_2) nil (x_0))
 ;         (#1#var x_0 x))
 ;        (#1#var y_1 y)))))))
-;(error X:)
+(error X:)
 ;----------------------------------------------------------------------------
 
 (T '1       '(#1#data 1))
@@ -305,6 +305,17 @@
      (#1#lambda (foo (a_0 b_1 c_2) nil nil)
       (#1#add (#1#add (#1#var a_0 a) (#1#var b_1 b))
        (#1#var c_2 c)))))
+
+; Method calls:
+(T '(.test {} 1 2 3)
+   '(#1#method-call test (#1#map)
+     (#1#data 1) (#1#data 2) (#1#data 3)))
+(T '(.test {})          '(#1#method-call test (#1#map)))
+(T '(.(str "x" "y") {})
+   '(#1#method-call
+     (#1#apply (#1#prim (42 str))
+      ((#1#data "x") (#1#data "y")))
+     (#1#map)))
 
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")
