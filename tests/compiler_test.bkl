@@ -1311,22 +1311,22 @@
    [#t #f {a: 10}])
 
 (T '(let ((m {a: 10})
-          (m_ (assign [a: 20] m)))
+          (m_ (assign m [a: 20])))
       [(eqv? m m) (eqv? m m_) m_])
    [#t #f {a: 20}])
 
 (T '(let ((m {a: 10})
-          (m_ (assign {a: 20} m)))
+          (m_ (assign m {a: 20})))
       [(eqv? m m) (eqv? m m_) m_])
    [#t #f {a: 20}])
 
 (T '(let ((m [1 2 3 4])
-          (m_ (assign {0 10 2 30} m)))
+          (m_ (assign m {0 10 2 30})))
       [(eqv? m m) (eqv? m m_) m_])
    [#t #f [10 2 30 4]])
 
 (T '(let ((m [1 2 3 4])
-          (m_ (assign [0 10 2 30] m)))
+          (m_ (assign m [0 10 2 30])))
       [(eqv? m m) (eqv? m m_) m_])
    [#t #f [10 2 30 4]])
 

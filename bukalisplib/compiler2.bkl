@@ -84,6 +84,17 @@
     (keys-in-map (@" UPV " env))))
 ;----------------------------------------------------------------------------
 
+(define post-optimize-apply
+ (lambda (ctx T gtx apply-tree)
+   (if (and (eqv? (@0 apply-tree)      '#1#apply)
+            (eqv? (@0 (@1 apply-tree)) '#1#prim))
+     (begin
+       (case (@1 (@1 apply-tree))
+         ((list) (.AM gtx (append '#1#list (@2 apply-tree))))
+         (else apply-tree)))
+     apply-tree)))
+;----------------------------------------------------------------------------
+
 (define stage1-transformator
   (lambda (data root-env gtx)
     (@!'S1-T-Q gtx (lambda (ctx v)
@@ -128,10 +139,11 @@
                        arg))
               ['#1#get (T ctx (@0 arg)) (T ctx (@1 arg))])
              ((list)
-              ['#1#apply
-               (T ctx (@0 arg))
-               (.AM gtx (map (lambda (v) (T ctx v))
-                             (drop arg 1)))])
+              (post-optimize-apply ctx T gtx
+                                   ['#1#apply
+                                    (T ctx (@0 arg))
+                                    (.AM gtx (map (lambda (v) (T ctx v))
+                                                  (drop arg 1)))]))
              ((symbol)
               (let ((lookup-res (lookup-in-env (env: ctx) (@0 arg) annotate-upvalue-use []))
                     (value (@0 lookup-res)))
@@ -145,10 +157,11 @@
                      (T ctx transformed)))
                   ((prim:)
                    (if (nil? (@2 value))
-                     ['#1#apply
-                      (.AM gtx ['#1#prim (@1 value)])
-                      (.AM gtx (map (lambda (v) (T ctx v))
-                                    (drop arg 1)))]
+                     (post-optimize-apply ctx T gtx
+                                          ['#1#apply
+                                           (.AM gtx ['#1#prim (@1 value)])
+                                           (.AM gtx (map (lambda (v) (T ctx v))
+                                                         (drop arg 1)))])
                      ((@2 value) ctx arg T gtx)))
                   ((var:)
                    ['#1#apply
@@ -221,7 +234,7 @@
 (include "compiler2_syntax")
 
 (do-each (k v (bkl-primitive-map))
-  (@!k S1-ROOT-ENV [prim: [v k]]))
+  (@!k S1-ROOT-ENV [prim: k]))
 
 (define add-optimized-prim
   (lambda (root-env prim-k compile-func)

@@ -760,6 +760,14 @@ START_PRIM()
                  i != src_map.end();
                  i++)
             {
+                if (i->first.m_type != T_INT
+                    && i->first.m_type != T_DBL)
+                {
+                    Atom e = i->first;
+                    error("'assign' bad index in assignment, "
+                          "expected int or dbl",
+                          e);
+                }
                 av->set((size_t) i->first.to_int(), i->second);
             }
             out.set_vec(av);
@@ -783,7 +791,14 @@ START_PRIM()
         {
             AtomVec *av = m_rt->m_gc.clone_vector(A0.m_d.vec);
             for (size_t i = 0; i < src_vec->m_len; i += 2)
+            {
+                if (src_vec->m_data[i].m_type != T_INT
+                    && src_vec->m_data[i].m_type != T_DBL)
+                    error("'assign' bad index in assignment, "
+                          "expected int or dbl",
+                          src_vec->m_data[i]);
                 av->set((size_t) src_vec->m_data[i].to_int(), src_vec->m_data[i + 1]);
+            }
             out.set_vec(av);
         }
     }

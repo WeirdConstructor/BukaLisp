@@ -30,6 +30,10 @@
 
 ;----------------------------------------------------------------------------
 
+; Test apply optimization for list:
+(T ''(1 2 3) '(#1#list (#1#data 1) (#1#data 2) (#1#data 3)))
+(T '[1 2 3]  '(#1#list (#1#data 1) (#1#data 2) (#1#data 3)))
+;(error X:)
 ;----------------------------------------------------------------------------
 
 (T '1       '(#1#data 1))
@@ -39,12 +43,12 @@
 
 (T '(map? 1)
    '(#1#apply
-     (#1#prim (22 map?))
+     (#1#prim map?)
      ((#1#data 1))))
 (T '(let ((a +)) (a 1 2))
     '(#1#let (a_0)
       (#1#begin
-       (#1#set! (#1#var a_0 a) (#1#prim (0 +)))
+       (#1#set! (#1#var a_0 a) (#1#prim +))
        (#1#apply (#1#var a_0 a)
         ((#1#data 1) (#1#data 2))))))
 (T '(begin
@@ -128,14 +132,12 @@
    '(#1#begin (#1#data 1) (#1#yield #1#data 2) (#1#data 2)))
 (T '(@1 [1 2])
    '(#1#get (#1#data 1)
-     (#1#apply (#1#prim (9 list))
-      ((#1#data 1)
-       (#1#data 2)))))
+     (#1#list (#1#data 1)
+      (#1#data 2))))
 (T '(@!1 [1 2] x:)
    '(#1#set field: (#1#data 1)
-     (#1#apply (#1#prim (9 list))
-      ((#1#data 1)
-       (#1#data 2)))
+     (#1#list (#1#data 1)
+      (#1#data 2))
      (#1#data x:)))
 (T '(let ((x 10)) x)
    '(#1#let (x_0)
@@ -154,9 +156,9 @@
 (T '(include "c2_test_incl.bkl")
    '(#1#begin
      (#1#data test-include:)
-     (#1#apply (#1#prim (42 str))
+     (#1#apply (#1#prim str)
                ((#1#data x:)
-                (#1#apply (#1#prim (42 str))
+                (#1#apply (#1#prim str)
                           ((#1#data f:)
                            (#1#data y:)))
                 (#1#data "foobar")))))
@@ -262,7 +264,7 @@
 ; Test result from list as function for apply:
 (T '((let ((x @)) x) x: { x: 10 })
    '(#1#apply (#1#let (x_0)
-               (#1#begin (#1#set! (#1#var x_0 x) (#1#prim (24 @)))
+               (#1#begin (#1#set! (#1#var x_0 x) (#1#prim @))
                 (#1#var x_0 x)))
      ((#1#data x:) (#1#map ((#1#data x:) (#1#data 10))))))
 
@@ -297,7 +299,7 @@
 (T '(.test {})          '(#1#method-call test (#1#map)))
 (T '(.(str "x" "y") {})
    '(#1#method-call
-     (#1#apply (#1#prim (42 str))
+     (#1#apply (#1#prim str)
       ((#1#data "x") (#1#data "y")))
      (#1#map)))
 
@@ -336,8 +338,7 @@
       (#1#set! (#1#var i_0 i) (#1#nil))
       (#1#set! (#1#var v_1 v) (#1#nil))
       (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
-       (#1#apply (#1#prim (9 list))
-        ((#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4)))
+       (#1#list (#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4))
        (#1#begin (#1#add (#1#var i_0 i) (#1#data 1))
         (#1#sub (#1#var v_1 v) (#1#data 20)))))))
 (T '(begin
@@ -352,7 +353,7 @@
        (#1#begin (#1#set! (#1#var i_0 i) (#1#nil))
         (#1#set! (#1#var v_1 v) (#1#nil))
         (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
-         (#1#apply (#1#prim (9 list)) ())
+         (#1#list)
          (#1#lambda (nil () nil (v_1))
           (#1#add (#1#glob-var x) (#1#var v_1 v)))))))))
 (T '(do-each (i v [1 2 3 4])
@@ -362,8 +363,7 @@
        (#1#begin (#1#set! (#1#var i_0 i) (#1#nil))
         (#1#set! (#1#var v_1 v) (#1#nil))
         (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
-         (#1#apply (#1#prim (9 list))
-          ((#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4)))
+         (#1#list (#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4))
          (#1#lambda (nil () nil (i_0))
           (#1#mul (#1#data 2) (#1#var i_0 i))))))))
 
