@@ -1299,6 +1299,38 @@
       o)
    [])
 
+; Testing some shallow copy operations and assignments
+(T '(let ((v [1 2 3])
+          (v_ (list-copy v)))
+      [(eqv? v v) (eqv? v v_) v_])
+   [#t #f [1 2 3]])
+
+(T '(let ((m {a: 10})
+          (m_ (map-copy m)))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f {a: 10}])
+
+(T '(let ((m {a: 10})
+          (m_ (assign [a: 20] m)))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f {a: 20}])
+
+(T '(let ((m {a: 10})
+          (m_ (assign {a: 20} m)))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f {a: 20}])
+
+(T '(let ((m [1 2 3 4])
+          (m_ (assign {0 10 2 30} m)))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f [10 2 30 4]])
+
+(T '(let ((m [1 2 3 4])
+          (m_ (assign [0 10 2 30] m)))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f [10 2 30 4]])
+
+
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")
 ::

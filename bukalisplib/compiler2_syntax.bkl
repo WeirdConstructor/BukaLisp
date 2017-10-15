@@ -94,7 +94,7 @@
     (define lambda-name nil)
     (when (not (nil? (lambda-name: ctx)))
       (set! lambda-name (lambda-name: ctx))
-      (set! ctx (cpassign ctx lambda-name: nil)))
+      (set! ctx (assign ctx [lambda-name: nil])))
     (unless (> (length args) 2)
       (error "'lambda' needs more than 1 argument" args))
     (define lambda-params
@@ -106,7 +106,7 @@
                    " LAMBDA-UPV "     {}})
           (new-args [])
           (va-arg nil)
-          (new-ctx (cpassign ctx env: new-env)))
+          (new-ctx (assign ctx [env: new-env])))
       (do-each (s (args: lambda-params))
         (let ((new-var-name (gtx-gensym gtx s)))
           (push! new-args new-var-name)
@@ -143,7 +143,7 @@
 (define compile-let-block
   (lambda (ctx T gtx var-binds body-compile-func)
     (let ((new-env           { " PARENT " (env: ctx) })
-          (new-ctx           (cpassign ctx env: new-env))
+          (new-ctx           (assign ctx [env: new-env]))
           (let-new-var-names [])
           (body              (.AM gtx ['#1#begin]))
           (out-form          ['#1#let let-new-var-names body]))
@@ -155,9 +155,9 @@
           (push! let-new-var-names new-var-name)
           (push! body (.AM gtx ['#1#set!
                                 (append '#1#var (drop var-t 1))
-                                (T (cpassign
+                                (T (assign
                                      new-ctx
-                                     lambda-name: bind-name)
+                                     [lambda-name: bind-name])
                                    (@1 bind-pair))]))))
       (let ((compiled-body
              (body-compile-func new-ctx T gtx)))
@@ -218,7 +218,7 @@
                         (set! var [var: new-var-name var-name]))))
                   (@!var-name (env: ctx) var)
                   ['#1#set! (append var-s1-sym (drop var 1))
-                   (T (cpassign ctx lambda-name: var-name)
+                   (T (assign ctx [lambda-name: var-name])
                       (@2 args))]))
       ((list) (unless (> (length args) 2)
                 (error (str "'define' for function define needs "
@@ -243,7 +243,7 @@
                       (set! var [var: new-var-name func-name]))))
                 (@!func-name (env: ctx) var)
                 ['#1#set! (append var-s1-sym (drop var 1))
-                 (T (cpassign ctx lambda-name: func-name)
+                 (T (assign ctx [lambda-name: func-name])
                     (.AM gtx
                          (append
                            'lambda
@@ -287,10 +287,10 @@
                              include-file-path))
           (read-data       (read-str include-content
                                      include-file-path))
-          (new-ctx (cpassign ctx
-                             include-dir:
+          (new-ctx (assign ctx
+                           [include-dir:
                              (first (sys-path-split
-                                      include-file-path)))))
+                                      include-file-path))])))
       (with-cleanup
         (push! (meta-stack: gtx) [include-file-path 1])
         (pop! (meta-stack: gtx))
@@ -314,7 +314,7 @@
     ['#1#set method:
      ['#1#data (first (@2 args))]
      (T ctx (@1 args))
-     (T (cpassign ctx lambda-name: (first (@2 args)))
+     (T (assign ctx [lambda-name: (first (@2 args))])
         (.AM
           gtx
           (append
@@ -364,11 +364,6 @@
               (T ctx (@1 iter-desc))]
              obj
              (s1-begin T ctx (drop args 2))])))
-      ;TODO FIXME: Global variables should not be an up value!
-      ;            But how do we prevent namespace collisions?
-      ;            (#1#var vs #1#glob-var!)
-      ;            For that we need to add the corresponding
-      ;            code everywhere!
       (begin
         (define obj (T ctx obj-atom))
         (compile-let-block
@@ -378,8 +373,7 @@
             ['#1#do-each
              [(T ctx (@0 iter-desc))]
              obj
-             (s1-begin T ctx (drop args 2))]))
-        ))))
+             (s1-begin T ctx (drop args 2))]))))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -401,3 +395,68 @@
         (.AM gtx (map (lambda (v) (T ctx v)) m-args))))))
 ;----------------------------------------------------------------------------
 
+(add-syntax
+  'or
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 1)
+      (error "'or' needs at least one argument" args))
+    (define tmp-var (string->symbol
+                      (str (gtx-gensym gtx 'or) "_t")))
+    (define operand (@1 args))
+    (define false-v (T ctx #f))
+    (define build-sub-tree
+      (lambda (rest-ops)
+        (let ((next-rest-ops (drop rest-ops 1))
+              (operand       (first rest-ops)))
+          ['#1#begin
+           ['#1#set! tmp-var (T ctx operand)]
+           (.AM
+             gtx
+             (if (> (length next-rest-ops) 0)
+               ['#1#if tmp-var tmp-var (build-sub-tree next-rest-ops)]
+               ['#1#if tmp-var tmp-var false-v]))])))
+
+    (compile-let-block
+      ctx T gtx
+      (.AM gtx [[tmp-var operand]])
+      (lambda (ctx T gtx)
+        (unless (list? tmp-var)
+          (set! tmp-var (T ctx tmp-var)))
+        (.AM gtx
+             (if (> (length args) 2)
+               ['#1#if tmp-var tmp-var (build-sub-tree (drop args 2))]
+               ['#1#if tmp-var tmp-var false-v]))))))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'and
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 1)
+      (error "'and' needs at least one argument" args))
+    (define tmp-var (string->symbol
+                      (str (gtx-gensym gtx 'and) "_t")))
+    (define operand (@1 args))
+    (define false-v (T ctx #f))
+    (define build-sub-tree
+      (lambda (rest-ops)
+        (let ((next-rest-ops (drop rest-ops 1))
+              (operand       (first rest-ops)))
+          ['#1#begin
+           ['#1#set! tmp-var (T ctx operand)]
+           (.AM
+             gtx
+             (if (> (length next-rest-ops) 0)
+               ['#1#if tmp-var (build-sub-tree next-rest-ops) false-v]
+               ['#1#if tmp-var tmp-var false-v]))])))
+
+    (compile-let-block
+      ctx T gtx
+      (.AM gtx [[tmp-var operand]])
+      (lambda (ctx T gtx)
+        (unless (list? tmp-var)
+          (set! tmp-var (T ctx tmp-var)))
+        (.AM gtx
+             (if (> (length args) 2)
+               ['#1#if tmp-var (build-sub-tree (drop args 2)) false-v]
+               ['#1#if tmp-var tmp-var false-v]))))))
+;----------------------------------------------------------------------------

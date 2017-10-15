@@ -710,6 +710,103 @@ END_PRIM_DOC(bkl-set-doc!,
 )
 
 START_PRIM()
+    REQ_EQ_ARGC(list-copy, 1);
+    if (A0.m_type != T_VEC)
+        error("'list-copy' can only copy lists", A0);
+    out.set_vec(m_rt->m_gc.clone_vector(A0.m_d.vec));
+END_PRIM_DOC(list-copy,
+"@lists procedure (list-copy _list_)\n"
+"\n"
+"Makes a shallow clone of the _list_.\n"
+)
+
+START_PRIM()
+    REQ_EQ_ARGC(map-copy, 1);
+    if (A0.m_type != T_MAP)
+        error("'map-copy' can only copy maps", A0);
+    out.set_map(m_rt->m_gc.clone_map(A0.m_d.map));
+END_PRIM_DOC(map-copy,
+"@maps procedure (map-copy _map_)\n"
+"\n"
+"Makes a shallow clone of the _map_.\n"
+)
+
+START_PRIM()
+    REQ_EQ_ARGC(assign, 2);
+
+    if (   A0.m_type != T_MAP
+        && A0.m_type != T_VEC)
+        error("'assign' can only assign to maps or lists", A0);
+
+    if (A1.m_type == T_MAP)
+    {
+        auto &src_map = A1.m_d.map->m_map;
+
+        if (A0.m_type == T_MAP)
+        {
+            AtomMap *om = m_rt->m_gc.clone_map(A0.m_d.map);
+            for (UnordAtomMap::iterator i = src_map.begin();
+                 i != src_map.end();
+                 i++)
+            {
+                om->set(i->first, i->second);
+            }
+            out.set_map(om);
+        }
+        else
+        {
+            AtomVec *av = m_rt->m_gc.clone_vector(A0.m_d.vec);
+            for (UnordAtomMap::iterator i = src_map.begin();
+                 i != src_map.end();
+                 i++)
+            {
+                av->set((size_t) i->first.to_int(), i->second);
+            }
+            out.set_vec(av);
+        }
+    }
+    else if (A1.m_type == T_VEC)
+    {
+        if (A1.m_d.vec->m_len % 2 != 0)
+            error("'assign' can only use an assignments list with "
+                  "an even number of elements.", A0);
+
+        AtomVec *src_vec = A1.m_d.vec;
+        if (A0.m_type == T_MAP)
+        {
+            AtomMap *om = m_rt->m_gc.clone_map(A0.m_d.map);
+            for (size_t i = 0; i < src_vec->m_len; i += 2)
+                om->set(src_vec->m_data[i], src_vec->m_data[i + 1]);
+            out.set_map(om);
+        }
+        else
+        {
+            AtomVec *av = m_rt->m_gc.clone_vector(A0.m_d.vec);
+            for (size_t i = 0; i < src_vec->m_len; i += 2)
+                av->set((size_t) src_vec->m_data[i].to_int(), src_vec->m_data[i + 1]);
+            out.set_vec(av);
+        }
+    }
+END_PRIM_DOC(assign,
+"@maps procedure (assign _destination-map_ _assignments-map_)\n"
+"@lists procedure (assign _destination-list_ _assignments-list_)\n"
+"\n"
+"This procedure creates a clone of _destination-map/-list_\n"
+"with the keys defined by the _assignments-map/-list_.\n"
+"This is useful if you want to copy and change a list or map at the same time.\n"
+"\n"
+"    (assign {a: 20 b: 10} {a: 10})\n"
+"    ;=> {a: 10 b: 10} where the output map is a shallow clone.\n"
+"\n"
+"    ; alternative:\n"
+"    (assign {a: 20 b: 10} [a: 10])\n"
+"\n"
+"    (assign [0 1 2 3] [0 10 2 20])\n"
+"    ;=> [10 1 20 3] where the output list is a shallow cone.\n"
+"\n"
+)
+
+START_PRIM()
     REQ_EQ_ARGC(?doc, 1);
     const std::string search = A0.to_display_str();
     if (search.size() <= 0)

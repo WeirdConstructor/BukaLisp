@@ -175,14 +175,6 @@
     (let ((sym (string->symbol (str name "_" (var-counter: gtx)))))
       (@!var-counter: gtx (+ 1 (var-counter: gtx)))
       sym)))
-
-(define cpassign
-  (lambda (m k v)
-    (let ((om {}))
-      (do-each (k_ v_ m)
-        (@!k_ om v_))
-      (@!k om v)
-      om)))
 ;----------------------------------------------------------------------------
 
 (define s1-begin

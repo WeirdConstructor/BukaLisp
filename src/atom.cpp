@@ -211,7 +211,7 @@ void AtomVec::pop()
 }
 //---------------------------------------------------------------------------
 
-void AtomVec::set(size_t idx, Atom &a)
+void AtomVec::set(size_t idx, const Atom &a)
 {
     if (idx >= m_len)
         check_size(idx);
@@ -277,14 +277,14 @@ AtomVec::~AtomVec()
 }
 //---------------------------------------------------------------------------
 
-void AtomMap::set(Sym *s, Atom &a)
+void AtomMap::set(Sym *s, const Atom &a)
 {
     Atom sym(T_SYM, s);
     m_map[sym] = a;
 }
 //---------------------------------------------------------------------------
 
-void AtomMap::set(const Atom &k, Atom &a)
+void AtomMap::set(const Atom &k, const Atom &a)
 {
     m_map[k] = a;
 }

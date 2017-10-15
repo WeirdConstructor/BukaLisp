@@ -14,6 +14,14 @@
       (error "'@!' requires exactly 3 arguments" args))
     ['#1#set field: (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))]))
 
+(add-optimized-prim
+  S1-ROOT-ENV
+  'not
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 2)
+      (error "'not' requires exactly 1 argument" args))
+    ['#1#not (T ctx (@1 args))]))
+
 (define make-assoc-tree
   (lambda (operation ctx args T gtx)
     (let ((out-pair [operation]))

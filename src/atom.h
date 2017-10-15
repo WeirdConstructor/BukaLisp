@@ -145,7 +145,7 @@ struct AtomVec
     void check_size(size_t idx);
 
     Atom at(size_t idx);
-    void set(size_t idx, Atom &a);
+    void set(size_t idx, const Atom &a);
 
     ~AtomVec();
 };
@@ -170,8 +170,8 @@ struct AtomMap
 
     AtomMap() : m_gc_next(nullptr), m_gc_color(0), m_meta(nullptr) { }
 
-    void set(Sym *s, Atom &a);
-    void set(const Atom &str, Atom &a);
+    void set(Sym *s, const Atom &a);
+    void set(const Atom &str, const Atom &a);
 
     Atom at(const Atom &a);
     Atom at(const Atom &k, bool &defined);
@@ -238,13 +238,13 @@ struct Atom
         m_d.i  = 0;
     }
 
-    inline int64_t to_int()
+    inline int64_t to_int() const 
     { return m_type == T_INT   ? m_d.i
              : m_type == T_DBL ? static_cast<int64_t>(m_d.d)
              : m_type == T_SYM ? (int64_t) m_d.sym
              : m_type == T_NIL ? 0
              :                   m_d.i; }
-    inline double to_dbl()
+    inline double to_dbl() const
     { return m_type == T_DBL   ? m_d.d
              : m_type == T_INT ? static_cast<double>(m_d.i)
              : m_type == T_SYM ? (double) (int64_t) m_d.sym
@@ -278,6 +278,12 @@ struct Atom
     {
         m_type = T_VEC;
         m_d.vec = v;
+    }
+
+    void set_map(AtomMap *v)
+    {
+        m_type = T_MAP;
+        m_d.map = v;
     }
 
     void set_ptr(void *ptr)
@@ -1085,6 +1091,20 @@ class GC
                 new_vec->m_data[i] = av->m_data[i];
             new_vec->m_len = av->m_len;
             return new_vec;
+        }
+
+        AtomMap *clone_map(AtomMap *am)
+        {
+            AtomMap *outm = allocate_map();
+
+            for (UnordAtomMap::iterator i = am->m_map.begin();
+                 i != am->m_map.end();
+                 i++)
+            {
+                outm->set(i->first, i->second);
+            }
+
+            return outm;
         }
 
         size_t count_potentially_alive_vectors()

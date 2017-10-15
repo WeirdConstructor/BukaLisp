@@ -30,8 +30,6 @@
 
 ;----------------------------------------------------------------------------
 
-
-;(error X:)
 ;----------------------------------------------------------------------------
 
 (T '1       '(#1#data 1))
@@ -376,6 +374,50 @@
       (#1#do-each ((#1#var v_0 v))
        (#1#map ((#1#data a:) (#1#data 10)))
        (#1#var v_0 v)))))
+
+; Test some logix optimized primitives:
+(T '(not #f)
+   '(#1#not (#1#data #false)))
+
+; Test 'and' and 'or'
+(T '(or 1 2 3)
+   '(#1#let (or_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var or_0_t_1 or_0_t) (#1#data 1))
+      (#1#if (#1#var or_0_t_1 or_0_t)
+       (#1#var or_0_t_1 or_0_t)
+       (#1#begin
+        (#1#set! (#1#var or_0_t_1 or_0_t) (#1#data 2))
+        (#1#if (#1#var or_0_t_1 or_0_t)
+         (#1#var or_0_t_1 or_0_t)
+         (#1#begin
+          (#1#set! (#1#var or_0_t_1 or_0_t) (#1#data 3))
+          (#1#if (#1#var or_0_t_1 or_0_t) (#1#var or_0_t_1 or_0_t) (#1#data #false)))))))))
+
+(T '(or 1)
+   '(#1#let (or_0_t_1)
+     (#1#begin (#1#set! (#1#var or_0_t_1 or_0_t) (#1#data 1))
+      (#1#if
+       (#1#var or_0_t_1 or_0_t)
+       (#1#var or_0_t_1 or_0_t)
+       (#1#data #false)))))
+
+(T '(and 1)
+   '(#1#let (and_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var and_0_t_1 and_0_t) (#1#data 1))
+      (#1#if (#1#var and_0_t_1 and_0_t) (#1#var and_0_t_1 and_0_t) (#1#data #false)))))
+
+(T '(and 1 2)
+   '(#1#let (and_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var and_0_t_1 and_0_t) (#1#data 1))
+      (#1#if (#1#var and_0_t_1 and_0_t)
+       (#1#begin
+        (#1#set! (#1#var and_0_t_1 and_0_t) (#1#data 2))
+        (#1#if (#1#var and_0_t_1 and_0_t) (#1#var and_0_t_1 and_0_t) (#1#data #false)))
+       (#1#data #false)))))
+
 
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")
