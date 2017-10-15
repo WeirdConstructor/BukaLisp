@@ -30,13 +30,10 @@
 
 ;----------------------------------------------------------------------------
 
-; Test apply optimization for list:
-(T ''(1 2 3) '(#1#list (#1#data 1) (#1#data 2) (#1#data 3)))
-(T '[1 2 3]  '(#1#list (#1#data 1) (#1#data 2) (#1#data 3)))
 ;(error X:)
 ;----------------------------------------------------------------------------
 
-(T '1       '(#1#data 1))
+(T '1     '(#1#data 1))
 (T '"foo" '(#1#data "foo"))
 (T ''foo  '(#1#data foo))
 (T 'foo:  '(#1#data foo:))
@@ -418,6 +415,91 @@
         (#1#if (#1#var and_0_t_1 and_0_t) (#1#var and_0_t_1 and_0_t) (#1#data #false)))
        (#1#data #false)))))
 
+; Test apply optimization for list:
+(T ''(1 2 3) '(#1#list (#1#data 1) (#1#data 2) (#1#data 3)))
+(T '[1 2 3]  '(#1#list (#1#data 1) (#1#data 2) (#1#data 3)))
+
+; Test 'cond' syntax:
+(T '(cond
+      ((= 0 1) (+ 1 2) 3)
+      ((= 2 3) => (lambda (x) (+ x 4)))
+      (else 23))
+   '(#1#cond
+     (clause: (#1#eq (#1#data 0) (#1#data 1)) (#1#data 3))
+     (#1#let (cond_0_t_1)
+      (#1#begin
+       (#1#set! (#1#var cond_0_t_1 cond_0_t)
+        (#1#eq (#1#data 2) (#1#data 3)))
+       (clause: (#1#var cond_0_t_1 cond_0_t)
+         (#1#apply (#1#lambda (nil (x_2) nil nil)
+                    (#1#add (#1#var x_2 x) (#1#data 4)))
+          ((#1#var cond_0_t_1 cond_0_t))))))
+     (else: (#1#data 23))))
+
+(T '(cond ((= 0 0) 1))
+   '(#1#cond
+     (clause: (#1#eq (#1#data 0) (#1#data 0)) (#1#nil))
+     (else: (#1#nil))))
+
+(T '(cond (else 1))
+   '(#1#cond (else: (#1#data 1))))
+
+; Testing 'case'
+(T '(case 'foo
+      ((a b) 1 2 3)
+      ((foo) 3))
+   '(#1#let (case_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var case_0_t_1 case_0_t) (#1#data foo))
+      (#1#cond
+       (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data a))
+                (#1#begin (#1#data 1) (#1#data 2) (#1#data 3)))
+       (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data b))
+                (#1#begin (#1#data 1) (#1#data 2) (#1#data 3)))
+       (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data foo))
+                (#1#data 3))))))
+
+(T '(case 'foo (else 1 2 3))
+   '(#1#let (case_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var case_0_t_1 case_0_t) (#1#data foo))
+      (#1#cond
+       (else: (#1#begin (#1#data 1) (#1#data 2) (#1#data 3)))))))
+
+(T '(case 'foo (else => (lambda (x) x)))
+   '(#1#let (case_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var case_0_t_1 case_0_t) (#1#data foo))
+      (#1#cond
+       (else:
+         (#1#apply
+          (#1#lambda (nil (x_2) nil nil) (#1#var x_2 x))
+          ((#1#var case_0_t_1 case_0_t))))))))
+
+(T '(case 'foo
+      ((foo) #t)
+      (else 1 2 3))
+   '(#1#let (case_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var case_0_t_1 case_0_t) (#1#data foo))
+      (#1#cond
+       (clause:
+         (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data foo))
+         (#1#data #true))
+       (else:
+         (#1#begin (#1#data 1) (#1#data 2) (#1#data 3)))))))
+
+(T '(case 'foo
+      ((foo) => (lambda (x) x)))
+   '(#1#let (case_0_t_1)
+     (#1#begin
+      (#1#set! (#1#var case_0_t_1 case_0_t) (#1#data foo))
+      (#1#cond
+       (clause:
+         (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data foo))
+         (#1#apply
+          (#1#lambda (nil (x_2) nil nil) (#1#var x_2 x))
+          ((#1#var case_0_t_1 case_0_t))))))))
 
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")

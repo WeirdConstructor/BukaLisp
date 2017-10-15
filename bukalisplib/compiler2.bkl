@@ -1,6 +1,12 @@
 (include transformator)
 
 ;----------------------------------------------------------------------------
+(define DI!
+  (lambda (src to)
+    (bkl-set-meta to 0 (@0 (bkl-get-meta src)))
+    to))
+
+;----------------------------------------------------------------------------
 
 (define lookup-in-env
   (lambda (env sym transform-src-env-fn env-stck)
@@ -188,6 +194,11 @@
     (let ((sym (string->symbol (str name "_" (var-counter: gtx)))))
       (@!var-counter: gtx (+ 1 (var-counter: gtx)))
       sym)))
+;----------------------------------------------------------------------------
+
+(define gtx-gentmpsym
+  (lambda (gtx name)
+    (string->symbol (str (gtx-gensym gtx name) "_t"))))
 ;----------------------------------------------------------------------------
 
 (define s1-begin

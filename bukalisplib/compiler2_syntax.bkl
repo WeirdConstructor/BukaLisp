@@ -374,6 +374,7 @@
              [(T ctx (@0 iter-desc))]
              obj
              (s1-begin T ctx (drop args 2))]))))))
+
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -400,8 +401,7 @@
   (lambda (ctx args T gtx)
     (unless (> (length args) 1)
       (error "'or' needs at least one argument" args))
-    (define tmp-var (string->symbol
-                      (str (gtx-gensym gtx 'or) "_t")))
+    (define tmp-var (gtx-gentmpsym gtx 'or))
     (define operand (@1 args))
     (define false-v (T ctx #f))
     (define build-sub-tree
@@ -433,8 +433,7 @@
   (lambda (ctx args T gtx)
     (unless (> (length args) 1)
       (error "'and' needs at least one argument" args))
-    (define tmp-var (string->symbol
-                      (str (gtx-gensym gtx 'and) "_t")))
+    (define tmp-var (gtx-gentmpsym gtx 'and))
     (define operand (@1 args))
     (define false-v (T ctx #f))
     (define build-sub-tree
@@ -448,7 +447,6 @@
              (if (> (length next-rest-ops) 0)
                ['#1#if tmp-var (build-sub-tree next-rest-ops) false-v]
                ['#1#if tmp-var tmp-var false-v]))])))
-
     (compile-let-block
       ctx T gtx
       (.AM gtx [[tmp-var operand]])
@@ -460,3 +458,116 @@
                ['#1#if tmp-var (build-sub-tree (drop args 2)) false-v]
                ['#1#if tmp-var tmp-var false-v]))))))
 ;----------------------------------------------------------------------------
+
+(add-syntax
+  'cond
+  (lambda (ctx arg T gtx)
+    ; TODO: For 'case' and 'cond' it would be useful to extract the
+    ;       debug meta info from the clauses, so we can have more 
+    ;       precise error messages!
+    (define else-clause nil)
+    (define out ['#1#cond])
+    (unless (> (length arg) 1)
+      (error "'cond' clause must have at least one clause" arg))
+    (do-each (clause (drop arg 1))
+      (unless (list? clause)
+        (error "'cond' has an improper clause" clause))
+      (when (= (length clause) 0)
+        (error "'cond' clauses may not be empty" clause))
+      (if (eqv? (@0 clause) 'else)
+        (begin
+          (when else-clause
+            (error "'cond' must not have more than one 'else' clause" clause))
+          (set! else-clause clause))
+        (push!
+          out
+          (if (eqv? (@1 clause) '=>)
+            (let ((tmp-var (gtx-gentmpsym gtx 'cond)))
+              (compile-let-block
+                ctx T gtx
+                (.AM gtx [[tmp-var (first clause)]])
+                (lambda (ctx T gtx)
+                  (set! tmp-var (T ctx tmp-var))
+                  [clause:
+                    tmp-var
+                    (DI! (@2 clause)
+                         ['#1#apply
+                          (T ctx (@2 clause))
+                          [tmp-var]])])))
+            [clause:
+              (T ctx (first clause))
+              (DI! clause (s1-begin T ctx (drop clause 2)))]))))
+    (if else-clause
+      (push! out [else: (s1-begin T ctx (DI! else-clause (drop else-clause 1)))])
+      (push! out [else: (T ctx nil)]))
+    out))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'case
+  (lambda (ctx arg T gtx)
+    ; TODO: For 'case' and 'cond' it would be useful to extract the
+    ;       debug meta info from the clauses, so we can have more 
+    ;       precise error messages!
+    (define else-clause nil)
+    (when (< (length arg) 3)
+      (error "'case' needs at least 2 arguments" arg))
+    (let ((all-values {}))
+      (do-each (clause (drop arg 2))
+        (if (eqv? (first clause) 'else)
+          (begin
+            (when else-clause
+              (error "'case' duplicated else clause" clause))
+            (set! else-clause clause))
+          (begin
+            (when (not (list? (first clause)))
+              (error "'case' clause first element is not a list" clause))
+            (do-each (element (first clause))
+              (if (@element all-values)
+                (error "'case' with duplicate value" element))
+              (@!element all-values #t)))))
+    (let ((key-value (@1 arg))
+          (tmp-var (gtx-gentmpsym gtx 'case)))
+      (compile-let-block
+        ctx T gtx
+        (.AM gtx [[tmp-var key-value]])
+        (lambda (ctx T gtx)
+          (set! tmp-var (T ctx tmp-var))
+          (define out-cond ['#1#cond])
+          (do-each (clause (drop arg 2))
+            (unless (eqv? (first clause) 'else)
+              (if (eqv? (@1 clause) '=>)
+                (begin
+                  (do-each (element (first clause))
+                    (begin
+                      (push! out-cond
+                             [clause:
+                               (DI!
+                                 (first clause)
+                                 ['#1#eqv tmp-var (.S1-T-Q gtx ctx element)])
+                               (DI! clause
+                                    ['#1#apply
+                                     (T ctx (@2 clause))
+                                     [tmp-var]])]))))
+                (let ((expr-block
+                        (s1-begin T ctx (DI! clause (drop clause 1)))))
+                  (do-each (element (first clause))
+                    (begin
+                      (push! out-cond
+                             [clause:
+                               ['#1#eqv tmp-var (.S1-T-Q gtx ctx element)]
+                               expr-block])))))))
+          (when else-clause
+            (push! out-cond
+              (if (eqv? (@1 else-clause) '=>)
+                [else: (DI!
+                         else-clause
+                         ['#1#apply
+                          (T ctx (@2 else-clause))
+                          [tmp-var]])]
+                [else: (s1-begin T ctx (DI!
+                                         else-clause
+                                         (drop else-clause 1)))])))
+          out-cond))))))
+;----------------------------------------------------------------------------
+
