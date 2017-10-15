@@ -124,9 +124,9 @@
 (T ''"foo" '(#1#data "foo"))
 (T ''foo:  '(#1#data foo:))
 (T '(begin 1 (return 2) 2)
-   '(#1#begin (#1#data 1) (#1#return #1#data 2) (#1#data 2)))
+   '(#1#begin (#1#data 1) (#1#return (#1#data 2)) (#1#data 2)))
 (T '(begin 1 (yield 2) 2)
-   '(#1#begin (#1#data 1) (#1#yield #1#data 2) (#1#data 2)))
+   '(#1#begin (#1#data 1) (#1#yield (#1#data 2)) (#1#data 2)))
 (T '(@1 [1 2])
    '(#1#get (#1#data 1)
      (#1#list (#1#data 1)
@@ -500,6 +500,29 @@
          (#1#apply
           (#1#lambda (nil (x_2) nil nil) (#1#var x_2 x))
           ((#1#var case_0_t_1 case_0_t))))))))
+
+; Test 'while' and some exiting syntaxes:
+(T '(while #t 1 2 3)
+   '(#1#while (#1#data #true)
+     (#1#begin (#1#data 1) (#1#data 2) (#1#data 3))))
+
+(T '(while #t 1 (break 10) (continue) 3)
+   '(#1#while (#1#data #true)
+     (#1#begin
+      (#1#data 1)
+      (#1#break (#1#data 10))
+      (#1#continue)
+      (#1#data 3))))
+
+(T '(while #t 1 (break 10) (continue) (return 10) (yield 20) 3)
+   '(#1#while (#1#data #true)
+     (#1#begin
+      (#1#data 1)
+      (#1#break (#1#data 10))
+      (#1#continue)
+      (#1#return (#1#data 10))
+      (#1#yield (#1#data 20))
+      (#1#data 3))))
 
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")

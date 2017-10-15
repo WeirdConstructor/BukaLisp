@@ -65,7 +65,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'return' needs exactly 1 arguments" args))
-    (append '#1#return (T ctx (@1 args)))))
+    (append '#1#return [(T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -73,7 +73,23 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'yield needs exactly 1 arguments" args))
-    (append '#1#yield (T ctx (@1 args)))))
+    (append '#1#yield [(T ctx (@1 args))])))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'continue
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 1)
+      (error "'continue' does not take any arguments" args))
+    (append '#1#continue)))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'break
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 2)
+      (error "'break' needs exactly 1 arguments" args))
+    (append '#1#break [(T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
 (define only-in-first
@@ -375,6 +391,20 @@
              obj
              (s1-begin T ctx (drop args 2))]))))))
 
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'while
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 2)
+      (error "'while' needs at least 2 arguments (test and body)" args))
+    ['#1#while
+     (T ctx (@1 args))
+     (s1-begin T ctx (drop args 2))]))
+;----------------------------------------------------------------------------
+
+; TODO: 'for
+; TODO: 'do in terms of while
 ;----------------------------------------------------------------------------
 
 (add-syntax
