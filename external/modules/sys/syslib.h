@@ -22,10 +22,7 @@
 ******************************************************************************/
 
 #pragma once
-#include "module_init_defs.h"
-namespace lal_rt
-{
-//---------------------------------------------------------------------------
-void init_syslib(LuaThread *t, Lua::Instance &lua);
-//---------------------------------------------------------------------------
-} // namespace lal_rt
+
+#include <modules/bklisp_module_wrapper.h>
+
+BukaLISPModule init_syslib();

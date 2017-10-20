@@ -17,7 +17,8 @@
 #include "atom_printer.h"
 #include "util.h"
 
-#include <modules/util/utillib.h>
+//#include <modules/util/utillib.h>
+//#include <modules/sys/syslib.h>
 #include <modules/testlib.h>
 
 //---------------------------------------------------------------------------
@@ -972,8 +973,9 @@ int main(int argc, char *argv[])
         }
 
         std::vector<BukaLISPModule *> bukalisp_modules;
-        bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
+//        bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
         bukalisp_modules.push_back(new BukaLISPModule(init_testlib()));
+//        bukalisp_modules.push_back(new BukaLISPModule(init_syslib()));
 
         auto load_vm_modules = [&](VM &vm)
         {

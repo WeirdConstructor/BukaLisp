@@ -231,6 +231,9 @@ void AtomVec::push(const Atom &a)
 
 void AtomVec::check_size(size_t idx)
 {
+    if (idx < m_len)
+        return;
+
     if (idx >= m_alloc)
     {
         Atom *old_data = m_data;

@@ -58,8 +58,8 @@
                    (set! found? #t)))
                 ((symbol)
                  (when (and (list? data) (eqv? match-templ (@0 data)))
-                   (set! ret (match-lambda leaf-ctx (drop data 1) T global-ctx)
-                   (set! found? #t)))))))
+                   (set! ret (match-lambda leaf-ctx (drop data 1) T global-ctx))
+                   (set! found? #t))))))
           (unless found?
             (error "Couldn't find transformation for " data))
           ret))))))

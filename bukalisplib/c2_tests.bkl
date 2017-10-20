@@ -30,7 +30,6 @@
 
 ;----------------------------------------------------------------------------
 
-;(error X:)
 ;----------------------------------------------------------------------------
 
 (T '1     '(#1#data 1))
@@ -524,6 +523,49 @@
       (#1#yield (#1#data 20))
       (#1#data 3))))
 
+; Test 'for'
+(T '(for (i 1 10) 1 2 i)
+   '(#1#let (i_0)
+     (#1#begin
+      (#1#set! (#1#var i_0 i) (#1#data 1))
+      (#1#for ((#1#data 10) (#1#data 1))
+       (#1#begin (#1#data 1) (#1#data 2) (#1#var i_0 i))))))
+
+(T '(for (i 1 10 2) 1 2 i)
+   '(#1#let (i_0)
+     (#1#begin
+      (#1#set! (#1#var i_0 i) (#1#data 1))
+      (#1#for ((#1#data 10) (#1#data 2))
+       (#1#begin (#1#data 1) (#1#data 2) (#1#var i_0 i))))))
+
+; Test 'do'
+(T '(do () ((= 0 1) 1 2 3)
+      4 5 6)
+   '(#1#let ()
+     (#1#do
+      (#1#eq (#1#data 0) (#1#data 1))
+      (#1#begin (#1#data 1) (#1#data 2) (#1#data 3))
+      ()
+      (#1#begin (#1#data 4) (#1#data 5) (#1#data 6)))))
+
+(T '(do ((i 10)
+         (y 20 (+ y -1)))
+      ((> i y) (+ i y 11))
+      x:
+      y:
+      z:)
+   '(#1#let (i_0 y_1)
+     (#1#begin
+      (#1#set! (#1#var i_0 i) (#1#data 10))
+      (#1#set! (#1#var y_1 y) (#1#data 20))
+      (#1#do
+       (#1#gt (#1#var i_0 i) (#1#var y_1 y))
+       (#1#add
+        (#1#add (#1#var i_0 i) (#1#var y_1 y))
+        (#1#data 11))
+       ((#1#set (#1#var i_0 i) (#1#var i_0 i))
+        (#1#set (#1#var y_1 y) (#1#add (#1#var y_1 y) (#1#data -1))))
+       (#1#begin (#1#data x:) (#1#data y:) (#1#data z:))))))
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")
 ::

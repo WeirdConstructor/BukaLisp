@@ -159,8 +159,9 @@
 (define compile-let-block
   (lambda (ctx T gtx var-binds body-compile-func)
     (let ((new-env           { " PARENT " (env: ctx) })
-          (new-ctx           (assign ctx [env: new-env]))
           (let-new-var-names [])
+          (new-ctx           (assign ctx [env:      new-env
+                                          let-vars: let-new-var-names]))
           (body              (.AM gtx ['#1#begin]))
           (out-form          ['#1#let let-new-var-names body]))
       (do-each (bind-pair var-binds)
@@ -178,6 +179,8 @@
       (let ((compiled-body
              (body-compile-func new-ctx T gtx)))
         (push! body compiled-body)
+        (when (= (length body) 2)
+          (set! body (@1 body)))
         (if (found-upv-in-env? new-env)
           ['#1#let
            (append
@@ -231,6 +234,7 @@
                     (begin
                       (set! var-s1-sym '#1#var)
                       (let ((new-var-name (gtx-gensym gtx var-name)))
+                        (push! (let-vars: ctx) new-var-name)
                         (set! var [var: new-var-name var-name]))))
                   (@!var-name (env: ctx) var)
                   ['#1#set! (append var-s1-sym (drop var 1))
@@ -256,6 +260,7 @@
                   (begin
                     (set! var-s1-sym '#1#var)
                     (let ((new-var-name (gtx-gensym gtx func-name)))
+                      (push! (let-vars: ctx) new-var-name)
                       (set! var [var: new-var-name func-name]))))
                 (@!func-name (env: ctx) var)
                 ['#1#set! (append var-s1-sym (drop var 1))
@@ -403,8 +408,77 @@
      (s1-begin T ctx (drop args 2))]))
 ;----------------------------------------------------------------------------
 
-; TODO: 'for
-; TODO: 'do in terms of while
+(add-syntax
+  'for
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 2)
+      (error "'for' needs at least 2 arguments (iterator desc and body)" args))
+    (let ((iter-desc (@1 args)))
+      (unless (or (= (length iter-desc) 3)
+                  (= (length iter-desc) 4))
+        (error "'for' iteration description needs 3 or 4 elements" iter-desc))
+      (unless (symbol? (@0 iter-desc))
+        (error "'for' iteration description needs a symbol as first elemetn"
+               iter-desc))
+      (compile-let-block
+        ctx T gtx
+         (.AM gtx [[(@0 iter-desc) (@1 iter-desc)]])
+         (lambda (ctx T gtx)
+           ['#1#for [(T ctx (@2 iter-desc))
+                     (T ctx (if (nil? (@3 iter-desc))
+                              1
+                              (@3 iter-desc)))
+                     (T ctx (@0 iter-desc))]
+            (s1-begin T ctx (drop args 2))])))))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'do
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 3)
+      (error "'do' needs at least 3 arguments (iterator binds, test and body)"
+             args))
+    (unless (list? (@1 args))
+      (error "'do' first argument is not a list (iterator binds)"))
+    (unless (list? (@2 args))
+      (error "'do' second argument is not a list (test)"))
+    (unless (> (length (@2 args)) 1)
+      (error "'do' test needs a test expression and a return value expression"
+             (@2 args)))
+    (let ((iter-descs           (@1 args))
+          (let-binds            [])
+          (test-expr            (@0 (@2 args)))
+          (test-end-block       (drop (@2 args) 1)))
+      (do-each (iter-bind iter-descs)
+        (unless (or (= (length iter-bind) 2)
+                    (= (length iter-bind) 3))
+          (error "'do' bad iterator bind, has not 3 elements" iter-bind))
+        (unless (symbol? (@0 iter-bind))
+          (error "'do' first element of iteration binding needs to be a symbol"
+                 iter-bind))
+        (push! let-binds [(@0 iter-bind) (@1 iter-bind)]))
+      (compile-let-block
+        ctx T gtx
+        (.AM gtx let-binds)
+        (lambda (ctx T gtx)
+          (do-each (bind let-binds)
+            (@!0 bind (T ctx (@0 bind))))
+          (define step-exprs (.AM gtx []))
+          (let ((i 0))
+            (do-each (bind let-binds)
+              (define iter (@i iter-descs))
+              (define step
+                (if (nil? (@2 iter))
+                  (@0 bind)
+                  (T ctx (@2 iter))))
+              (push! step-exprs
+                     (DI! iter ['#1#set (@0 bind) step]))
+              (set! i (+ i 1))))
+          ['#1#do
+           (T ctx test-expr)
+           (s1-begin T ctx test-end-block)
+           step-exprs
+           (s1-begin T ctx (drop args 3))])))))
 ;----------------------------------------------------------------------------
 
 (add-syntax

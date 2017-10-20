@@ -1,0 +1,145 @@
+(include compiler2)
+
+;----------------------------------------------------------------------------
+
+(define str-pad
+  (lambda ()
+    (let ((self {indent:    0
+                 value-str: []
+                 value-type: nil
+                 lines:     []}))
+      ($define! self (inc-indent)
+        (@!indent: self (+ (indent: self) 1)))
+      ($define! self (dec-indent)
+        (@!indent: self (- (indent: self) 1)))
+      ($define! self (add-debug-str s)
+        (.add-line self (str "// " s)))
+      ($define! self (add-debug-info atom)
+        (.add-line self (str "// " (@0 (bkl-get-meta atom)))))
+      ($define! self (add-debug-from-gtx gtx)
+        (.add-debug-str self (last (meta-stack: gtx))))
+      ($define! self (add-line line)
+        (push! (lines: self) [(indent: self) line]))
+      ($define! self (set-value s)
+        (@!value-type: self with-sideeffect:)
+        (@!value-str: self s))
+      ($define! self (set-value-no-sideeffect s)
+        (@!value-type: self no-sideeffect:)
+        (@!value-str: self s))
+      ($define! self (append-value o-p)
+        (@!value-type: self (value-type: o-p))
+        (@!value-str:  self (value-str: o-p)))
+      ($define! self (sideeffect?)
+        (eqv? (value-type: self) with-sideeffect:))
+      ($define! self (value)
+        (value-str: self))
+;      ($define! self (nl)
+;        (push! (lines: self)
+;               [(indent: self) (apply str (value-str: self))])
+;        (@!cur-line: self []))
+      ($define! self (append-pad o-p)
+        (do-each (line (lines: o-p))
+          (push! (lines: self)
+                 [(+ (first line)
+                     (indent: self))
+                  (@1 line)])))
+      ($define! self (to-string)
+        (let ((o-lines []))
+          (do-each (line (lines: self))
+            (let ((out-line []))
+              (when (> (@0 line) 0)
+                (for (i 0 (@0 line))
+                (push! out-line "  ")))
+              (push! out-line (@1 line))
+              (push! o-lines (apply str-join "" out-line))))
+          (apply str-join "\n" o-lines)))
+      ($define! self (print)
+        (displayln (.to-string self)))
+      self)))
+;----------------------------------------------------------------------------
+
+(define js-transformer
+  (lambda (stage-2-data ctx gtx)
+    (find-transform-match
+      [['#1#begin
+        (lambda (ctx arg T gtx)
+          (let ((P (str-pad)))
+            (if (= (length arg) 1)
+              (T ctx (@0 arg))
+              (let ((last-P (T ctx (@(- (length arg) 1) arg))))
+                (do-each (expr (take arg (- (length arg) 1)))
+                  (let ((sub-P (T ctx expr)))
+                    (.append-pad P sub-P)
+                    (when (.sideeffect? sub-P)
+                      (.add-line P (.value sub-P)))))
+                (.append-pad P last-P)
+                (.append-value P last-P)
+                P))))]
+       ['#1#data
+        (lambda (ctx arg T gtx)
+          (let ((P (str-pad)))
+            (.set-value-no-sideeffect P (@0 arg))
+            P))]
+       ['#1#var
+        (lambda (ctx arg T gtx)
+          (let ((P (str-pad)))
+            (.set-value-no-sideeffect P (@0 arg))
+            P))]
+       ['#1#set!
+        (lambda (ctx arg T gtx)
+          (let ((P (str-pad)))
+            (.add-debug-from-gtx P gtx)
+            (let ((var-p   (T ctx (@0 arg)))
+                  (value-p (T ctx (@1 arg))))
+              (.append-pad P var-p)
+              (.append-pad P value-p)
+              (.add-line P (str (.value var-p) " = " (.value value-p) ";"))
+              (.append-value P var-p)
+              P)))]
+       ['#1#lambda
+        (lambda (ctx arg T gtx)
+          (let ((P (str-pad)))
+            (.add-debug-from-gtx P gtx)
+            (.add-line P
+                       (str "function ("
+                            (apply str-join "," (@1 (@0 arg)))
+                            ") {"))
+            (.inc-indent P)
+            (let ((block-P (T ctx (@1 arg))))
+              (.append-pad P block-P)
+              (.add-line P (str "return " (.value block-P) ";")))
+            (.dec-indent P)
+            (.add-line P "}")
+            P))]]
+      stage-2-data
+      ctx
+      gtx)))
+;----------------------------------------------------------------------------
+
+(define s2js-transform
+  (lambda (val stage1-root-env)
+    (js-transformer
+      val
+      stage1-root-env
+      {})))
+;----------------------------------------------------------------------------
+
+(define js-compile
+  (lambda (expr)
+    (let ((root-env (spawn-root-env))
+          (s1prog (stage1-transformator
+                    expr
+                    {env:         root-env
+                    include-dir: "bukalisplib"}
+                    {root-env:    root-env
+                    var-counter: 0})))
+      (displayln (pp-str s1prog))
+      (.print (s2js-transform s1prog root-env)))))
+;----------------------------------------------------------------------------
+
+(js-compile '(lambda (a b c) a))
+(js-compile
+  '(lambda (a b c)
+     (set! a 10)
+     a))
+

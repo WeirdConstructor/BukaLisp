@@ -147,13 +147,13 @@ class Atom2CPP
 
                     string a_d_m = write_atom(prog->m_debug_info_map, o);
                     o << "PROG *" << nn << "_ud = new PROG(gc, "
-                      << prog->m_atom_data_len
+                      << prog->data_array()->m_len
                       << ", "
                       << prog->m_instructions_len << ");\n";
 
-                    for (size_t i = 0; i < prog->m_atom_data_len; i++)
+                    for (size_t i = 0; i < prog->data_array()->m_len; i++)
                     {
-                        string ne = write_atom(prog->m_atom_data[i], o);
+                        string ne = write_atom(prog->data_array()->m_data[i], o);
                         o << nn << "_ud->m_atom_data[" << i << "] = "
                           << ne << ";\n";
                     }
@@ -166,8 +166,10 @@ class Atom2CPP
                         o << nn << "_i_" << i << ".oe = " << prog->m_instructions[i].oe << ";\n";
                         o << nn << "_i_" << i << ".a  = " << prog->m_instructions[i].a  << ";\n";
                         o << nn << "_i_" << i << ".b  = " << prog->m_instructions[i].b  << ";\n";
+                        o << nn << "_i_" << i << ".c  = " << prog->m_instructions[i].c  << ";\n";
                         o << nn << "_i_" << i << ".ae = " << prog->m_instructions[i].ae << ";\n";
                         o << nn << "_i_" << i << ".be = " << prog->m_instructions[i].be << ";\n";
+                        o << nn << "_i_" << i << ".ce = " << prog->m_instructions[i].ce << ";\n";
                     }
 
                     o << "gc.reg_userdata(" << nn << "_ud);\n";

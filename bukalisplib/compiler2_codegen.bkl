@@ -1,0 +1,376 @@
+;----------------------------------------------------------------------------
+
+(include compiler2)
+(include code-pad)
+
+;----------------------------------------------------------------------------
+
+(define REG-ROW-FRAME 0)
+(define REG-ROW-DATA  1)
+(define REG-ROW-PRIM  2)
+(define REG-ROW-UPV   3)
+(define REG-ROW-ROOT  4)
+
+;----------------------------------------------------------------------------
+
+(define make-s2-frame
+  (lambda (gtx)
+    (let ((self {pad: []
+                 pos: [0 []]}))
+      ($define! self (get-debug-info)
+        (last (meta-stack: gtx)))
+      ($define! self (store-static-data data)
+        (push! (pad: self) data)
+        [(- (length (pad: self)) 1) REG-ROW-DATA])
+      ($define! self (to-vm-prog code-pad)
+        (make-vm-prog [(pad:  self)
+                       (.to-vm-prog-code       code-pad)
+                       (.to-vm-prog-debug-info code-pad)]))
+      ($define! self (new-tmp-pos)
+        (let ((env-pos           (pos: self))
+              (free-tmp-pos-list (@1 env-pos)))
+          (if (> (length free-tmp-pos-list) 0)
+            [(pop! free-tmp-pos-list) REG-ROW-FRAME tmp:]
+            (let ((new-pos (@0 env-pos)))
+              (@!0 env-pos (+ new-pos 1))
+              [new-pos REG-ROW-FRAME tmp:]))))
+      ($define! self (new-pos)
+        (let ((env-pos (pos: self))
+              (new-pos (@0 env-pos)))
+          (@!0 env-pos (+ 1 new-pos))
+          [new-pos REG-ROW-FRAME]))
+      ($define! self (recycle-pos pos)
+        (when (eqv? (@2 pos) tmp:)
+          (push! (@1 (pos: self))
+                 (if (list? pos)
+                   (@0 pos)
+                   pos)))
+        pos)
+
+      self)))
+
+;----------------------------------------------------------------------------
+
+(define stage2-transformer
+  (lambda (stage-2-data ctx gtx)
+    (find-transform-match
+      [['#1#data
+        (lambda (ctx arg T gtx)
+          (.store-static-data (frame: ctx) (first arg)))]
+       ['#1#begin
+        (lambda (ctx arg T gtx)
+          (define last-adr nil)
+          (do-each (form arg)
+            (when last-adr
+              (.recycle-pos (frame: ctx) last-adr))
+            (let ((adr (T ctx form)))
+              (set! last-adr adr))
+            last-adr))]
+       ['#1#var
+        (lambda (ctx arg T gtx)
+          (let ((adr (@(@0 arg) (env: ctx))))
+            (unless adr
+              (error "Fatal error in stage 2, variable not found!" arg))
+            adr))]
+       ['#1#glob-var
+        (lambda (ctx arg T gtx)
+          (let ((root-var  (@(@0 arg) (root-env: gtx)))
+                (root-regs (@" REGS " (root-env: gtx))))
+            (unless root-var
+              (let ((new-root-adr (length root-regs)))
+                (@!new-root-adr root-regs nil)
+                (set! root-var [new-root-adr REG-ROW-ROOT])
+                (@!(@0 arg) (root-env: gtx) root-var)))
+            root-var))]
+       ['#1#set!
+        (lambda (ctx arg T gtx)
+          (let ((var-adr (T ctx (@0 arg)))
+                (val-adr (T ctx (@1 arg))))
+            (.op-mov (P: ctx) var-adr val-adr nil)
+            (.recycle-pos (frame: ctx) val-adr)
+            var-adr))]
+       ['#1#add
+        (lambda (ctx arg T gtx)
+          (let ((out-adr (.new-tmp-pos (frame: ctx))))
+            (.op-add (P: ctx) out-adr (T ctx (@0 arg)) (T ctx (@1 arg)))
+            out-adr))]
+       ['#1#nil
+        (lambda (ctx arg T gtx)
+          (let ((adr (.new-tmp-pos (frame: ctx))))
+          (.op-load-nil (P: ctx) adr)
+          adr))]
+       ['#1#let
+        (lambda (ctx arg T gtx)
+          (let ((new-vars []))
+            (do-each (v (@0 arg))
+              (push! new-vars v)
+              (push! new-vars (.new-pos (frame: ctx))))
+            (T (assign ctx [env: (assign (env: ctx) new-vars)]) (@1 arg))))]
+       ['#1#list
+        (lambda (ctx arg T gtx)
+          (let ((list-adrs      [])
+                (recycle-adrs   [])
+                (ret-adr (.new-tmp-pos (frame: ctx))))
+            (do-each (a arg)
+              (let ((val-adr (T ctx a)))
+                (push! recycle-adrs val-adr)
+                (push! list-adrs (@0 val-adr))
+                (push! list-adrs (@1 val-adr))))
+            (.op-new-arg-vec
+              (P: ctx)
+              ret-adr
+              (length arg)
+              (.store-static-data (frame: ctx) list-adrs))
+            (do-each (r-adr recycle-adrs)
+              (.recycle-pos (frame: ctx) r-adr))
+            ret-adr))]
+       ['#1#apply
+        (lambda (ctx arg T gtx)
+          (let ((fn-adr         (T ctx (@0 arg)))
+                (arg-adrs       [])
+                (recycle-adrs   [])
+                (vec-adr        (.new-tmp-pos (frame: ctx)))
+                (ret-adr        (.new-tmp-pos (frame: ctx))))
+            (do-each (a (@1 arg))
+              (let ((val-adr (T ctx a)))
+                (push! recycle-adrs val-adr)
+                (push! arg-adrs (@0 val-adr))
+                (push! arg-adrs (@1 val-adr))))
+            (.op-new-arg-vec
+              (P: ctx)
+              vec-adr
+              (length (@1 arg))
+              (.store-static-data (frame: ctx) arg-adrs))
+            (.op-call (P: ctx) ret-adr fn-adr vec-adr)
+            (do-each (a-adr recycle-adrs)
+              (.recycle-pos (frame: ctx) a-adr))
+            ret-adr))]
+       ['#1#create-upv
+        (lambda (ctx arg T gtx)
+          (let ((new-var-defs []))
+            (do-each (upv-var-name (@1 arg))
+              (let ((upv-adr (@upv-var-name (env: ctx))))
+                (if (= (@1 upv-adr) REG-ROW-UPV)
+                  (.op-new-upv (P: ctx) upv-adr upv-adr)
+                  (begin
+                    (let ((new-upv-adr [(nxt-upv-idx: ctx) REG-ROW-UPV]))
+                      (.op-new-upv (P: ctx) new-upv-adr upv-adr)
+                      (@!nxt-upv-idx: ctx (+ 1 (nxt-upv-idx: ctx)))
+                      (push! new-var-defs upv-var-name)
+                      (push! new-var-defs new-upv-adr))))))
+            (T (assign ctx
+                       [env: (assign (env: ctx)
+                                     new-var-defs)])
+               (@2 arg))))]
+       ['#1#for
+        (lambda (ctx arg T gtx)
+          (let ((cond-res-adr (.new-tmp-pos (frame: ctx)))
+                #| XXX: Must follow cond-res-adr! |#
+                (end-val-adr  (T ctx (@0 (@0 arg))))
+                (step-val-adr (T ctx (@1 (@0 arg))))
+                (iter-adr     (T ctx (@2 (@0 arg))))
+                (for-ret-adr  (.new-tmp-pos (frame: ctx)))
+                (body-pad     (make-code-pad-object (frame: ctx)))
+                (body-ret-adr (T (assign ctx [P: body-pad]) (@1 arg))))
+            (.op-br           (P: ctx) (.count-ops body-pad))
+            (.append-code-pad (P: ctx) body-pad)
+            (.op-forinc       (P: ctx)
+                              cond-res-adr
+                              iter-adr
+                              step-val-adr
+                              end-val-adr)
+            (.op-brnif        (P: ctx)
+                              (- 0 (+ 2 (.count-ops body-pad)))
+                              cond-res-adr)
+            (.op-mov          (P: ctx) for-ret-adr body-ret-adr nil)
+;            (.recycle-pos (frame: ctx) cond-res-adr)
+;            (.recycle-pos (frame: ctx) end-val-adr)
+;            (.recycle-pos (frame: ctx) step-val-adr)
+;            (.recycle-pos (frame: ctx) body-ret-adr)
+            for-ret-adr))]
+       ['#1#lambda
+        (lambda (ctx arg T gtx)
+          (let ((lambda-spec        (@0 arg))
+                (arg-var-adrs       [])
+                (lambda-frame       (make-s2-frame gtx))
+                (lambda-pad         (make-code-pad-object lambda-frame))
+                (is-coroutine       #f #| TODO |#)
+                (creator-upv-adrs   [])
+                (nxt-upv-idx         0)
+                (new-upv-env        {})
+                (arity              (if (nil? (@2 lambda-spec))
+                                      (length (@1 lambda-spec))
+                                      (if (> (length (@1 lambda-spec)) 0)
+                                        (- 0 (length (@1 lambda-spec)))
+                                        nil))))
+            (when (list? (@3 lambda-spec))
+              (do-each (upv-var-name (@3 lambda-spec))
+                (let ((upv-adr (@upv-var-name (env: ctx))))
+                  (unless (= (@1 upv-adr) REG-ROW-UPV)
+                    (error "Bad upvalue in stage 2 compilation"
+                           [upv-var-name lambda-spec]))
+                  (push! creator-upv-adrs (@0 upv-adr))
+                  (@!upv-var-name new-upv-env [nxt-upv-idx REG-ROW-UPV])
+                  (set! nxt-upv-idx (+ 1 nxt-upv-idx)))))
+            (do-each (param (@1 lambda-spec))
+              (push! arg-var-adrs (.new-pos lambda-frame))
+              (@!param new-upv-env (last arg-var-adrs)))
+            (unless (nil? (@2 lambda-spec))
+              (push! arg-var-adrs (.new-pos lambda-frame))
+              (.op-pack-va lambda-pad (last arg-var-adrs) (last arg-var-adrs))
+              (@!(@2 lambda-spec) new-upv-env (last arg-var-adrs)))
+            (define new-env (assign (env: ctx) new-upv-env))
+            (let ((body-res-adr
+                    (T (assign ctx [P:              lambda-pad
+                                    frame:          lambda-frame
+                                    env:            new-env
+                                    nxt-upv-idx:    nxt-upv-idx])
+                       (@1 arg)))
+                  (ret-adr (.new-tmp-pos (frame: ctx))))
+              (.op-return lambda-pad body-res-adr)
+              (.op-new-closure
+                (P: ctx)
+                ret-adr
+                (.store-static-data
+                  (frame: ctx)
+                  (.to-vm-prog lambda-frame lambda-pad))
+                (.store-static-data
+                  (frame: ctx)
+                  [is-coroutine arity creator-upv-adrs]))
+              ret-adr)))]]
+      stage-2-data
+      ctx
+      gtx)))
+;----------------------------------------------------------------------------
+
+(define bukalisp-compile
+  (lambda (expr)
+    (let ((root-env (spawn-root-env))
+          (s1-ctx   {env:         root-env
+                     include-dir: "bukalisplib"})
+          (s1-gtx   {root-env:    root-env
+                     var-counter: 0})
+          (s1prog (stage1-transformator
+                    (DI! expr (append 'begin expr))
+                    s1-ctx
+                    s1-gtx)))
+      (displayln (pp-str s1prog))
+      (let ((gtx {root-env:    {" REGS " []}})
+            (frame (make-s2-frame gtx))
+            (ctx {frame:        frame
+                  P:            (make-code-pad-object frame)
+                  env:          {}
+                  nxt-upv-idx:  0})
+            (adr (stage2-transformer s1prog ctx gtx))
+            (P (P: ctx)))
+        (.op-return P adr)
+;        (displayln DEBUG-INFO: adr (pp-str (.to-vm-prog-debug-info P)))
+;        (displayln ROOT-ENV: (pp-str (root-env: gtx)))
+        (let ((prog (.to-vm-prog (frame: ctx) P)))
+          (displayln PROG: prog)
+          (run-vm-prog prog (@" REGS " (root-env: gtx))))))))
+;----------------------------------------------------------------------------
+
+(define T-env
+  (lambda (code expected env)
+    (set! code (DI! code [code]))
+;    (when (nil? env) (set! env [{} []]))
+    (let ((r (bukalisp-compile code)))
+      (if (eqv? (write-str r) (write-str expected))
+        (displayln (str "OK - " code))
+        (error (str "Test failed: " code ", returned: " r " != " expected))))))
+
+(define T
+  (lambda (code expected)
+    (T-env code expected nil)))
+;----------------------------------------------------------------------------
+
+;(error X:)
+;----------------------------------------------------------------------------
+
+; Test basic (lambda ...) and (let ...)
+(T '((lambda (y)
+       (let ((x 10))
+         (+ x y)))
+     13)
+   23)
+
+(T '(begin
+      (define x 5)
+      (+ 1 2 x))
+   8)
+
+(T '((lambda (x) (+ x 10)) 11)
+   21)
+
+; Test var-args:
+(T '((lambda (. x) x) 1 2 3) '(1 2 3))
+
+(T '((lambda (. x) x))              [])
+(T '((lambda (. x) x) 1 2 3)        [1 2 3])
+(T '((lambda (a . x) [a x]) 1 2 3)  [1 [2 3]])
+(T '((lambda (a . x) [a x]) 1)      [1 []])
+(T '((lambda (a . x) [a x]) nil)    [nil []])
+(T '(begin
+      (define (x a . v) [a v])
+      (x 1 2 3))
+   [1 [2 3]])
+
+; Test upvalues and closures
+(T '((lambda (x) x) 5)
+   5)
+
+(T '((lambda (x y)
+       (+ 1 ((lambda () x))))
+     5 nil)
+   6)
+
+(T '((lambda (x)
+       ((lambda (y) (+ x y))
+        10))
+     5)
+   15)
+
+(T '(begin (define x 0)
+           (define (o a)
+             (set! x (+ x a)))
+           (for (i 1 1000000)
+             (o 1)))
+   1000000)
+
+; Test weird (define ...)s:
+(T '(let ((x (begin
+               (define y 20)
+               (+ 10 y))))
+      (define o 20)
+      (+ y x o))
+   70)
+(T '(let ((x 1))
+      (define o 10)
+      (+ o x))
+   11)
+
+; Test (for ...), upvalues and closures:
+(T '(begin (define x 0)
+           (define (o a)
+             (set! x (+ x a)))
+           (for (i 1 1000000)
+             (o 1)))
+   1000000)
+
+(T '(let ((x 0))
+      (define (o a)
+        (set! x (+ x a)))
+      (for (i 1 1000000)
+        (o 1)))
+   1000000)
+
+(T '(let ((x 0)
+          (y 0))
+      (define (o a fn-i)
+        (set! x (+ x a))
+        (set! y (+ y (fn-i))))
+      (for (i 1 100000)
+        (o 1 (lambda () i)))
+      [x y])
+   [100000 5000050000])

@@ -3,7 +3,8 @@
 ;----------------------------------------------------------------------------
 (define DI!
   (lambda (src to)
-    (bkl-set-meta to 0 (@0 (bkl-get-meta src)))
+    (when (bkl-get-meta src)
+      (bkl-set-meta to 0 (@0 (bkl-get-meta src))))
     to))
 
 ;----------------------------------------------------------------------------
@@ -263,4 +264,5 @@
     (define root-env {})
     (do-each (k v S1-ROOT-ENV)
       (@!k root-env v))
+    (@!" REGS " root-env [])
     root-env))

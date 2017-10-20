@@ -21,16 +21,13 @@
 * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ******************************************************************************/
 
-#include "base/util.h"
-#include "rt/syslib.h"
-#include "rt/lua_thread.h"
-#include "rt/lua_thread_helper.h"
+#include "syslib.h"
+#include <modules/vval_util.h>
 #include <boost/filesystem.hpp>
 #include <Poco/Process.h>
 #include <Poco/Pipe.h>
 #include <Poco/PipeStream.h>
 #include <regex>
-#include "rt/log.h"
 #include <boost/filesystem/detail/utf8_codecvt_facet.hpp>
 
 using namespace boost::filesystem;
@@ -46,8 +43,6 @@ static std::string g_path(const VVal::VV &v)
     return s;
 }
 
-namespace lal_rt
-{
 //---------------------------------------------------------------------------
 
 VV_CLOSURE_DOC(file_exists_Q,
@@ -235,6 +230,20 @@ VV_CLOSURE_DOC(find,
 }
 //---------------------------------------------------------------------------
 
+std::string read_all(std::istream &in)
+{
+    std::string all;
+    char buf[4096];
+
+    while (in.read(buf, sizeof(buf)))
+        all.append(buf, sizeof(buf));
+
+    all.append(buf, in.gcount());
+
+    return all;
+}
+//---------------------------------------------------------------------------
+
 VV_CLOSURE_DOC(exec_M,
 "@sys procedure (sys-exec! _mode-string-or-keyword_ _prog-path_ _arg-list_)\n\n"
 "Starts the executable _prog-path_ with the arguments _arg-list_.\n"
@@ -247,7 +256,7 @@ VV_CLOSURE_DOC(exec_M,
 "    ;=> { exit-status: 0 stderr: \"...\" stdout: \"...\" }\n"
 )
 {
-    if (strip_lal_kw(vv_args->_s(0)) == "simple")
+    if (vv_args->_s(0) == "simple")
     {
         try
         {
@@ -277,7 +286,7 @@ VV_CLOSURE_DOC(exec_M,
         }
         catch (const std::exception &e)
         {
-            L_ERROR << "sys-exit! (" << vv_args << ") Exception: " << e.what();
+//            L_ERROR << "sys-exit! (" << vv_args << ") Exception: " << e.what();
             return vv_map() << vv_kv("error", e.what());
         }
     }
@@ -287,9 +296,15 @@ VV_CLOSURE_DOC(exec_M,
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
 
-void init_syslib(LuaThread *t, Lua::Instance &lua)
+BukaLISPModule init_syslib()
 {
-    VV obj(vv_list() << vv_ptr(t, "LuaThread"));
+    VV reg(vv_list() << vv("sys"));
+    VV obj(vv_map());
+    VV mod(vv_list());
+    reg << mod;
+
+#define SET_FUNC(functionName, closureName) \
+    mod << (vv_list() << vv(#functionName) << VVC_NEW_##closureName(obj))
 
     // Prepare boost::filesystem to return utf-8 encoded strings:
     std::locale old_locale = std::locale();
@@ -297,10 +312,10 @@ void init_syslib(LuaThread *t, Lua::Instance &lua)
         old_locale, new boost::filesystem::detail::utf8_codecvt_facet);
     boost::filesystem::path::imbue(new_locale);
 
-    LUA_REG(lua, "sys", "fileExistsQ", obj, file_exists_Q);
-    LUA_REG(lua, "sys", "execM",       obj, exec_M);
-    LUA_REG(lua, "sys", "find",        obj, find);
+    SET_FUNC(fileExists?, file_exists_Q);
+    SET_FUNC(exec!,       exec_M);
+    SET_FUNC(find,        find);
+
+    return BukaLISPModule(reg);
 }
 //---------------------------------------------------------------------------
-
-} // namespace lal_rt

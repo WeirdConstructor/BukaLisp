@@ -13,6 +13,9 @@ add_library(bklisp_mod_util STATIC
     external/modules/util/csv.cpp
     external/modules/util/utillib.cpp
 )
+add_library(bklisp_mod_sys  STATIC
+    external/modules/sys/syslib.cpp
+)
 
 add_library(bklisp_mod_test STATIC
     external/modules/testlib.cpp
@@ -32,8 +35,10 @@ target_link_libraries(bukalisp_lib
     bklisp_module_support
 
     bklisp_mod_test
-    bklisp_mod_util
+#    bklisp_mod_util
+#    bklisp_mod_sys
 
-    ${Boost_LIBRARIES}
-    ${BOOST_SUPPORT_LIBS}
-    ${POCO_LIBRARIES})
+#    ${Boost_LIBRARIES}
+#    ${BOOST_SUPPORT_LIBS})
+#    ${POCO_LIBRARIES}
+)

@@ -44,10 +44,8 @@ class VMException : public std::exception
     X(NEW_VEC,        7) /*                                        */ \
     X(NEW_MAP,        8) /*                                        */ \
     X(CSET_VEC,       9) /*                                        */ \
-    X(PUSH_ENV,      11) /*                                        */ \
-    X(POP_ENV,       12) /*                                        */ \
+    X(NEW_UPV,       10) /* (O: upvalue-adr)                       */ \
     X(DUMP_ENV_STACK,13) /*                                        */ \
-    X(SET_RETURN,    14) /*                                        */ \
     X(CALL,          15) /*                                        */ \
     X(NEW_CLOSURE,   16) /* (O: closure A: VM-PROG B: is_coro?)    */ \
     X(BRNIF,         17) /*                                        */ \
@@ -89,21 +87,19 @@ OP_CODE_DEF(X)
 
 struct INST
 {
-    int32_t o;
-    int32_t oe;
-    int32_t a;
-    int32_t b;
-    int32_t ae;
-    int32_t be;
+    uint32_t op;
+    int32_t  o;
+    int32_t  oe;
+    int32_t  a;
+    int32_t  ae;
+    int32_t  b;
+    int32_t  be;
+    int32_t  c;
+    int32_t  ce;
     union {
         double  d;
         int64_t i;
     } va;
-    union {
-        double  d;
-        int64_t i;
-    } vb;
-    uint32_t  op;
 
     void to_string(std::ostream &ss)
     {
@@ -113,7 +109,12 @@ struct INST
 #       undef X
         while (op_name.size() < 14)
            op_name = " " + op_name;
-        ss << "#" << op_name << ": (" << o << "/" << oe << ", [" << a << "/" << ae << ":" << b << "/" << be << "](" << va.i << ";" << vb.i << "))";
+        ss << "#" << op_name << ": ("
+           << o << "/" << oe
+           << ", [" << a << "/" << ae
+           << ":" << b << "/" << be
+           << ":" << c << "/" << ce
+           << "](" << va.i << "))";
     }
 
     INST() { clear(); }
@@ -125,7 +126,6 @@ struct INST
         a  = 0;
         b  = 0;
         va.i = 0;
-        vb.i = 0;
     }
 };
 //---------------------------------------------------------------------------
@@ -134,43 +134,32 @@ class PROG : public UserData
 {
     public:
         Atom     m_debug_info_map;
-        Atom    *m_atom_data;
-        size_t   m_atom_data_len;
+        Atom     m_atom_data;
         INST    *m_instructions;
         size_t   m_instructions_len;
 
     public:
         PROG()
-            : m_atom_data_len(0), m_instructions(nullptr), m_atom_data(nullptr)
+            : m_instructions(nullptr)
         {
 //            std::cout << "*NEW PROG" << ((void *) this) << std::endl;
         }
         PROG(GC &gc, size_t atom_data_len, size_t instr_len)
         {
-            m_atom_data_len    = atom_data_len;
-#if WITH_MEM_POOL
-            m_atom_data        = g_atom_array_pool.allocate(atom_data_len + 1);
-#else
-            m_atom_data        = new Atom[atom_data_len + 1];
-#endif
+            m_atom_data.set_vec(gc.allocate_vector(atom_data_len));
             m_instructions_len = instr_len;
             m_instructions     = new INST[instr_len + 1];
             m_instructions[instr_len].op = OP_END;
 //            std::cout << "NEW PROG" << ((void *) this) << ";; " << atom_data_len << " ;;" << std::endl;
         }
 
-        size_t data_array_len()   { return m_atom_data_len; }
-        Atom *data_array()        { return m_atom_data; }
-        void get_data_array(Atom *&data, size_t &len)
-        {
-            data = m_atom_data;
-            len  = m_atom_data_len;
-        }
+        AtomVec *data_array() { return m_atom_data.m_d.vec; }
 
         void set_data_from(AtomVec *av)
         {
-            for (size_t i = 0; i < av->m_len && i < m_atom_data_len; i++)
-                m_atom_data[i] = av->m_data[i];
+            m_atom_data.m_d.vec->m_len = 0;
+            for (size_t i = 0; i < av->m_len; i++)
+                m_atom_data.m_d.vec->set(i, av->m_data[i]);
         }
 
         void set_debug_info(Atom &a)
@@ -191,18 +180,12 @@ class PROG : public UserData
         virtual void mark(GC *gc, uint8_t clr)
         {
             UserData::mark(gc, clr);
-            for (size_t i = 0; i < m_atom_data_len; i++)
-                gc->mark_atom(m_atom_data[i]);
+            gc->mark_atom(m_atom_data);
             gc->mark_atom(m_debug_info_map);
         }
 
         virtual ~PROG()
         {
-#if WITH_MEM_POOL
-            if (m_atom_data)    g_atom_array_pool.free(m_atom_data);
-#else
-            if (m_atom_data)    delete[] m_atom_data;
-#endif
             if (m_instructions) delete[] m_instructions;
 //            std::cout << "DEL PROG" << ((void *) this) << std::endl;
         }
@@ -395,7 +378,7 @@ class VM
             }
         }
 
-        Atom eval(Atom at_ud, AtomVec *args = nullptr);
+        Atom eval(Atom at_ud, AtomVec *root_env, AtomVec *args = nullptr);
 };
 //---------------------------------------------------------------------------
 
