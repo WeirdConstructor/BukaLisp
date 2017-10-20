@@ -338,6 +338,19 @@
              (o 1)))
    1000000)
 
+(T '((((let ((x 10))
+         (lambda (y)
+           (lambda (j)
+             (let ((v (+ y j x)))
+               (lambda ()
+                 (+
+                   ((lambda () (+ v x)))
+                   v
+                   x
+                   j
+                   y)))))) 1) 2))
+   49)
+
 ; Test weird (define ...)s:
 (T '(let ((x (begin
                (define y 20)
@@ -372,5 +385,16 @@
         (set! y (+ y (fn-i))))
       (for (i 1 100000)
         (o 1 (lambda () i)))
+      [x y])
+   [100000 5000050000])
+
+(T '(let ((x 0)
+          (y 0))
+      (define (o a fn-i)
+        (set! x (+ x a))
+        (set! y (+ y (fn-i))))
+      (for (i 1 100000)
+        (let ((j i))
+          (o 1 (lambda () j))))
       [x y])
    [100000 5000050000])
