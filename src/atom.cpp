@@ -426,6 +426,33 @@ void AtomMapIterator::mark(GC *gc, uint8_t clr)
 }
 //---------------------------------------------------------------------------
 
+RegRowsReference::RegRowsReference(
+            AtomVec **rr0,
+            AtomVec **rr1,
+            AtomVec **rr2,
+            AtomVec **rr3,
+            AtomVec **rr4)
+    :
+    m_rr0(rr0),
+    m_rr1(rr1),
+    m_rr2(rr2),
+    m_rr3(rr3),
+    m_rr4(rr4)
+{
+}
+//---------------------------------------------------------------------------
+
+void RegRowsReference::mark(GC *gc, uint8_t clr)
+{
+    UserData::mark(gc, clr);
+    gc->mark_atom(Atom(T_VEC, *m_rr0));
+    gc->mark_atom(Atom(T_VEC, *m_rr1));
+    gc->mark_atom(Atom(T_VEC, *m_rr2));
+    gc->mark_atom(Atom(T_VEC, *m_rr3));
+    gc->mark_atom(Atom(T_VEC, *m_rr4));
+}
+//---------------------------------------------------------------------------
+
 BukaLISPException &BukaLISPException::push(Atom &err_stack)
 {
     if (err_stack.m_type != T_VEC)

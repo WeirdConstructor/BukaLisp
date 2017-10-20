@@ -224,27 +224,22 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 {
     using namespace std::chrono;
 
-//(define REG-ROW-FRAME 0)
-//(define REG-ROW-DATA  1)
-//(define REG-ROW-PRIM  2)
-//(define REG-ROW-UPV   3)
-//(define REG-ROW-ROOT  4)
-#define REG_ROW_FRAME   0
-#define REG_ROW_DATA    1
-#define REG_ROW_PRIM    2
-#define REG_ROW_UPV     3
-#define REG_ROW_ROOT    4
-#define REG_ROWS        5
-
-    GC_ROOT_VEC(m_rt->m_gc, keep_alive_reg_rows) =
-        m_rt->m_gc.allocate_vector(2);
-    keep_alive_reg_rows->check_size(1);
     AtomVec *reg_row[REG_ROWS];
-#define SET_FRAME_ROW(row_ptr)  reg_row[REG_ROW_FRAME] = row_ptr; keep_alive_reg_rows->m_data[0].set_vec(reg_row[REG_ROW_FRAME]);
-#define SET_DATA_ROW(row_ptr)   reg_row[REG_ROW_DATA]  = row_ptr;
-#define SET_PRIM_ROW(row_ptr)   reg_row[REG_ROW_PRIM]  = row_ptr;
-#define SET_UPV_ROW(row_ptr)    reg_row[REG_ROW_UPV]   = row_ptr; keep_alive_reg_rows->m_data[1].set_vec(reg_row[REG_ROW_UPV]);
-#define SET_ROOT_ROW(row_ptr)   reg_row[REG_ROW_ROOT]  = row_ptr;
+    for (size_t i = 0; i < REG_ROWS; i++)
+        reg_row[i] = nullptr;
+    GC_ROOT(m_rt->m_gc, reg_rows_ref) =
+        Atom(T_UD, new RegRowsReference(
+        &reg_row[0],
+        &reg_row[1],
+        &reg_row[2],
+        &reg_row[3],
+        &reg_row[4]));
+
+#define SET_FRAME_ROW(row_ptr)  reg_row[REG_ROW_FRAME] = row_ptr; // cout << "SET FRM ROW: " << reg_row[REG_ROW_FRAME] << endl;
+#define SET_DATA_ROW(row_ptr)   reg_row[REG_ROW_DATA]  = row_ptr; // cout << "SET FRM DATA: " << reg_row[REG_ROW_DATA] << endl;
+#define SET_PRIM_ROW(row_ptr)   reg_row[REG_ROW_PRIM]  = row_ptr; // cout << "SET FRM PRIM: " << reg_row[REG_ROW_PRIM] << endl;
+#define SET_UPV_ROW(row_ptr)    reg_row[REG_ROW_UPV]   = row_ptr; // cout << "SET FRM UPV: " << reg_row[REG_ROW_UPV] << endl;
+#define SET_ROOT_ROW(row_ptr)   reg_row[REG_ROW_ROOT]  = row_ptr; // cout << "SET FRM ROOT: " << reg_row[REG_ROW_ROOT] << endl;
 
     PROG *prog = nullptr;
     INST *pc   = nullptr;
@@ -315,7 +310,6 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     SET_PRIM_ROW(m_prim_table);
     SET_FRAME_ROW(args);
 
-    // TODO: Check:
     // XXX: The root-call-frame actually keeps alive the whole code-tree, including
     //      any callable sub-m_prog objects. Thus, we don't have to explicitly
     //      keep alive the m-prog or it's data_array().
@@ -384,7 +378,6 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
 #define E_GET(out_ptr, reg) E_GET_D(out_ptr, PE_##reg, P_##reg)
 
-// TODO: Check:
 #define RESTORE_FROM_CALL_FRAME(call_frame, ret_val)  \
     do {                                              \
         Atom *cv = (call_frame).m_d.vec->m_data;        \

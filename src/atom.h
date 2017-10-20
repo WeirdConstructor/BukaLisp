@@ -232,6 +232,11 @@ struct Atom
         m_d.func = f;
     }
 
+    Atom(Type t, UserData *ud) : m_type(t)
+    {
+        m_d.ud = ud;
+    }
+
     inline void clear()
     {
         m_type = T_NIL;
@@ -698,28 +703,6 @@ class GC
             num = i;
         }
 
-        void mark_vector(AtomVec *&vec)
-        {
-            if (!vec) return;
-
-            // Vector was put back on free list:
-            if (vec->m_gc_color == GC_COLOR_FREE)
-                return;
-
-            if (vec->m_gc_color == m_current_color)
-                return;
-
-            vec->m_gc_color = m_current_color;
-
-            if (vec->m_meta && vec->m_meta)
-                m_gc_vec_stack.push_back(vec->m_meta);
-
-            for (size_t i = 0; i < vec->m_len; i++)
-            {
-                mark_atom(vec->m_data[i]);
-            }
-        }
-
         void mark_map(AtomMap *&map)
         {
             if (!map) return;
@@ -947,6 +930,28 @@ class GC
                     if (at.m_d.sym)
                         at.m_d.sym->m_gc_color = m_current_color;
                     break;
+            }
+        }
+
+        void mark_vector(AtomVec *&vec)
+        {
+            if (!vec) return;
+
+            // Vector was put back on free list:
+            if (vec->m_gc_color == GC_COLOR_FREE)
+                return;
+
+            if (vec->m_gc_color == m_current_color)
+                return;
+
+            vec->m_gc_color = m_current_color;
+
+            if (vec->m_meta && vec->m_meta)
+                m_gc_vec_stack.push_back(vec->m_meta);
+
+            for (size_t i = 0; i < vec->m_len; i++)
+            {
+                mark_atom(vec->m_data[i]);
             }
         }
 
@@ -1207,6 +1212,42 @@ class AtomMapIterator : public UserData
 
         virtual ~AtomMapIterator()
         {
+        }
+};
+//---------------------------------------------------------------------------
+
+#define REG_ROW_FRAME   0
+#define REG_ROW_DATA    1
+#define REG_ROW_PRIM    2
+#define REG_ROW_UPV     3
+#define REG_ROW_ROOT    4
+#define REG_ROWS        5
+
+class RegRowsReference : public UserData
+{
+    public:
+        AtomVec                **m_rr0;
+        AtomVec                **m_rr1;
+        AtomVec                **m_rr2;
+        AtomVec                **m_rr3;
+        AtomVec                **m_rr4;
+
+    public:
+        RegRowsReference(
+            AtomVec **rr0,
+            AtomVec **rr1,
+            AtomVec **rr2,
+            AtomVec **rr3,
+            AtomVec **rr4);
+
+        virtual std::string type()      { return "REG-ROWS-REF"; }
+        virtual std::string as_string() { return "#<reg-rows-reference>"; }
+
+        virtual void mark(GC *gc, uint8_t clr);
+
+        virtual ~RegRowsReference()
+        {
+            std::cout << "DIED REG ROWS REF" << std::endl;
         }
 };
 //---------------------------------------------------------------------------
