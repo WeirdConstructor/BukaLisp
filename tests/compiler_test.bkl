@@ -797,34 +797,34 @@
 ;(t-env "(define y x)"    13.3 root-env)
 ;(t-env "(+ x y)"         26.6 root-env)
 
-; test externally given environment executed inside VM:
-(let ((my-env []))
-  (T-env '(begin 1) 1 my-env)
-  (@!'l (@0 my-env) [var: (length (@1 my-env))])
-  (push! (@1 my-env) 12)
-  (T-env '(begin
-            (define k 10)
-            ((lambda () l)))
-     12 my-env))
-
-; test recursive calling into VM:
-(let ((my-env [])
-      (func (invoke-compiler ['(displayln foo-out: (+ 10 20))] "test-code x" #t root-env)))
-  (T-env '(begin 1) 1 my-env)
-  (@!'xxx (@0 my-env) [var: (length (@1 my-env))])
-  (push! (@1 my-env) func)
-  (T-env '(begin
-            (define k 10)
-            ((lambda () (run-vm-prog xxx [])))
-            (+ 12.345 k))
-	 22.345
-	 my-env))
-
-; Test comments:
-(t "(define x 10)                             #;(set! x 20) x"      10)
-(t "(define x #;20 10)                        #;(set! x 20) x"      10)
-(t "#;()(define x #;20 10 #;[])#;{}           #;(set! x 20) x #;()" 10)
-(t "#;()(#;() define #;() x #;20 10 #;[])#;{} #;(set! x 20) x"      10)
+;; test externally given environment executed inside VM:
+;(let ((my-env []))
+;  (T-env '(begin 1) 1 my-env)
+;  (@!'l (@0 my-env) [var: (length (@1 my-env))])
+;  (push! (@1 my-env) 12)
+;  (T-env '(begin
+;            (define k 10)
+;            ((lambda () l)))
+;     12 my-env))
+;
+;; test recursive calling into VM:
+;(let ((my-env [])
+;      (func (invoke-compiler ['(displayln foo-out: (+ 10 20))] "test-code x" #t root-env)))
+;  (T-env '(begin 1) 1 my-env)
+;  (@!'xxx (@0 my-env) [var: (length (@1 my-env))])
+;  (push! (@1 my-env) func)
+;  (T-env '(begin
+;            (define k 10)
+;            ((lambda () (run-vm-prog xxx [])))
+;            (+ 12.345 k))
+;	 22.345
+;	 my-env))
+;
+;; Test comments:
+;(t "(define x 10)                             #;(set! x 20) x"      10)
+;(t "(define x #;20 10)                        #;(set! x 20) x"      10)
+;(t "#;()(define x #;20 10 #;[])#;{}           #;(set! x 20) x #;()" 10)
+;(t "#;()(#;() define #;() x #;20 10 #;[])#;{} #;(set! x 20) x"      10)
 
 ; Test conditionals:
 (T '(when   #t 10) 10)

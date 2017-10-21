@@ -123,7 +123,7 @@
        [symbol?
          (lambda (ctx arg T gtx)
            (let ((lookup-res (lookup-in-env (env: ctx) arg annotate-upvalue-use []))
-                 (value (@0 lookup-res)))
+                 (value (if lookup-res (@0 lookup-res) nil)))
              (when (nil? value)
                (error (str "Access undefined variable '" arg "'")
                       (last (meta-stack: gtx))))
@@ -270,3 +270,20 @@
       (@!k root-env v))
     (@!" REGS " root-env [])
     root-env))
+
+(define set-root-env-var
+  (lambda (root-env sym content)
+    (let ((var (@sym root-env)))
+      (let ((reg-idx nil))
+        (if var
+          (if (eqv? (first var) glob-var:)
+            (set! reg-idx (@2 var))
+            (begin
+              (set! var [glob-var: sym])
+              (@!sym root-env var)))
+          (set! var [glob-var: sym]))
+        (unless reg-idx
+          (set! reg-idx (length (@" REGS " root-env))))
+        (@!sym root-env var)
+        (@!reg-idx (@" REGS " root-env) content)
+        (@!2 var reg-idx)))))
