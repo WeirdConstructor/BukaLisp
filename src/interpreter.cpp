@@ -663,6 +663,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
             AtomVecPush avp_env(m_env_stack, Atom(T_MAP, am_bind_env));
 
             AtomVec *binds = lambda_form.m_d.vec->m_data[1].m_d.vec;
+//            cout << "GOGO: " << Atom(T_VEC, av).to_write_str() << "=" << Atom(T_VEC, binds).to_write_str() << "<=" << lambda_form.to_write_str() << endl;
 
             if (binds->m_len > av->m_len)
             {

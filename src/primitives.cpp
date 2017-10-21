@@ -609,16 +609,18 @@ START_PRIM()
     if (!m_vm)
         error("Can't run 'apply' without VM.", A0);
 
+    cout << "APPLY PRIM: " << Atom(T_VEC, &args).to_write_str() << endl;
+
     if (args.m_len == 1)
     {
         AtomVec *av = m_rt->m_gc.allocate_vector(0);
-        out = m_vm->eval(A0, av);
+        out = m_vm->eval(A0, nullptr, av);
     }
     else if (args.m_len == 2)
     {
         if (A1.m_type != T_VEC)
             error("'apply' No argument list given.", A1);
-        out = m_vm->eval(A0, A1.m_d.vec);
+        out = m_vm->eval(A0, nullptr, A1.m_d.vec);
     }
     else
     {
@@ -638,7 +640,7 @@ START_PRIM()
         for (size_t i = 0; i < av_last->m_len; i++)
             av->push(av_last->m_data[i]);
 
-        out = m_vm->eval(A0, av);
+        out = m_vm->eval(A0, nullptr, av);
     }
 END_PRIM_DOC(apply,
 "@control procedure (apply _proc_ [_arg1_ ... _argN_] [...])\n"

@@ -304,6 +304,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
     VMProgStateGuard psg(m_prog, m_pc, prog, pc);
 
+    if (!root_env) root_env = m_rt->m_gc.allocate_vector(0);
     SET_ROOT_ROW(root_env);
     SET_DATA_ROW(m_prog->data_array());
     SET_UPV_ROW(clos_upvalues);

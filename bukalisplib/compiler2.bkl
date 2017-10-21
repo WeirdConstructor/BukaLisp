@@ -153,14 +153,18 @@
                                                   (drop arg 1)))]))
              ((symbol)
               (let ((lookup-res (lookup-in-env (env: ctx) (@0 arg) annotate-upvalue-use []))
-                    (value (@0 lookup-res)))
+                    (value (if lookup-res (@0 lookup-res) nil)))
                 (when (nil? value)
                   (error (str "Access undefined variable '" (@0 arg) "'")
                          (last (meta-stack: gtx))))
                 (case (@0 value)
                   ((syntax:) ((@1 value) ctx arg T gtx))
                   ((macro:)
-                   (let ((transformed (apply (@1 value) (drop arg 1))))
+                   (displayln VAL: value arg)
+                   (let ((transformed
+                           (apply (@1 value) (drop arg 1))))
+
+
                      (T ctx transformed)))
                   ((prim:)
                    (if (nil? (@2 value))

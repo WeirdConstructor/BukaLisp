@@ -119,10 +119,12 @@
         (lambda (msg a)
           (error (str "'lambda' parameter error: " msg) a))))
     (let ((new-env {" PARENT "         (env: ctx)
-                   " LAMBDA-UPV "     {}})
+                    " LAMBDA-UPV "     {}})
           (new-args [])
           (va-arg nil)
-          (new-ctx (assign ctx [env: new-env])))
+          (let-vars [])
+          (new-ctx (assign ctx [env:      new-env
+                                let-vars: let-vars])))
       (do-each (s (args: lambda-params))
         (let ((new-var-name (gtx-gensym gtx s)))
           (push! new-args new-var-name)
@@ -137,23 +139,28 @@
             (lambda-upv
               (if (> (length (@" LAMBDA-UPV " new-env)) 0)
                 (keys-in-map (@" LAMBDA-UPV " new-env))
-                nil)))
+                nil))
+            (defined-upvalues (if (found-upv-in-env? new-env)
+                                (only-in-first (upvalues-in-env new-env) new-args)
+                                []))
+            (non-upv-let-vars (only-in-first let-vars defined-upvalues))
+            (lambda-body (if (found-upv-in-env? new-env)
+                           (let ((upv-body ['#1#create-upv
+                                            lambda:
+                                            (upvalues-in-env new-env)
+                                            compiled-body]))
+                             (if (> (length defined-upvalues) 0)
+                               [['#1#let defined-upvalues upv-body]]
+                               [upv-body]))
+                           [compiled-body])))
+        (unless (empty? non-upv-let-vars)
+          (set! lambda-body [['#1#let non-upv-let-vars (first lambda-body)]]))
         (append
           '#1#lambda
           (.AM gtx (if (nil? va-arg)
                      [[lambda-name new-args nil    lambda-upv]]
                      [[lambda-name new-args va-arg lambda-upv]]))
-          (if (found-upv-in-env? new-env)
-            (let ((defined-upvalues
-                   (only-in-first (upvalues-in-env new-env) new-args))
-                  (upv-body ['#1#create-upv
-                             lambda:
-                             (upvalues-in-env new-env)
-                             compiled-body]))
-              (if (> (length defined-upvalues) 0)
-                [['#1#let defined-upvalues upv-body]]
-                [upv-body]))
-            [compiled-body]))))))
+          lambda-body)))))
 ;----------------------------------------------------------------------------
 
 (define compile-let-block
@@ -289,8 +296,8 @@
                params)))
     (define macro-name (first params))
     (define macro-func
-      (eval (.AM gtx (append ['lambda (drop params 1)]
-                             (drop args 2)))))
+      (eval (displayln (.AM gtx (append ['lambda (drop params 1)]
+                             (drop args 2))))))
     (@!macro-name (env: ctx)
                   [macro: macro-func macro-name])
     (.AM gtx ['#1#nil])))
@@ -472,7 +479,7 @@
                   (@0 bind)
                   (T ctx (@2 iter))))
               (push! step-exprs
-                     (DI! iter ['#1#set (@0 bind) step]))
+                     (DI! iter ['#1#set! (@0 bind) step]))
               (set! i (+ i 1))))
           ['#1#do
            (T ctx test-expr)
