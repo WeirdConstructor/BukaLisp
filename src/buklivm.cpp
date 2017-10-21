@@ -514,7 +514,28 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                 {
                     E_SET_CHECK_REALLOC(O, O);
                     alloc = true;
-                    E_SET(O, Atom(T_MAP, m_rt->m_gc.allocate_map()));
+
+                    AtomMap *out_am = m_rt->m_gc.allocate_map();
+                    E_SET(O, Atom(T_VEC, out_am));
+
+                    E_GET(tmp, A);
+                    if (tmp->m_type != T_VEC)
+                        error("Bad argument index vector!", *tmp);
+                    AtomVec *av = tmp->m_d.vec;
+
+                    for (size_t i = 0; i < av->m_len; i += 4)
+                    {
+                        Atom *key_idx  = &(av->m_data[i]);
+                        Atom *key_eidx = &(av->m_data[i + 1]);
+                        Atom *val_idx  = &(av->m_data[i + 2]);
+                        Atom *val_eidx = &(av->m_data[i + 3]);
+                        Atom *key, *val;
+                        E_GET_D(key, key_eidx->m_d.i, key_idx->m_d.i);
+                        E_GET_D(val, val_eidx->m_d.i, val_idx->m_d.i);
+                        out_am->set(*key, *val);
+                    }
+
+                    E_SET(O, Atom(T_MAP, out_am));
                     break;
                 }
 
@@ -1121,12 +1142,13 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                     Atom *ot;                                            \
                     E_SET_D_PTR(PE_O, P_O, ot);                          \
                     Atom &o = *ot;                                       \
-                    o.m_type = a.m_type;                                 \
                     if (a.m_type == T_DBL)                               \
+                    {                                                    \
                         o.m_d.d = a.to_dbl() oper b.to_dbl();            \
+                        o.m_type = T_DBL;                                \
+                    }                                                    \
                     else if (a.m_type == T_NIL)                          \
                     {                                                    \
-                        o.m_type = b.m_type;                             \
                         if (b.m_type == T_DBL)                           \
                         {                                                \
                             o.m_d.d = (double) neutr;                    \
@@ -1137,9 +1159,13 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                             o.m_d.i = (int64_t) neutr;                   \
                             o.m_d.i = ((int64_t) neutr) oper b.to_int(); \
                         }                                                \
+                        o.m_type = b.m_type;                             \
                     }                                                    \
                     else                                                 \
+                    {                                                    \
                         o.m_d.i = a.to_int() oper b.to_int();            \
+                        o.m_type = T_INT;                                \
+                    }                                                    \
                     break;                                               \
                 }
 

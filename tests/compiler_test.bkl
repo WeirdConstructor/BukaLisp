@@ -70,133 +70,133 @@
 ;	 my-env))
 
 ;----------------------------------------------------------------------------
-
-(T '((lambda (x) x) 5)
-   5)
-
-(T '((lambda (x y)
-       (+ 1 ((lambda () x))))
-     5 nil)
-   6)
-
-(T '((lambda (x)
-       ((lambda (y) (+ x y))
-        10))
-     5)
-   15)
-
-(T '(begin (define x 0)
-           (define (o a)
-             (set! x (+ x a)))
-           (for (i 1 1000000)
-             (o 1)))
-   1000000)
-;(error X:)
+;
+;(T '((lambda (x) x) 5)
+;   5)
+;
+;(T '((lambda (x y)
+;       (+ 1 ((lambda () x))))
+;     5 nil)
+;   6)
+;
+;(T '((lambda (x)
+;       ((lambda (y) (+ x y))
+;        10))
+;     5)
+;   15)
+;
+;(T '(begin (define x 0)
+;           (define (o a)
+;             (set! x (+ x a)))
+;           (for (i 1 1000000)
+;             (o 1)))
+;   1000000)
+;;(error X:)
 
 ;----------------------------------------------------------------------------
 
-(T '(when   #t 10) 10)
-(T '(when   #f 10) nil)
-(T '(unless #t 10) nil)
-(T '(unless #f 10) 10)
+;(T '(when   #t 10) 10)
+;(T '(when   #f 10) nil)
+;(T '(unless #t 10) nil)
+;(T '(unless #f 10) 10)
 ;----------------------------------------------------------------------------
 
-(t "123"        123)
-(t "(+ 123)"    123)
-(t "(+ 1 123)"  124)
-(t '((+ 1 123)
-     (+ 1 345)
-     (+ 1 567))
-   568)
-(t "(define x 12) (define y 34) (+ x y)" 46)
+;(t "123"        123)
+;(t "(+ 123)"    123)
+;(t "(+ 1 123)"  124)
+;(t '((+ 1 123)
+;     (+ 1 345)
+;     (+ 1 567))
+;   568)
+;(t "(define x 12) (define y 34) (+ x y)" 46)
+;
+;(T '123         123)
+;(T '(+ 123)     123)
+;(T '(+ 1 123)   124)
+;(t '((define x 12)
+;     (define y 34)
+;     (+ x y))
+;   46)
+;(T '(begin
+;      (define x 12)
+;      (define y 34)
+;      (+ x y))
+;   46)
+;(t '((define x 12)
+;     (set! x (+ 14.5 x)))
+;   26.5)
+;(t '((define x +)
+;     (set! x (x 1.5 1)))
+;   2.5)
+;
+;(T '(* 2 3 4)          24)
+;
+;(T '(> (atom-id []) 0) #true)
+;
+;; Test basic variable handling:
+;(T '(begin (define y 30) y) 30)
+;(T '(begin (define x 12)
+;           (define y 30)
+;           (set! y 10)
+;           y) 10)
+;
+;; Test data loading:
+;(T 'a: a:)
+;(T '[1 2 3] '(1 2 3))
+;(T '{x: 12} {x: 12})
+;(T ''{x: 12} {x: 12})
+;(T '{x: (+ 6 2)} {x: 8})
+;(T ''(1 2 3) '(1 2 3))
+;(T ''(eq? 1 2) '(eq? 1 2))
 
-(T '123         123)
-(T '(+ 123)     123)
-(T '(+ 1 123)   124)
-(t '((define x 12)
-     (define y 34)
-     (+ x y))
-   46)
-(T '(begin
-      (define x 12)
-      (define y 34)
-      (+ x y))
-   46)
-(t '((define x 12)
-     (set! x (+ 14.5 x)))
-   26.5)
-(t '((define x +)
-     (set! x (x 1.5 1)))
-   2.5)
+;; Test arithmetics:
+;(T '(+ 1 2 3) 6)
+;(T '(+ 1.2 2 3) 6.2)
+;(T '(* 1.2 2 3) 7.2)
+;(T '(/ 8 2 2) 2)
+;(T '(/ 5 2) 2)
+;(T '(- 10.5 1.3 2.2) 7)
+;(T '(< 1 2) #true)
+;(T '(> 1 2) #false)
+;(T '(<= 1 2) #true)
+;(T '(<= 1 2) #true)
+;(T '(<= 2 2) #true)
+;(T '(<= 2.1 2) #false)
+;(T '(>= 2.1 2) #true)
 
-(T '(* 2 3 4)          24)
-
-(T '(> (atom-id []) 0) #true)
-
-; Test basic variable handling:
-(T '(begin (define y 30) y) 30)
-(T '(begin (define x 12)
-           (define y 30)
-           (set! y 10)
-           y) 10)
-
-; Test data loading:
-(T 'a: a:)
-(T '[1 2 3] '(1 2 3))
-(T '{x: 12} {x: 12})
-(T ''{x: 12} {x: 12})
-(T '{x: (+ 6 2)} {x: 8})
-(T ''(1 2 3) '(1 2 3))
-(T ''(eq? 1 2) '(eq? 1 2))
-
-; Test arithmetics:
-(T '(+ 1 2 3) 6)
-(T '(+ 1.2 2 3) 6.2)
-(T '(* 1.2 2 3) 7.2)
-(T '(/ 8 2 2) 2)
-(T '(/ 5 2) 2)
-(T '(- 10.5 1.3 2.2) 7)
-(T '(< 1 2) #true)
-(T '(> 1 2) #false)
-(T '(<= 1 2) #true)
-(T '(<= 1 2) #true)
-(T '(<= 2 2) #true)
-(T '(<= 2.1 2) #false)
-(T '(>= 2.1 2) #true)
-
-; Test procedures:
-(T '(eqv? #t #t) #true)
-(T '(eqv? #f #f) #true)
-(T '(eqv? #t #f) #false)
-
-(T '(eqv? a: a:) #true)
-(T '(eqv? a: b:) #false)
-
-(T '(eqv? 'a 'a) #true)
-(T '(eqv? 'a 'b) #false)
-
-(T '(eqv? 2 (/ 4 2)) #true)
-(T '(eqv? 2 (/ 4.0 2.0)) #false)
-(T '(eqv? 2.0 (/ 4.0 2.0)) #true)
-
-(T '(eqv? [] []) #false)
-(T '(eqv? {} {}) #false)
-(T '(eqv? { x: 11 } { x: 10 }) #false)
-(T '(eqv? 2 (/ 5 2)) #true)
-(T '(eqv? 2 (/ 5.0 2)) #false)
-(T '(eqv? #f 0) #false)
-(T '(eqv? #f []) #false)
-(T '(eqv? 2.0 2) #false)
-
-(T '(eqv? + (let ((y +)) y)) #true)
-(T '(eqv? + (let ((o +)) (let ((y +)) y o))) #true)
-(T '(let ((m { x: 11 }) (l #f)) (set! l m) (eqv? m l)) #true)
-
-(T '(not #t) #false)
-(T '(not 1) #false)
-(T '(not '()) #false)
-(T '(not #f) #true)
-
+;; Test procedures:
+;(T '(eqv? #t #t) #true)
+;(T '(eqv? #f #f) #true)
+;(T '(eqv? #t #f) #false)
+;
+;(T '(eqv? a: a:) #true)
+;(T '(eqv? a: b:) #false)
+;
+;(T '(eqv? 'a 'a) #true)
+;(T '(eqv? 'a 'b) #false)
+;
+;(T '(eqv? 2 (/ 4 2)) #true)
+;(T '(eqv? 2 (/ 4.0 2.0)) #false)
+;(T '(eqv? 2.0 (/ 4.0 2.0)) #true)
+;
+;(T '(eqv? [] []) #false)
+;(T '(eqv? {} {}) #false)
+;(T '(eqv? { x: 11 } { x: 10 }) #false)
+;(T '(eqv? 2 (/ 5 2)) #true)
+;(T '(eqv? 2 (/ 5.0 2)) #false)
+;(T '(eqv? #f 0) #false)
+;(T '(eqv? #f []) #false)
+;(T '(eqv? 2.0 2) #false)
+;
+;(T '(eqv? + (let ((y +)) y)) #true)
+;(T '(eqv? + (let ((o +)) (let ((y +)) y o))) #true)
+;(T '(let ((m { x: 11 }) (l #f)) (set! l m) (eqv? m l)) #true)
+;
+;(T '(not #t) #false)
+;(T '(not 1) #false)
+;(T '(not '()) #false)
+;(T '(not #f) #true)
+;
 ; Testing predicates
 (T '(symbol? 'a) #true)
 (T '(symbol? a:) #false)

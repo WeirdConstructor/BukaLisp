@@ -261,6 +261,12 @@ struct Atom
     size_t size() const;
     bool is_simple() const;
 
+    void set_dbl(double i)
+    {
+        m_type = T_DBL;
+        m_d.d = i;
+    }
+
     void set_int(int64_t i)
     {
         m_type = T_INT;

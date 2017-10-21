@@ -82,8 +82,8 @@
       ($define! self (op-new-arg-vec out-idx len arg-idx)
         (push-op NEW_ARG_VEC: out-idx len arg-idx 0))
 
-      ($define! self (op-new-map out-idx)
-        (push-op NEW_MAP: out-idx 0 0 0))
+      ($define! self (op-new-map out-idx in-idx-vec-idx)
+        (push-op NEW_MAP: out-idx in-idx-vec-idx 0 0))
 
       ($define! self (op-set-vec vec-idx idx src-idx)
         (push-op SET_VEC: vec-idx idx src-idx 0))
@@ -138,6 +138,9 @@
 
       ($define! self (op-le out-idx a-idx b-idx)
         (push-op LE: out-idx a-idx b-idx 0))
+
+      ($define! self (op-not out-idx in-idx)
+        (push-op NOT: out-idx in-idx 0 0))
 
       ($define! self (op-forinc cond-idx iter-idx step-idx end-idx)
         ; XXX: iter-idx=cond-idx+1
