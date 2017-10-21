@@ -4,6 +4,8 @@
 #include "atom.h"
 #include "atom_printer.h"
 
+using namespace std;
+
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
@@ -32,19 +34,16 @@ size_t count_elements(const Atom &a)
         switch (at.m_type)
         {
             case T_VEC:
-            case T_CLOS:
                 s++;
                 for (size_t i = 0; i < at.m_d.vec->m_len; i++)
                     to_count.push_back(at.m_d.vec->m_data[i]);
                 break;
             case T_MAP:
                 s++;
-                for (UnordAtomMap::iterator i = at.m_d.map->m_map.begin();
-                     i != at.m_d.map->m_map.end();
-                     i++)
+                for (auto i : at.m_d.map->m_map)
                 {
-                    to_count.push_back(i->first);
-                    to_count.push_back(i->second);
+                    to_count.push_back(i.first);
+                    to_count.push_back(i.second);
                 }
                 break;
             default:

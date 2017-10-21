@@ -792,10 +792,10 @@
 ;      (x 1 2 3))
 ;   [1 [2 3]])
 
-(t-env "(define x 13.3)" 13.3 root-env)
-(t-env "x"               13.3 root-env)
-(t-env "(define y x)"    13.3 root-env)
-(t-env "(+ x y)"         26.6 root-env)
+;(t-env "(define x 13.3)" 13.3 root-env)
+;(t-env "x"               13.3 root-env)
+;(t-env "(define y x)"    13.3 root-env)
+;(t-env "(+ x y)"         26.6 root-env)
 
 ; test externally given environment executed inside VM:
 (let ((my-env []))
