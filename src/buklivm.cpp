@@ -224,6 +224,8 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 {
     using namespace std::chrono;
 
+//    cout << "BUKKLIROOT" << Atom(T_VEC, root_env).to_write_str() << endl;
+
     AtomVec *reg_row[REG_ROWS];
     for (size_t i = 0; i < REG_ROWS; i++)
         reg_row[i] = nullptr;

@@ -129,7 +129,7 @@
                       (last (meta-stack: gtx))))
              (case (@0 value)
                ((var:)      ['#1#var (@1 value) (@2 value)])
-               ((glob-var:) ['#1#glob-var (@1 value)])
+               ((glob-var:) ['#1#glob-var (@1 value) (@2 value)])
                ((prim:)     ['#1#prim (@1 value)])
                ((syntax:)
                 (error "Variable contains syntax directive, can't use it here" value))
@@ -181,7 +181,7 @@
                                   (drop arg 1)))])
                   ((glob-var:)
                    ['#1#apply
-                    (.AM gtx ['#1#glob-var (@1 value)])
+                    (.AM gtx ['#1#glob-var (@1 value) (@2 value)])
                     (.AM gtx (map (lambda (v) (T ctx v))
                                   (drop arg 1)))])
                   (else

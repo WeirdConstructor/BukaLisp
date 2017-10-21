@@ -237,7 +237,9 @@
                   (if is-root-env?
                     (begin
                       (set! var-s1-sym '#1#glob-var)
-                      (set! var [glob-var: var-name]))
+                      (let ((glob-reg-idx (length (@" REGS " (env: ctx)))))
+                        (push! (@" REGS " (env: ctx)) nil)
+                        (set! var [glob-var: var-name glob-reg-idx])))
                     (begin
                       (set! var-s1-sym '#1#var)
                       (let ((new-var-name (gtx-gensym gtx var-name)))
@@ -263,7 +265,9 @@
                 (if is-root-env?
                   (begin
                     (set! var-s1-sym '#1#glob-var)
-                    (set! var [glob-var: func-name]))
+                    (let ((glob-reg-idx (length (@" REGS " (env: ctx)))))
+                      (push! (@" REGS " (env: ctx)) nil)
+                      (set! var [glob-var: func-name glob-reg-idx])))
                   (begin
                     (set! var-s1-sym '#1#var)
                     (let ((new-var-name (gtx-gensym gtx func-name)))

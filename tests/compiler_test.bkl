@@ -747,50 +747,50 @@
 ;      x)
 ;   [1 2])
 
-; Test recursive calling:
-(T '(let ((x [])
-          (c 11))
-      (set! c
-        (lambda (o)
-          (push! x o)
-          (when (eqv? o 0)
-            (return 11))
-          (c (- o 1))))
-      (c 2)
-      x)
-   [2 1 0])
-
-; Test define
-(T '(begin (define x 10) x)     10)
-(T '(begin (define (x) 10) (x)) 10)
-(T '(begin
-      (define (x b c)
-        (+ (* b c) 10))
-      (x 2.5 10))
-   35)
-(T '(begin (define x 10) (define x 20) x) 20)
-(T '(begin (define x 10) (define y 20) (define x 21) [x y]) '(21 20))
-(T '(begin (define x 10) (define y 20) (define x y) x) 20)
-(T '(begin (define if 10) if) 10)
-
-
-; Test varargs
-(T '((lambda (. x) x))              [])
-(T '((lambda (. x) x) 1 2 3)        [1 2 3])
-(T '((lambda (a . x) [a x]) 1 2 3)  [1 [2 3]])
-(T '((lambda (a . x) [a x]) 1)      [1 []])
-(T '((lambda (a . x) [a x]) nil)    [nil []])
-(T '(begin
-      (define (x a . v) [a v])
-      (x 1 2 3))
-   [1 [2 3]])
-
-(T '(begin
-      (define (x a . v)
-        (define z v)
-        [a z])
-      (x 1 2 3))
-   [1 [2 3]])
+;; Test recursive calling:
+;(T '(let ((x [])
+;          (c 11))
+;      (set! c
+;        (lambda (o)
+;          (push! x o)
+;          (when (eqv? o 0)
+;            (return 11))
+;          (c (- o 1))))
+;      (c 2)
+;      x)
+;   [2 1 0])
+;
+;; Test define
+;(T '(begin (define x 10) x)     10)
+;(T '(begin (define (x) 10) (x)) 10)
+;(T '(begin
+;      (define (x b c)
+;        (+ (* b c) 10))
+;      (x 2.5 10))
+;   35)
+;(T '(begin (define x 10) (define x 20) x) 20)
+;(T '(begin (define x 10) (define y 20) (define x 21) [x y]) '(21 20))
+;(T '(begin (define x 10) (define y 20) (define x y) x) 20)
+;(T '(begin (define if 10) if) 10)
+;
+;
+;; Test varargs
+;(T '((lambda (. x) x))              [])
+;(T '((lambda (. x) x) 1 2 3)        [1 2 3])
+;(T '((lambda (a . x) [a x]) 1 2 3)  [1 [2 3]])
+;(T '((lambda (a . x) [a x]) 1)      [1 []])
+;(T '((lambda (a . x) [a x]) nil)    [nil []])
+;(T '(begin
+;      (define (x a . v) [a v])
+;      (x 1 2 3))
+;   [1 [2 3]])
+;
+;(T '(begin
+;      (define (x a . v)
+;        (define z v)
+;        [a z])
+;      (x 1 2 3))
+;   [1 [2 3]])
 
 (t-env "(define x 13.3)" 13.3 root-env)
 (t-env "x"               13.3 root-env)

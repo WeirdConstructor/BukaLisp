@@ -125,11 +125,9 @@
             adr))]
        ['#1#glob-var
         (lambda (ctx arg T gtx)
-          (let ((root-var  (@(@0 arg) (root-env: gtx)))
-                (root-regs (@" REGS " (root-env: gtx))))
+          (let ((root-var  (@(@0 arg) (root-env: gtx))))
             (unless root-var
-              (let ((new-root-adr (length root-regs)))
-                (@!new-root-adr root-regs nil)
+              (let ((new-root-adr (@1 arg)))
                 (set! root-var [new-root-adr REG-ROW-ROOT])
                 (@!(@0 arg) (root-env: gtx) root-var)))
             root-var))]
@@ -376,9 +374,8 @@
 ;----------------------------------------------------------------------------
 
 (define bukalisp-compile
-  (lambda (expr)
-    (let ((root-env (spawn-root-env))
-          (s1-ctx   {env:         root-env
+  (lambda (expr root-env)
+    (let ((s1-ctx   {env:         root-env
                      include-dir: "bukalisplib"})
           (s1-gtx   {root-env:    root-env
                      var-counter: 0})
@@ -387,7 +384,7 @@
                     s1-ctx
                     s1-gtx)))
       (displayln (pp-str s1prog))
-      (let ((gtx {root-env:    {" REGS " []}})
+      (let ((gtx {root-env:    {" REGS " (@" REGS " root-env)}})
             (frame (make-s2-frame gtx))
             (ctx {F:            frame
                   P:            (make-code-pad-object frame)
@@ -404,17 +401,18 @@
 ;----------------------------------------------------------------------------
 
 (define T-env
-  (lambda (code expected env)
+  (lambda (code expected root-env)
     (set! code (DI! code [code]))
 ;    (when (nil? env) (set! env [{} []]))
-    (let ((r (bukalisp-compile code)))
+    (let ((r (bukalisp-compile code root-env)))
+;      (displayln ROOT_ENV: root-env)
       (if (eqv? (write-str r) (write-str expected))
         (displayln (str "OK - " code))
         (error (str "Test failed: " code ", returned: " r " != " expected))))))
 
 (define T
   (lambda (code expected)
-    (T-env code expected nil)))
+    (T-env code expected (spawn-root-env))))
 ;----------------------------------------------------------------------------
 
 ;(error X:)
@@ -1236,3 +1234,10 @@
         [a z])
       (x 1 2 3))
    [1 [2 3]])
+
+; Test using a known environemt which is mutatable:
+(let ((my-env (spawn-root-env)))
+  (T-env '(begin (define x 13.3)) 13.3 my-env)
+  (T-env '(begin x)               13.3 my-env)
+  (T-env '(define y x)            13.3 my-env)
+  (T-env '(+ x y)                 26.6 my-env))
