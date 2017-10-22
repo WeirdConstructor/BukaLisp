@@ -543,13 +543,34 @@
 ;----------------------------------------------------------------------------
 
 ;(PUSH-DEBUG)
-;;(error XXX:)
-;
+;(error XXX:)
+
+;(T '(begin
+;  (define x 0)
+;  (for (i 1 100000000)
+;    (set! x (+ x 1))))
+;   100000000)
+;;(error o:)
+;;(T '(begin
+;;  (define x 0)
+;;  (define (inc a) (set! x (+ x a)))
+;;  (for (i 1 10000000)
+;;    (inc 1)))
+;;   0)
+;;
+;;(error F:)
+;;(T '(begin
+;;      (define x 10000000)
+;;      (let ((inco (lambda (a) (set! x (+ x a)))))
+;;        (while (> x 0)
+;;               (inco -1)))) 0)
 ;(T '(begin
 ;      (define x 10000000)
-;      (let ((inco (lambda (a) (set! x (+ x a)))))
-;        (while (> x 0)
-;               (inco -1)))) 0)
+;      (while (> x 0)
+;             (set! x (- x 1)))) 0)
+;(T '(let ((x 10000000))
+;      (while (> x 0)
+;             (set! x (- x 1)))) 0)
 ;(error X:)
 ;----------------------------------------------------------------------------
 

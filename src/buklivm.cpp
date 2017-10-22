@@ -226,22 +226,28 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
 //    cout << "BUKKLIROOT" << Atom(T_VEC, root_env).to_write_str() << endl;
 
+    if (!root_env) root_env = m_rt->m_gc.allocate_vector(0);
+
+    AtomVec *rr_frame   = nullptr;
+    Atom    *rr_v_frame = nullptr;
+    AtomVec *rr_data    = nullptr;
+    Atom    *rr_v_data  = nullptr;
+    Atom    *rr_v_root  = root_env->m_data;
     AtomVec *reg_row[REG_ROWS];
     for (size_t i = 0; i < REG_ROWS; i++)
         reg_row[i] = nullptr;
     GC_ROOT(m_rt->m_gc, reg_rows_ref) =
         Atom(T_UD, new RegRowsReference(
-        &reg_row[0],
-        &reg_row[1],
+        &rr_frame,
+        &rr_data,
         &reg_row[2],
         &reg_row[3],
-        &reg_row[4]));
+        &root_env));
 
-#define SET_FRAME_ROW(row_ptr)  reg_row[REG_ROW_FRAME] = row_ptr; // cout << "SET FRM ROW: " << reg_row[REG_ROW_FRAME] << endl;
-#define SET_DATA_ROW(row_ptr)   reg_row[REG_ROW_DATA]  = row_ptr; // cout << "SET FRM DATA: " << reg_row[REG_ROW_DATA] << endl;
+#define SET_FRAME_ROW(row_ptr)  rr_frame = row_ptr; rr_v_frame = rr_frame->m_data; // cout << "SET FRM ROW: " << reg_row[REG_ROW_FRAME] << endl;
+#define SET_DATA_ROW(row_ptr)   rr_data = row_ptr; rr_v_data = rr_data->m_data; // cout << "SET FRM DATA: " << reg_row[REG_ROW_DATA] << endl;
 #define SET_PRIM_ROW(row_ptr)   reg_row[REG_ROW_PRIM]  = row_ptr; // cout << "SET FRM PRIM: " << reg_row[REG_ROW_PRIM] << endl;
 #define SET_UPV_ROW(row_ptr)    reg_row[REG_ROW_UPV]   = row_ptr; // cout << "SET FRM UPV: " << reg_row[REG_ROW_UPV] << endl;
-#define SET_ROOT_ROW(row_ptr)   reg_row[REG_ROW_ROOT]  = row_ptr; // cout << "SET FRM ROOT: " << reg_row[REG_ROW_ROOT] << endl;
 
     PROG *prog = nullptr;
     INST *pc   = nullptr;
@@ -306,8 +312,6 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
     VMProgStateGuard psg(m_prog, m_pc, prog, pc);
 
-    if (!root_env) root_env = m_rt->m_gc.allocate_vector(0);
-    SET_ROOT_ROW(root_env);
     SET_DATA_ROW(m_prog->data_array());
     SET_UPV_ROW(clos_upvalues);
     SET_PRIM_ROW(m_prim_table);
@@ -341,40 +345,63 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 #define PE_O ((PC.oe))
 
 #define E_SET_CHECK_REALLOC_D(env_idx, idx) do { \
-    if ((env_idx) < REG_ROWS) \
-    { \
-        reg_row[(env_idx)]->check_size((idx)); \
-    } \
-    else \
-        error("out of reg_row range (" #env_idx ")", Atom(T_INT, (env_idx))); \
+    switch ((env_idx)) { \
+    case REG_ROW_FRAME: if (rr_frame->m_len <= (size_t) (idx)) { rr_frame->check_size((idx)); rr_v_frame = rr_frame->m_data; } break; \
+    case REG_ROW_ROOT: if (root_env->m_len <= (size_t) (idx)) { root_env->check_size((idx)); rr_v_root = root_env->m_data; } break; \
+    case REG_ROW_DATA: if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((idx)); rr_v_data = rr_data->m_data; } break; \
+    default: \
+        if ((env_idx) < REG_ROWS) \
+        { \
+            reg_row[(env_idx)]->check_size((idx)); \
+        } \
+        else \
+            error("out of reg_row range (" #env_idx ")", Atom(T_INT, (env_idx))); \
+    }\
 } while (0)
 #define E_SET_CHECK_REALLOC(env_idx_reg, idx_reg) \
     E_SET_CHECK_REALLOC_D(PE_##env_idx_reg, P_##idx_reg)
 
 #define E_SET_D_PTR(env_idx, idx, val_ptr) do { \
-    val_ptr = &(reg_row[(env_idx)]->m_data[(idx)]); \
-    if (env_idx == REG_ROW_UPV) val_ptr = &(val_ptr->m_d.vec->m_data[0]); \
+    switch ((env_idx)) { \
+    case REG_ROW_FRAME: val_ptr = &(rr_v_frame[(idx)]); break; \
+    case REG_ROW_DATA:  val_ptr = &(rr_v_data[(idx)]); break; \
+    case REG_ROW_ROOT:  val_ptr = &(rr_v_root[(idx)]); break; \
+    default: \
+        { \
+            val_ptr = &(reg_row[(env_idx)]->m_data[(idx)]); \
+            if (env_idx == REG_ROW_UPV) val_ptr = &(val_ptr->m_d.vec->m_data[0]); \
+        } \
+    } \
 } while (0)
 
 #define E_SET_D(env_idx, idx, val) do { \
-    if (env_idx != REG_ROW_UPV) \
-        reg_row[(env_idx)]->m_data[(idx)] = (val); \
-    else \
-        reg_row[(env_idx)]->m_data[(idx)].m_d.vec->m_data[0] = (val); \
+    switch ((env_idx)) { \
+    case REG_ROW_FRAME: rr_v_frame[(idx)] = (val); break; \
+    case REG_ROW_DATA: rr_v_data[(idx)] = (val); break; \
+    case REG_ROW_ROOT: rr_v_root[(idx)] = (val); break; \
+    case REG_ROW_UPV: reg_row[(env_idx)]->m_data[(idx)].m_d.vec->m_data[0] = (val); break; \
+    default: reg_row[(env_idx)]->m_data[(idx)] = (val); \
+    } \
 } while (0)
 
 #define E_SET(reg, val) E_SET_D(PE_##reg, P_##reg, (val))
 
 #define E_GET_D(out_ptr, eidx, idx) do { \
-    if ((idx) >= (int32_t) reg_row[(eidx)]->m_len) \
-        (out_ptr) = &static_nil_atom; \
-    else { \
-        (out_ptr) = &(reg_row[(eidx)]->m_data[(idx)]); \
-        if ((eidx) == REG_ROW_UPV) \
-        { \
-            if (out_ptr->m_type != T_VEC || out_ptr->m_d.vec->m_len <= 0) \
-                error("Bad upvalue access", Atom(T_INT, (idx))); \
-            (out_ptr) = &(out_ptr->m_d.vec->m_data[0]); \
+    switch ((eidx)) { \
+    case REG_ROW_FRAME: (out_ptr) = &(rr_v_frame[(idx)]); break; \
+    case REG_ROW_DATA: (out_ptr) = &(rr_v_data[(idx)]); break; \
+    case REG_ROW_ROOT: (out_ptr) = &(rr_v_root[(idx)]); break; \
+    default: \
+        if ((idx) >= (int32_t) reg_row[(eidx)]->m_len) \
+            (out_ptr) = &static_nil_atom; \
+        else { \
+            (out_ptr) = &(reg_row[(eidx)]->m_data[(idx)]); \
+            if ((eidx) == REG_ROW_UPV) \
+            { \
+                if (out_ptr->m_type != T_VEC || out_ptr->m_d.vec->m_len <= 0) \
+                    error("Bad upvalue access", Atom(T_INT, (idx))); \
+                (out_ptr) = &(out_ptr->m_d.vec->m_data[0]); \
+            } \
         } \
     } \
 } while (0)
@@ -424,7 +451,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
         data[0].set_clos(func.m_d.vec);                 \
         data[1].set_ud((UserData *) m_prog);            \
         data[2].set_vec(reg_row[REG_ROW_UPV]);          \
-        data[3].set_vec(reg_row[REG_ROW_FRAME]);        \
+        data[3].set_vec(rr_frame);        \
         data[4].set_ptr(m_pc);                          \
         data[5].set_int(P_O);                           \
         data[6].set_int(PE_O);                          \
@@ -444,11 +471,11 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
             {
                 cout << "VMTRC FRMS(" << cont_stack->m_len << "): ";
                 m_pc->to_string(cout);
-                cout << "ROOT: (" << Atom(T_VEC, reg_row[REG_ROW_ROOT]).to_write_str() << ")";
+                cout << "ROOT: (" << Atom(T_VEC, root_env).to_write_str() << ")";
                 cout << " {ENV= ";
-                for (size_t i = 0; i < reg_row[REG_ROW_FRAME]->m_len; i++)
+                for (size_t i = 0; i < rr_frame->m_len; i++)
                 {
-                    Atom &a = reg_row[REG_ROW_FRAME]->m_data[i];
+                    Atom &a = rr_v_frame[i];
                     if (a.m_type == T_UD && a.m_d.ud->type() == "VM-PROG")
                         cout << i << "[#<prog>] ";
                     else
@@ -494,12 +521,14 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                         error("Bad argument index vector!", *tmp);
                     AtomVec *av = tmp->m_d.vec;
 
-                    for (size_t i = 0; i < av->m_len; i += 2)
+                    out_av->m_len = P_A;
+                    for (size_t i = 0, j = 0; i < av->m_len; i += 2, j++)
                     {
-                        Atom *tmp_idx  = &(av->m_data[i]);
-                        Atom *tmp_eidx = &(av->m_data[i + 1]);
-                        E_GET_D(tmp, tmp_eidx->m_d.i, tmp_idx->m_d.i);
-                        out_av->push(*tmp);
+                        E_GET_D(
+                            tmp,
+                            av->m_data[i + 1].m_d.i,
+                            av->m_data[i].m_d.i);
+                        out_av->m_data[j] = *tmp;
                     }
 
                     break;
@@ -694,7 +723,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                 case OP_PACK_VA:
                 {
                     size_t pack_idx = P_A;
-                    AtomVec *frame = reg_row[REG_ROW_FRAME];
+                    AtomVec *frame = rr_frame;
                     if (pack_idx < frame->m_len)
                     {
                         size_t va_len = frame->m_len - pack_idx;
@@ -930,8 +959,11 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                     E_SET_CHECK_REALLOC(O, O);
 
                     size_t idx_o = P_O + 1;
-                    if (idx_o >= reg_row[REG_ROW_FRAME]->m_len)
-                        reg_row[REG_ROW_FRAME]->set(idx_o, Atom(T_INT));
+                    if (idx_o >= rr_frame->m_len)
+                    {
+                        rr_frame->set(idx_o, Atom(T_INT));
+                        rr_v_frame = rr_frame->m_data;
+                    }
 
                     Atom *step;
                     E_GET(step, A);
@@ -947,29 +979,48 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
                     bool update = cond.m_type == T_BOOL;
 
-                    if (o.m_type == T_DBL)
+                    switch (o.m_type)
                     {
-                        double step_i = step->to_dbl();
-                        double i = o.m_d.d;
-                        if (update) i += step_i;
-                        cond.set_bool(
-                            step_i > 0.0
-                            ? i > tmp->to_dbl()
-                            : i < tmp->to_dbl());
-                        o.m_d.d = i;
+                        case T_DBL:
+                        {
+                            double step_i = step->m_d.d;
+                            double i = o.m_d.d;
+                            if (update) i += step_i;
+                            cond.m_type = T_BOOL;
+                            cond.m_d.b =
+                                step_i > 0.0
+                                ? i > tmp->m_d.d
+                                : i < tmp->m_d.d;
+                            o.m_d.d = i;
+                            break;
+                        }
+                        case T_INT:
+                        {
+                            int64_t step_i = step->m_d.i;
+                            int64_t i = o.m_d.i;
+                            if (update) i += step_i;
+                            cond.m_type = T_BOOL;
+                            cond.m_d.b =
+                                step_i > 0
+                                ? i > tmp->m_d.i
+                                : i < tmp->m_d.i;
+                            o.m_d.i = i;
+                            break;
+                        }
+                        default:
+                        {
+                            int64_t step_i = step->to_int();
+                            int64_t i = o.m_d.i;
+                            if (update) i += step_i;
+                            cond.m_type = T_BOOL;
+                            cond.m_d.b =
+                                step_i > 0
+                                ? i > tmp->to_int()
+                                : i < tmp->to_int();
+                            o.m_d.i = i;
+                            break;
+                        }
                     }
-                    else
-                    {
-                        int64_t step_i = step->to_int();
-                        int64_t i = o.m_d.i;
-                        if (update) i += step_i;
-                        cond.set_bool(
-                            step_i > 0
-                            ? i > tmp->to_int()
-                            : i < tmp->to_int());
-                        o.m_d.i = i;
-                    }
-
                     break;
                 }
 

@@ -96,10 +96,10 @@ struct INST
     int32_t  be;
     int32_t  c;
     int32_t  ce;
-    union {
-        double  d;
-        int64_t i;
-    } va;
+//    union {
+//        double  d;
+//        int64_t i;
+//    } va;
 
     void to_string(std::ostream &ss)
     {
@@ -114,7 +114,7 @@ struct INST
            << ", [" << a << "/" << ae
            << ":" << b << "/" << be
            << ":" << c << "/" << ce
-           << "](" << va.i << "))";
+           << "]";
     }
 
     INST() { clear(); }
@@ -125,7 +125,11 @@ struct INST
         oe = 0;
         a  = 0;
         b  = 0;
-        va.i = 0;
+        c  = 0;
+        ae = 0;
+        be = 0;
+        ce = 0;
+//        va.i = 0;
     }
 };
 //---------------------------------------------------------------------------
@@ -153,7 +157,7 @@ class PROG : public UserData
 //            std::cout << "NEW PROG" << ((void *) this) << ";; " << atom_data_len << " ;;" << std::endl;
         }
 
-        AtomVec *data_array() { return m_atom_data.m_d.vec; }
+        AtomVec *data_array() const { return m_atom_data.m_d.vec; }
 
         void set_data_from(AtomVec *av)
         {
