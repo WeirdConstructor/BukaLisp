@@ -448,7 +448,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
         cv->m_len = 7;                                  \
         Atom *data = cv->m_data;                        \
                                                         \
-        data[0].set_clos(func.m_d.vec);                 \
+        data[0].set_clos((func).m_d.vec);                 \
         data[1].set_ud((UserData *) m_prog);            \
         data[2].set_vec(reg_row[REG_ROW_UPV]);          \
         data[3].set_vec(rr_frame);        \
@@ -747,79 +747,95 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                 {
                     E_SET_CHECK_REALLOC(O, O);
 
-                    E_GET(tmp, A);
-                    Atom &func = *tmp;
+                    Atom *func;
+                    E_GET(func, A);
                     E_GET(tmp, B);
-                    Atom &argv = *tmp;
+                    if (tmp->m_type != T_VEC)
+                        error("Bad argument index vector!", *tmp);
+                    AtomVec *av    = tmp->m_d.vec;
+                    size_t len     = tmp->m_d.vec->m_len >> 1;
+                    AtomVec *frame = m_rt->m_gc.allocate_vector(len);
+                    frame->m_len   = len;
 
-                    if (argv.m_type != T_VEC)
-                        error("CALL argv not a vector", argv);
-
-                    if (func.m_type == T_PRIM)
+                    for (size_t i = 0, j = 0; i < av->m_len; i += 2, j++)
                     {
-                        Atom *ot;
-                        E_SET_D_PTR(PE_O, P_O, ot);
-                        (*func.m_d.func)(*(argv.m_d.vec), *ot);
-    //                    cout << "argv: " << argv.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
-                        if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
-
-    //                    m_rt->m_gc.give_back_vector(argv.m_d.vec, true);
+                        E_GET_D(
+                            tmp,
+                            av->m_data[i + 1].m_d.i,
+                            av->m_data[i].m_d.i);
+                        frame->m_data[j] = *tmp;
                     }
-                    else if (func.m_type == T_CLOS)
+
+                    switch (func->m_type)
                     {
-                        if (func.m_d.vec->m_len < 4)
-                            error("Bad closure found", func);
-                        if (func.m_d.vec->m_data[0].m_type != T_UD)
-                            error("Bad closure found", func);
-
-                        if (CHECK_ARITY(func.m_d.vec->m_data[3],
-                                        argv.m_d.vec->m_len) != 0)
-                            report_arity_error(func.m_d.vec->m_data[3],
-                                               argv.m_d.vec->m_len);
-
-                        alloc = true;
-                        // save the current execution context:
-                        RECORD_CALL_FRAME(func, call_frame);
-                        cont_stack->push(call_frame);
-
-                        if (func.m_d.vec->m_data[2].m_type == T_VEC)
+                        case T_PRIM:
                         {
-                            // XXX: Check if T_CLOS is a coroutine (!func.at(2).is_false())
-                            //      Then instead of a new entry point in PROG, we restore
-                            //      the former execution context by restoring the
-                            //      call frames and the execution context
-                            //      (m_prog, m_pc, frm_stack, output-register)
-                            //      We also need to set the output-register to the
-                            //      value of argv.at(0).
+                            Atom *ot;
+                            E_SET_D_PTR(PE_O, P_O, ot);
+                            (*func->m_d.func)(*(frame), *ot);
+        //                    cout << "frame: " << frame.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
+                            if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
 
-                            Atom ret_val = argv.at(0);
-
-                            AtomVec *coro_cont_stack =
-                                func.m_d.vec->m_data[2].m_d.vec;
-                            func.m_d.vec->m_data[2].set_bool(true);
-
-                            Atom restore_frame = *(coro_cont_stack->last());
-                            coro_cont_stack->pop();
-                            for (size_t i = 0; i < coro_cont_stack->m_len; i++)
-                                cont_stack->push(coro_cont_stack->m_data[i]);
-
-                            RESTORE_FROM_CALL_FRAME(restore_frame, ret_val);
+        //                    m_rt->m_gc.give_back_vector(frame.m_d.vec, true);
+                            break;
                         }
-                        else
+                        case T_CLOS:
                         {
-                            m_prog   = dynamic_cast<PROG*>(func.m_d.vec->m_data[0].m_d.ud);
-                            m_pc     = &(m_prog->m_instructions[0]);
-                            m_pc--;
+                            if (func->m_d.vec->m_len < 4)
+                                error("Bad closure found", *func);
+                            if (func->m_d.vec->m_data[0].m_type != T_UD)
+                                error("Bad closure found", *func);
 
-                            SET_DATA_ROW(m_prog->data_array());
-                            SET_UPV_ROW(
-                                m_rt->m_gc.clone_vector(
-                                    func.m_d.vec->m_data[1].m_d.vec));
-                            SET_FRAME_ROW(argv.m_d.vec);
+                            if (CHECK_ARITY(func->m_d.vec->m_data[3],
+                                            frame->m_len) != 0)
+                                report_arity_error(func->m_d.vec->m_data[3],
+                                                   frame->m_len);
+
+                            alloc = true;
+                            // save the current execution context:
+                            RECORD_CALL_FRAME(*func, call_frame);
+                            cont_stack->push(call_frame);
+
+                            if (func->m_d.vec->m_data[2].m_type == T_VEC)
+                            {
+                                // XXX: Check if T_CLOS is a coroutine (!func->at(2).is_false())
+                                //      Then instead of a new entry point in PROG, we restore
+                                //      the former execution context by restoring the
+                                //      call frames and the execution context
+                                //      (m_prog, m_pc, frm_stack, output-register)
+                                //      We also need to set the output-register to the
+                                //      value of frame.at(0).
+
+                                Atom ret_val = frame->at(0);
+
+                                AtomVec *coro_cont_stack =
+                                    func->m_d.vec->m_data[2].m_d.vec;
+                                func->m_d.vec->m_data[2].set_bool(true);
+
+                                Atom restore_frame = *(coro_cont_stack->last());
+                                coro_cont_stack->pop();
+                                for (size_t i = 0; i < coro_cont_stack->m_len; i++)
+                                    cont_stack->push(coro_cont_stack->m_data[i]);
+
+                                RESTORE_FROM_CALL_FRAME(restore_frame, ret_val);
+                            }
+                            else
+                            {
+                                m_prog   = dynamic_cast<PROG*>(func->m_d.vec->m_data[0].m_d.ud);
+                                m_pc     = &(m_prog->m_instructions[0]);
+                                m_pc--;
+
+                                SET_DATA_ROW(m_prog->data_array());
+                                SET_UPV_ROW(
+                                    m_rt->m_gc.clone_vector(
+                                        func->m_d.vec->m_data[1].m_d.vec));
+                                SET_FRAME_ROW(frame);
+                            }
+                            break;
                         }
+                        default:
+                            error("CALL does not support that function type yet", *func);
                     }
-                    else
-                        error("CALL does not support that function type yet", func);
 
                     break;
                 }

@@ -224,22 +224,27 @@
           (let ((fn-adr         (T ctx (@0 arg)))
                 (arg-adrs       [])
                 (recycle-adrs   [])
-                (vec-adr        (.new-tmp-pos (F: ctx)))
+;                (vec-adr        (.new-tmp-pos (F: ctx)))
                 (ret-adr        (tmp-pos-or-parent-adr ctx)))
             (push! recycle-adrs fn-adr)
-            (push! recycle-adrs vec-adr)
+;            (push! recycle-adrs vec-adr)
             (do-each (a (@1 arg))
               (let ((val-adr (T ctx a)))
                 (push! recycle-adrs val-adr)
                 (push! arg-adrs (@0 val-adr))
                 (push! arg-adrs (@1 val-adr))))
-            (.op-new-arg-vec
-              (P: ctx)
-              vec-adr
-              (length (@1 arg))
-              (.store-static-data (F: ctx) arg-adrs))
+;            (.op-new-arg-vec
+;              (P: ctx)
+;              vec-adr
+;              (length (@1 arg))
+;              (.store-static-data (F: ctx) arg-adrs))
+;            (.op-new-arg-vec
+;              (P: ctx)
+;              vec-adr
+;              (length (@1 arg))
+;              )
             ret-adr
-            (.op-call (P: ctx) ret-adr fn-adr vec-adr)
+            (.op-call (P: ctx) ret-adr fn-adr (.store-static-data (F: ctx) arg-adrs))
             (.recycle-pos-list (F: ctx) recycle-adrs)
             ret-adr))]
        ['#1#return
@@ -551,27 +556,27 @@
 ;    (set! x (+ x 1))))
 ;   100000000)
 ;;(error o:)
-;;(T '(begin
-;;  (define x 0)
-;;  (define (inc a) (set! x (+ x a)))
-;;  (for (i 1 10000000)
-;;    (inc 1)))
-;;   0)
+(T '(begin
+  (define x 0)
+  (define (inc a) (set! x (+ x a)))
+  (for (i 1 10000000)
+    (inc 1)))
+   10000000)
 ;;
 ;;(error F:)
-;;(T '(begin
-;;      (define x 10000000)
-;;      (let ((inco (lambda (a) (set! x (+ x a)))))
-;;        (while (> x 0)
-;;               (inco -1)))) 0)
-;(T '(begin
-;      (define x 10000000)
-;      (while (> x 0)
-;             (set! x (- x 1)))) 0)
-;(T '(let ((x 10000000))
-;      (while (> x 0)
-;             (set! x (- x 1)))) 0)
-;(error X:)
+(T '(begin
+      (define x 10000000)
+      (let ((inco (lambda (a) (set! x (+ x a)))))
+        (while (> x 0)
+               (inco -1)))) 0)
+(T '(begin
+      (define x 10000000)
+      (while (> x 0)
+             (set! x (- x 1)))) 0)
+(T '(let ((x 10000000))
+      (while (> x 0)
+             (set! x (- x 1)))) 0)
+(error X:)
 ;----------------------------------------------------------------------------
 
 ; Test basic (lambda ...) and (let ...)
