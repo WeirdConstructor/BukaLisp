@@ -52,13 +52,46 @@
             (push! out-pair (T ctx v))))
         out-pair))))
 
+(define make-cmp-op-tree
+  (lambda (operation)
+    (lambda (ctx args T gtx)
+      (when (< (length args) 3)
+        (error (str "Operation requires at least 2 arguments") args))
+      (let ((last-op  nil)
+            (out-tree nil)
+            (cur-tree nil))
+        (do-each (v (drop args 1))
+          (let ((c-v (T ctx v)))
+;            (displayln FL: v last-op out-tree)
+            (if last-op
+              (let ((cur-op
+                      (DI! args
+                           ['#1#if
+                            (DI! args
+                                 ['#1#not
+                                  (DI! args [operation last-op c-v])])
+                            ['#1#data #f]])))
+                (set! last-op c-v)
+                (when cur-tree
+                  (push! cur-tree cur-op))
+                (set! cur-tree cur-op))
+              (set! last-op c-v))
+            (unless out-tree (set! out-tree cur-tree))))
+        (let ((last-cmp (@1 (@1 cur-tree))))
+          (set-length! cur-tree 3)
+          (@!0 cur-tree (@0 last-cmp))
+          (@!1 cur-tree (@1 last-cmp))
+          (@!2 cur-tree (@2 last-cmp)))
+        out-tree))))
+
 (add-optimized-prim S1-ROOT-ENV '+ (make-left-assoc-tree '#1#add    0))
 (add-optimized-prim S1-ROOT-ENV '- (make-left-assoc-tree '#1#sub    0))
 (add-optimized-prim S1-ROOT-ENV '* (make-left-assoc-tree '#1#mul    1))
 (add-optimized-prim S1-ROOT-ENV '/ (make-left-assoc-tree '#1#div    1))
-(add-optimized-prim S1-ROOT-ENV '=  (make-left-assoc-tree-min-2 '#1#eq))
-(add-optimized-prim S1-ROOT-ENV '<  (make-left-assoc-tree-min-2 '#1#lt))
-(add-optimized-prim S1-ROOT-ENV '>  (make-left-assoc-tree-min-2 '#1#gt))
-(add-optimized-prim S1-ROOT-ENV '<= (make-left-assoc-tree-min-2 '#1#le))
-(add-optimized-prim S1-ROOT-ENV '>= (make-left-assoc-tree-min-2 '#1#ge))
+
+(add-optimized-prim S1-ROOT-ENV '=  (make-cmp-op-tree '#1#eq))
+(add-optimized-prim S1-ROOT-ENV '<  (make-cmp-op-tree '#1#lt))
+(add-optimized-prim S1-ROOT-ENV '>  (make-cmp-op-tree '#1#gt))
+(add-optimized-prim S1-ROOT-ENV '<= (make-cmp-op-tree '#1#le))
+(add-optimized-prim S1-ROOT-ENV '>= (make-cmp-op-tree '#1#ge))
 

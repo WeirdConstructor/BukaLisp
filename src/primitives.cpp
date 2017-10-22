@@ -303,6 +303,21 @@ START_PRIM()
 END_PRIM(pop!)
 
 START_PRIM()
+    REQ_EQ_ARGC(set-length!, 2);
+
+    if (A0.m_type != T_VEC)
+        error("Can only set-length! on a list!", A0);
+
+    size_t new_len = (size_t) A1.to_int();
+    AtomVec *v = A0.m_d.vec;
+    if (v->m_len < new_len)
+        v->check_size(new_len - 1);
+    else
+        v->m_len = new_len;
+    out = A0;
+END_PRIM(set-length!)
+
+START_PRIM()
     REQ_EQ_ARGC(make-vm-prog, 1);
     out = bukalisp::make_prog(m_rt->m_gc, A0);
     if (out.m_type == T_UD)
@@ -609,7 +624,7 @@ START_PRIM()
     if (!m_vm)
         error("Can't run 'apply' without VM.", A0);
 
-    cout << "APPLY PRIM: " << Atom(T_VEC, &args).to_write_str() << endl;
+//    cout << "APPLY PRIM: " << Atom(T_VEC, &args).to_write_str() << endl;
 
     if (args.m_len == 1)
     {

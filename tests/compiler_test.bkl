@@ -820,390 +820,390 @@
 ;	 22.345
 ;	 my-env))
 ;
-;; Test comments:
-;(t "(define x 10)                             #;(set! x 20) x"      10)
-;(t "(define x #;20 10)                        #;(set! x 20) x"      10)
-;(t "#;()(define x #;20 10 #;[])#;{}           #;(set! x 20) x #;()" 10)
-;(t "#;()(#;() define #;() x #;20 10 #;[])#;{} #;(set! x 20) x"      10)
+; Test comments:
+(t "(define x 10)                             #;(set! x 20) x"      10)
+(t "(define x #;20 10)                        #;(set! x 20) x"      10)
+(t "#;()(define x #;20 10 #;[])#;{}           #;(set! x 20) x #;()" 10)
+(t "#;()(#;() define #;() x #;20 10 #;[])#;{} #;(set! x 20) x"      10)
 
-; Test conditionals:
-(T '(when   #t 10) 10)
-(T '(when   #f 10) nil)
-(T '(unless #t 10) nil)
-(T '(unless #f 10) 10)
-(T '(begin
-      (define x 10)
-      (when (> 0 -1)
-        (let ((y 22))
-          (set! x (* 1.23 x y))))
-      x)
-   270.6)
-(T '(begin
-      (define x 10)
-      (when (> 0 1)
-        (let ((y 22))
-          (set! x (* 1.23 x y))))
-      x)
-   10)
-
-(T '(if #t 10 20) 10)
-(T '(if #t 10)    10)
-(T '(if #f 10 20) 20)
-(T '(if #f 10)    nil)
-
-(T '(begin
-      (define x 10)
-      (if (> 0 -1)
-        (let ((y 22))
-          (set! x (* 1.27 x y)))
-        (let ((y 22))
-          (set! x (* 1.23 x y))))
-      x)
-   279.4)
-
-(T '(begin
-      (define x 10)
-      (if (> 0 1)
-        (let ((y 22))
-          (set! x (* 1.27 x y)))
-        (let ((y 22))
-          (set! x (* 1.23 x y))))
-      x)
-   270.6)
-
-(T '(let ((aid  (atom-id (type nil)))
-          (aid2 (atom-id (type nil)))
-          (aid3 (atom-id (type nil))))
-      [(eqv? aid aid2) (eqv? aid aid3)])
-   '(#t #t))
-
-
-(T '(begin (define x 0)
-           (define (o a)
-             (set! x (+ x a)))
-           (for (i 1 1000000)
-             (o 1)))
-   1000000)
-
-(T '(begin (define x 0)
+;; Test conditionals:
+;(T '(when   #t 10) 10)
+;(T '(when   #f 10) nil)
+;(T '(unless #t 10) nil)
+;(T '(unless #f 10) 10)
+;(T '(begin
+;      (define x 10)
+;      (when (> 0 -1)
+;        (let ((y 22))
+;          (set! x (* 1.23 x y))))
+;      x)
+;   270.6)
+;(T '(begin
+;      (define x 10)
+;      (when (> 0 1)
+;        (let ((y 22))
+;          (set! x (* 1.23 x y))))
+;      x)
+;   10)
+;
+;(T '(if #t 10 20) 10)
+;(T '(if #t 10)    10)
+;(T '(if #f 10 20) 20)
+;(T '(if #f 10)    nil)
+;
+;(T '(begin
+;      (define x 10)
+;      (if (> 0 -1)
+;        (let ((y 22))
+;          (set! x (* 1.27 x y)))
+;        (let ((y 22))
+;          (set! x (* 1.23 x y))))
+;      x)
+;   279.4)
+;
+;(T '(begin
+;      (define x 10)
+;      (if (> 0 1)
+;        (let ((y 22))
+;          (set! x (* 1.27 x y)))
+;        (let ((y 22))
+;          (set! x (* 1.23 x y))))
+;      x)
+;   270.6)
+;
+;(T '(let ((aid  (atom-id (type nil)))
+;          (aid2 (atom-id (type nil)))
+;          (aid3 (atom-id (type nil))))
+;      [(eqv? aid aid2) (eqv? aid aid3)])
+;   '(#t #t))
+;
+;
+;(T '(begin (define x 0)
 ;           (define (o a)
 ;             (set! x (+ x a)))
-           (for (i 1 10000000)
-             (set! x (+ x 1))))
-   10000000)
-
-(T '(begin (define x 0)
-           (for (i 0 -100 -1)
-             (set! x (+ x i)))
-           x)
-   -5050)
-
-(T '(begin
-      (define x 1)
-      (for (i 1 0) (set! x 20) i)
-      x)
-   1)
-
-(T '(begin
-      (define x 1)
-      (for (i 1 1) (set! x (+ i 20)) i)
-      x)
-   21)
-
-(T '(begin
-      (define x 1)
-      (for (i 1 2) (set! x (+ i 20)) i)
-      x)
-   22)
-
-; Test binary ops that are (sometimes) optimized by the compiler
-; to be statically compiled down to VM OPs:
-(T '(+ 1 2 3) 6)
-(T '(let ((x +)) (x 1 2 3)) 6)
-
-(T '(+ 2 3) 5)
-(T '(let ((x +)) (x 2 3)) 5)
-
-(T '(- 10 2 3) 5)
-(T '(let ((x -)) (x 10 2 3)) 5)
-
-(T '(- 10 2) 8)
-(T '(let ((x -)) (x 10 2)) 8)
-
-(T '(- 10) -10)
-(T '(let ((x -)) (x 10)) -10)
-
-(T '(= 10 10) #t)
-(T '(= 10 9) #f)
-(T '(let ((x =)) (x 10 10)) #t)
-(T '(let ((x =)) (x 10 9)) #f)
-
-(T '(= 10 10 10) #t)
-(T '(= 10 10 9) #f)
-(T '(let ((x =)) (x 10 10 10)) #t)
-(T '(let ((x =)) (x 10 10 9)) #f)
-
-
-(T '(< 10 11) #t)
-(T '(< 10 10) #f)
-(T '(< 10 11 12) #t)
-(T '(< 10 11 11) #f)
-(T '(let ((x <)) (x 10 11 12)) #t)
-(T '(let ((x <)) (x 10 11 11)) #f)
-
-(T '(> 11 10) #t)
-(T '(> 11 11) #f)
-(T '(> 12 11 10) #t)
-(T '(> 12 11 11) #f)
-(T '(let ((x >)) (x 12 11 10)) #t)
-(T '(let ((x >)) (x 12 11 11)) #f)
-
-(T '(>= 11 10) #t)
-(T '(>= 11 12) #f)
-(T '(>= 12 11 10) #t)
-(T '(>= 12 11 12) #f)
-(T '(let ((x >=)) (x 12 11 10)) #t)
-(T '(let ((x >=)) (x 12 11 12)) #f)
-
-(T '(<= 10 11) #t)
-(T '(<= 11 11) #t)
-(T '(<= 10 9) #f)
-(T '(<= 11 11 12) #t)
-(T '(<= 11 11 9) #f)
-(T '(let ((x <=)) (x 11 11 12)) #t)
-(T '(let ((x <=)) (x 11 11 9)) #f)
-
-; Test accessor operations like @, $, $! and @!
-(T ''@ '@)
-(T ''@! '@!)
-
-(T '(@0 [22.2 22.4 45]) 22.2)
-(T '(let ((at @)) (at 0 [22.2 22.4 45])) 22.2)
-(T '(let ((x [])) (@!2 x 10) x) [nil nil 10])
-(T '(let ((x [])
-          (at-set! @!))
-      (at-set! 2 x 10) x)
-   [nil nil 10])
-
-(T '(@x: {x: 22.2}) 22.2)
-(T '(let ((at @)) (at x: {x: 22.2})) 22.2)
-(T '(let ((x {})) (@!x: x 10) x) {x: 10})
-(T '(let ((x {})
-          (at-set! @!))
-      (at-set! x: x 10) x)
-   {x: 10})
-
-(T '(let ((x 2) (v [1 2 3])) (@x v)) 3)
-
-(T '(@'x {'x 10}) 10)
-(T '(let ((m {'x 10})) (@!'x m 12) m) {'x 12})
-
-; Test eval
-(T '(eval 1)                    1)
-(T '(eval '(+ 1 2))             3)
-(T '(eval '(eval '(+ 1 2)))     3)
-(T '(eval '(eval '(+ 1 2)))     3)
-(T '(let ((env (interaction-environment)))
-      (eval '(define x 12) env)
-      (eval 'x env))
-   12)
-(T '(let ((env (interaction-environment)))
-      (eval '(define x 12) env)
-      (eval '(set! x (* x 2)) env)
-      (eval 'x env))
-   24)
-
-; Test include
-(T '(begin
-      (include "..\\bukalisplib\\test-compiler.bkl")
-      test-include-ok)
-   1)
-
-; Test meta-infos:
-(T '(let ((v []))
-      (bkl-set-meta v 2 42)
-      (bkl-get-meta v))
-   '(nil nil 42))
-
-; Test macros:
-(T '(begin
-      (define x 10)
-      (define m nil)
-      (let ()
-       (define-macro (x a b)
-         ['quote [a b a b]])
-       (set! m (x 9 11)))
-      [m x])
-   [[9 11 9 11] 10])
-
-; Test $define!
-(T '(let ((o {x: 0}))
-      ($define! o (foo) 9)
-      ((@'foo o)))
-   9)
-(T '(let ((o {x: 0}))
-      ($define! o (foo) 9)
-      [((@'foo o))])
-   [9])
-(T '(let ((o {x: 0}))
-      ($define! o (foo a b c)
-        9
-        (@!x: o (+ 1 (x: o)))
-        (* a (+ (x: o)
-                b
-                (* 2 c))))
-      [((@'foo o) 1 2 3)
-       ((@'foo o) 4 5 6)
-       ((@'foo o) 8 8 8)
-       ((@'foo o) 9 9 9)])
-   [9 76 216 279])
-
-; Test return:
-(T '(begin (define x 11) (set! x 32) (return x)) 32)
-(T '(begin (define x 11)
-           (set! x (return x))
-           (return x)) 11)
-(T '(begin (define g 10)
-           ((lambda ()
-              (set! g 33)
-              (return nil)
-              (set! g 45)))
-           g)
-   33)
-(T '(begin (define g 10)
-           ((lambda ()
-              (set! g 33)
-              (return g)
-              (set! g 45))))
-   33)
-(T '(return 32) 32)
-(T '{a: 10 x: (return 20)} 20)
-
-; Test predicates:
-(T '(list? (list))                  #true)
-(T '(let ((x list?)) (x (list)))    #true)
-(T '(list? { a: 1 })                #false)
-(T '(let ((x list?)) (x { a: 1 }))  #false)
-
-(T '(empty? (list))                 #true)
-(T '(empty? (list 1))               #false)
-(T '(empty? {})                     #true)
-(T '(empty? {a: 1})                 #false)
-(T '(let ((x empty?)) (x (list)))   #true)
-(T '(let ((x empty?)) (x (list 1))) #false)
-(T '(let ((x empty?)) (x {}))       #true)
-(T '(let ((x empty?)) (x {a: 1}))   #false)
-
-; Test (size)
-(T '(size nil)      0)
-(T '(size [])       0)
-(T '(size {})       0)
-(T '(size {a: 1})   2)
-(T '(size [1])      1)
-(T '(size [[]])     1)
-(T '(size fooo:)    4)
-(T '(size "fooo")   4)
-(T '(size 'fooo)    4)
-(T '(size [1 2 3 4 [5 6 7 8] 9]) 10)
-(T '(size [1 2 3 4 {a: 5 b: 6 c: 7 d: 8} 9]) 14)
-
-; Test return anywhere:
-(T '(let ((j (return (+ 9 10))))) 19) ; XXX: Should let be allowed to be empty?
-
-(T '{ b: 20 a: (return 9) x: 22 }
-   9)
-(T '(list? (return 10)) 10)
-(T '(empty? (return 11)) 11)
-;(T '(define-global ff (return 12)) 12)
-(T '(define ff2 (return 12)) 12)
-(T '(begin
-      (define ff2 12)
-      (set! ff2 (return 13)))
-   13)
-(T '((return 14) 22) 14)
-(T '(begin
-      (define x 2)
-      ((lambda () 2)
-       ((lambda ()
-          (set! x 16)))
-       (return x)))
-   16)
-(T '(begin
-      (define x 1)
-      (+ ((lambda ()
-            (set! x 15)))
-         (return x)))
-   15)
-(T '(begin
-       (define x 1)
-       (define y 2)
-       (+
-         ((lambda () (set! y 16)))
-         (+ ((lambda () (set! x 15)))
-            (return (+ x y)))))
-   31)
-(T '(begin
-      (let ((a 10) (b 20)) b)
-      (let ((c 30))
-        (let ((k 32)
-              (j (return (+ k 10))))))
-      44)
-   42)
-(T '(let ((x 11))
-      (let ((if (= (set! x 43) (return x)))) 12)
-      x)
-   43)
-(T '(if #t (return 44)) 44)
-(T '(if #f 10 (return 45)) 45)
+;           (for (i 1 1000000)
+;             (o 1)))
+;   1000000)
+;
+;(T '(begin (define x 0)
+;;           (define (o a)
+;;             (set! x (+ x a)))
+;           (for (i 1 10000000)
+;             (set! x (+ x 1))))
+;   10000000)
+;
+;(T '(begin (define x 0)
+;           (for (i 0 -100 -1)
+;             (set! x (+ x i)))
+;           x)
+;   -5050)
+;
 ;(T '(begin
-;      (define X 10)
-;      (. (set! X 47) (return X)))
-;   47)
+;      (define x 1)
+;      (for (i 1 0) (set! x 20) i)
+;      x)
+;   1)
+;
+;(T '(begin
+;      (define x 1)
+;      (for (i 1 1) (set! x (+ i 20)) i)
+;      x)
+;   21)
+;
+;(T '(begin
+;      (define x 1)
+;      (for (i 1 2) (set! x (+ i 20)) i)
+;      x)
+;   22)
+;
+;; Test binary ops that are (sometimes) optimized by the compiler
+;; to be statically compiled down to VM OPs:
+;(T '(+ 1 2 3) 6)
+;(T '(let ((x +)) (x 1 2 3)) 6)
+;
+;(T '(+ 2 3) 5)
+;(T '(let ((x +)) (x 2 3)) 5)
+;
+;(T '(- 10 2 3) 5)
+;(T '(let ((x -)) (x 10 2 3)) 5)
+;
+;(T '(- 10 2) 8)
+;(T '(let ((x -)) (x 10 2)) 8)
+;
+;(T '(- 10) -10)
+;(T '(let ((x -)) (x 10)) -10)
+;
+;(T '(= 10 10) #t)
+;(T '(= 10 9) #f)
+;(T '(let ((x =)) (x 10 10)) #t)
+;(T '(let ((x =)) (x 10 9)) #f)
+;
+;(T '(= 10 10 10) #t)
+;(T '(= 10 10 9) #f)
+;(T '(let ((x =)) (x 10 10 10)) #t)
+;(T '(let ((x =)) (x 10 10 9)) #f)
+;
+;
+;(T '(< 10 11) #t)
+;(T '(< 10 10) #f)
+;(T '(< 10 11 12) #t)
+;(T '(< 10 11 11) #f)
+;(T '(let ((x <)) (x 10 11 12)) #t)
+;(T '(let ((x <)) (x 10 11 11)) #f)
+;
+;(T '(> 11 10) #t)
+;(T '(> 11 11) #f)
+;(T '(> 12 11 10) #t)
+;(T '(> 12 11 11) #f)
+;(T '(let ((x >)) (x 12 11 10)) #t)
+;(T '(let ((x >)) (x 12 11 11)) #f)
+;
+;(T '(>= 11 10) #t)
+;(T '(>= 11 12) #f)
+;(T '(>= 12 11 10) #t)
+;(T '(>= 12 11 12) #f)
+;(T '(let ((x >=)) (x 12 11 10)) #t)
+;(T '(let ((x >=)) (x 12 11 12)) #f)
+;
+;(T '(<= 10 11) #t)
+;(T '(<= 11 11) #t)
+;(T '(<= 10 9) #f)
+;(T '(<= 11 11 12) #t)
+;(T '(<= 11 11 9) #f)
+;(T '(let ((x <=)) (x 11 11 12)) #t)
+;(T '(let ((x <=)) (x 11 11 9)) #f)
 
-; Test quote
-(T ''(+ 1 2) '(+ 1 2))
-(T ''((3 4)) '((3 4)))
-(T ''(+ 1 (+ 2 3)) '(+ 1 (+ 2 3)))
-(T '   '     ( +     1 (+  2 3 )      ) '(+ 1 (+ 2 3)))
-(T ''(* 1 2) '(* 1 2))
-(T ''(** 1 2) '(** 1 2))
-(T ''(1 2 3) '(1 2 3))
-(T '''1 '(quote 1))
-(T '''(1 2 3) '(quote (1 2 3)))
-(T '(quote 7) '7)
-(T ''7 '7)
-(T '(quote (1 2 3)) '(1 2 3))
-(T ''(1 2 3) '(1 2 3))
-(T '(quote (1 2 (3 4))) '(1 2 (3 4)))
-(T ''(1 2 (3 4)) '(1 2 (3 4)))
-(T '(quote (10)) '(10))
+;; Test accessor operations like @, $, $! and @!
+;(T ''@ '@)
+;(T ''@! '@!)
+;
+;(T '(@0 [22.2 22.4 45]) 22.2)
+;(T '(let ((at @)) (at 0 [22.2 22.4 45])) 22.2)
+;(T '(let ((x [])) (@!2 x 10) x) [nil nil 10])
+;(T '(let ((x [])
+;          (at-set! @!))
+;      (at-set! 2 x 10) x)
+;   [nil nil 10])
+;
+;(T '(@x: {x: 22.2}) 22.2)
+;(T '(let ((at @)) (at x: {x: 22.2})) 22.2)
+;(T '(let ((x {})) (@!x: x 10) x) {x: 10})
+;(T '(let ((x {})
+;          (at-set! @!))
+;      (at-set! x: x 10) x)
+;   {x: 10})
+;
+;(T '(let ((x 2) (v [1 2 3])) (@x v)) 3)
+;
+;(T '(@'x {'x 10}) 10)
+;(T '(let ((m {'x 10})) (@!'x m 12) m) {'x 12})
 
-; Test apply
-(T '(apply + 1 2 3 []) '6)
-(T '(apply + 1 2 3 (list)) '6)
-(T '(apply + 1 (list 2 3)) '6)
-(T '(apply - 0 (list 1)) '-1)
-(T '(apply - (list 0 1)) '-1)
-(T '(apply str-join "," (list X: Y:)) '"X,Y")
+;; Test eval
+;(T '(eval 1)                    1)
+;(T '(eval '(+ 1 2))             3)
+;(T '(eval '(eval '(+ 1 2)))     3)
+;(T '(eval '(eval '(+ 1 2)))     3)
+;(T '(let ((env (interaction-environment)))
+;      (eval '(define x 12) env)
+;      (eval 'x env))
+;   12)
+;(T '(let ((env (interaction-environment)))
+;      (eval '(define x 12) env)
+;      (eval '(set! x (* x 2)) env)
+;      (eval 'x env))
+;   24)
+;
+;; Test include
+;(T '(begin
+;      (include "..\\bukalisplib\\test-compiler.bkl")
+;      test-include-ok)
+;   1)
 
-; Test bkl-doc documentation
-(T '(begin
-      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
-      (?doc ?foobar-x:))
-   ["foobar-xxx-yyy"]);
-(T '(begin
-      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
-      (?doc xxx-test:))
-   ["foobar-xxx-yyy"]);
-(T '(begin
-      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
-      (?doc xxx-yyy:))
-   []);
-(T '(begin
-      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
-      (?doc *-yyy:))
-   ["foobar-xxx-yyy"]);
+;; Test meta-infos:
+;(T '(let ((v []))
+;      (bkl-set-meta v 2 42)
+;      (bkl-get-meta v))
+;   '(nil nil 42))
+;
+;; Test macros:
+;(T '(begin
+;      (define x 10)
+;      (define m nil)
+;      (let ()
+;       (define-macro (x a b)
+;         ['quote [a b a b]])
+;       (set! m (x 9 11)))
+;      [m x])
+;   [[9 11 9 11] 10])
+;
+;; Test $define!
+;(T '(let ((o {x: 0}))
+;      ($define! o (foo) 9)
+;      ((@'foo o)))
+;   9)
+;(T '(let ((o {x: 0}))
+;      ($define! o (foo) 9)
+;      [((@'foo o))])
+;   [9])
+;(T '(let ((o {x: 0}))
+;      ($define! o (foo a b c)
+;        9
+;        (@!x: o (+ 1 (x: o)))
+;        (* a (+ (x: o)
+;                b
+;                (* 2 c))))
+;      [((@'foo o) 1 2 3)
+;       ((@'foo o) 4 5 6)
+;       ((@'foo o) 8 8 8)
+;       ((@'foo o) 9 9 9)])
+;   [9 76 216 279])
+;
+;; Test return:
+;(T '(begin (define x 11) (set! x 32) (return x)) 32)
+;(T '(begin (define x 11)
+;           (set! x (return x))
+;           (return x)) 11)
+;(T '(begin (define g 10)
+;           ((lambda ()
+;              (set! g 33)
+;              (return nil)
+;              (set! g 45)))
+;           g)
+;   33)
+;(T '(begin (define g 10)
+;           ((lambda ()
+;              (set! g 33)
+;              (return g)
+;              (set! g 45))))
+;   33)
+;(T '(return 32) 32)
+;(T '{a: 10 x: (return 20)} 20)
+;
+;; Test predicates:
+;(T '(list? (list))                  #true)
+;(T '(let ((x list?)) (x (list)))    #true)
+;(T '(list? { a: 1 })                #false)
+;(T '(let ((x list?)) (x { a: 1 }))  #false)
+;
+;(T '(empty? (list))                 #true)
+;(T '(empty? (list 1))               #false)
+;(T '(empty? {})                     #true)
+;(T '(empty? {a: 1})                 #false)
+;(T '(let ((x empty?)) (x (list)))   #true)
+;(T '(let ((x empty?)) (x (list 1))) #false)
+;(T '(let ((x empty?)) (x {}))       #true)
+;(T '(let ((x empty?)) (x {a: 1}))   #false)
+;
+;; Test (size)
+;(T '(size nil)      0)
+;(T '(size [])       0)
+;(T '(size {})       0)
+;(T '(size {a: 1})   2)
+;(T '(size [1])      1)
+;(T '(size [[]])     1)
+;(T '(size fooo:)    4)
+;(T '(size "fooo")   4)
+;(T '(size 'fooo)    4)
+;(T '(size [1 2 3 4 [5 6 7 8] 9]) 10)
+;(T '(size [1 2 3 4 {a: 5 b: 6 c: 7 d: 8} 9]) 14)
+;
+;; Test return anywhere:
+;(T '(let ((j (return (+ 9 10))))) 19) ; XXX: Should let be allowed to be empty?
+;
+;(T '{ b: 20 a: (return 9) x: 22 }
+;   9)
+;(T '(list? (return 10)) 10)
+;(T '(empty? (return 11)) 11)
+;;(T '(define-global ff (return 12)) 12)
+;(T '(define ff2 (return 12)) 12)
+;(T '(begin
+;      (define ff2 12)
+;      (set! ff2 (return 13)))
+;   13)
+;(T '((return 14) 22) 14)
+;(T '(begin
+;      (define x 2)
+;      ((lambda () 2)
+;       ((lambda ()
+;          (set! x 16)))
+;       (return x)))
+;   16)
+;(T '(begin
+;      (define x 1)
+;      (+ ((lambda ()
+;            (set! x 15)))
+;         (return x)))
+;   15)
+;(T '(begin
+;       (define x 1)
+;       (define y 2)
+;       (+
+;         ((lambda () (set! y 16)))
+;         (+ ((lambda () (set! x 15)))
+;            (return (+ x y)))))
+;   31)
+;(T '(begin
+;      (let ((a 10) (b 20)) b)
+;      (let ((c 30))
+;        (let ((k 32)
+;              (j (return (+ k 10))))))
+;      44)
+;   42)
+;(T '(let ((x 11))
+;      (let ((if (= (set! x 43) (return x)))) 12)
+;      x)
+;   43)
+;(T '(if #t (return 44)) 44)
+;(T '(if #f 10 (return 45)) 45)
+;;(T '(begin
+;;      (define X 10)
+;;      (. (set! X 47) (return X)))
+;;   47)
+;
+;; Test quote
+;(T ''(+ 1 2) '(+ 1 2))
+;(T ''((3 4)) '((3 4)))
+;(T ''(+ 1 (+ 2 3)) '(+ 1 (+ 2 3)))
+;(T '   '     ( +     1 (+  2 3 )      ) '(+ 1 (+ 2 3)))
+;(T ''(* 1 2) '(* 1 2))
+;(T ''(** 1 2) '(** 1 2))
+;(T ''(1 2 3) '(1 2 3))
+;(T '''1 '(quote 1))
+;(T '''(1 2 3) '(quote (1 2 3)))
+;(T '(quote 7) '7)
+;(T ''7 '7)
+;(T '(quote (1 2 3)) '(1 2 3))
+;(T ''(1 2 3) '(1 2 3))
+;(T '(quote (1 2 (3 4))) '(1 2 (3 4)))
+;(T ''(1 2 (3 4)) '(1 2 (3 4)))
+;(T '(quote (10)) '(10))
+;
+;; Test apply
+;(T '(apply + 1 2 3 []) '6)
+;(T '(apply + 1 2 3 (list)) '6)
+;(T '(apply + 1 (list 2 3)) '6)
+;(T '(apply - 0 (list 1)) '-1)
+;(T '(apply - (list 0 1)) '-1)
+;(T '(apply str-join "," (list X: Y:)) '"X,Y")
 
+;; Test bkl-doc documentation
+;(T '(begin
+;      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
+;      (?doc ?foobar-x:))
+;   ["foobar-xxx-yyy"]);
+;(T '(begin
+;      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
+;      (?doc xxx-test:))
+;   ["foobar-xxx-yyy"]);
+;(T '(begin
+;      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
+;      (?doc xxx-yyy:))
+;   []);
+;(T '(begin
+;      (bkl-set-doc! xxx-test-bkl: "foobar-xxx-yyy")
+;      (?doc *-yyy:))
+;   ["foobar-xxx-yyy"]);
+;
 ; Testing coroutines:
 (T '(let ((x 10)
           (c (lambda coroutine: ()
@@ -1259,78 +1259,78 @@
       x)
    [rec: cont: foo: 10 foo: 11 foo: 12])
 
-; Test do-each
-(T '(let ((o []))
-      (do-each (x [1 2 3])
-        (push! o x))
-      o)
-   [1 2 3])
-
-(T '(let ((o []))
-      (do-each (x [])
-        (push! o x))
-      o)
-   [])
-
-(T '(let ((sum 0))
-      (do-each (v {a: 1 b: 2 c: 3 e: 5 f: 11})
-        (set! sum (+ sum v)))
-      sum)
-   22)
-
-(T '(let ((o []))
-      (do-each (k v [5 6 7])
-        (push! o k)
-        (push! o v))
-      o)
-   [0 5 1 6 2 7])
-
-(T '(let ((o []))
-      (do-each (k v {a: 12})
-        (push! o k)
-        (push! o v))
-      o)
-   [a: 12])
-
-(T '(let ((o []))
-      (do-each (k v {})
-        (push! o k)
-        (push! o v))
-      o)
-   [])
-
-; Testing some shallow copy operations and assignments
-(T '(let ((v [1 2 3])
-          (v_ (list-copy v)))
-      [(eqv? v v) (eqv? v v_) v_])
-   [#t #f [1 2 3]])
-
-(T '(let ((m {a: 10})
-          (m_ (map-copy m)))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f {a: 10}])
-
-(T '(let ((m {a: 10})
-          (m_ (assign m [a: 20])))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f {a: 20}])
-
-(T '(let ((m {a: 10})
-          (m_ (assign m {a: 20})))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f {a: 20}])
-
-(T '(let ((m [1 2 3 4])
-          (m_ (assign m {0 10 2 30})))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f [10 2 30 4]])
-
-(T '(let ((m [1 2 3 4])
-          (m_ (assign m [0 10 2 30])))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f [10 2 30 4]])
-
-
+;; Test do-each
+;(T '(let ((o []))
+;      (do-each (x [1 2 3])
+;        (push! o x))
+;      o)
+;   [1 2 3])
+;
+;(T '(let ((o []))
+;      (do-each (x [])
+;        (push! o x))
+;      o)
+;   [])
+;
+;(T '(let ((sum 0))
+;      (do-each (v {a: 1 b: 2 c: 3 e: 5 f: 11})
+;        (set! sum (+ sum v)))
+;      sum)
+;   22)
+;
+;(T '(let ((o []))
+;      (do-each (k v [5 6 7])
+;        (push! o k)
+;        (push! o v))
+;      o)
+;   [0 5 1 6 2 7])
+;
+;(T '(let ((o []))
+;      (do-each (k v {a: 12})
+;        (push! o k)
+;        (push! o v))
+;      o)
+;   [a: 12])
+;
+;(T '(let ((o []))
+;      (do-each (k v {})
+;        (push! o k)
+;        (push! o v))
+;      o)
+;   [])
+;
+;; Testing some shallow copy operations and assignments
+;(T '(let ((v [1 2 3])
+;          (v_ (list-copy v)))
+;      [(eqv? v v) (eqv? v v_) v_])
+;   [#t #f [1 2 3]])
+;
+;(T '(let ((m {a: 10})
+;          (m_ (map-copy m)))
+;      [(eqv? m m) (eqv? m m_) m_])
+;   [#t #f {a: 10}])
+;
+;(T '(let ((m {a: 10})
+;          (m_ (assign m [a: 20])))
+;      [(eqv? m m) (eqv? m m_) m_])
+;   [#t #f {a: 20}])
+;
+;(T '(let ((m {a: 10})
+;          (m_ (assign m {a: 20})))
+;      [(eqv? m m) (eqv? m m_) m_])
+;   [#t #f {a: 20}])
+;
+;(T '(let ((m [1 2 3 4])
+;          (m_ (assign m {0 10 2 30})))
+;      [(eqv? m m) (eqv? m m_) m_])
+;   [#t #f [10 2 30 4]])
+;
+;(T '(let ((m [1 2 3 4])
+;          (m_ (assign m [0 10 2 30])))
+;      [(eqv? m m) (eqv? m m_) m_])
+;   [#t #f [10 2 30 4]])
+;
+;
 (displayln (bkl-gc-statistics))
 (displayln "ALL OK")
 ::
