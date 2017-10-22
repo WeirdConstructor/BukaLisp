@@ -268,14 +268,14 @@
                 (end-val-adr  (T ctx (@0 (@0 arg))))
                 (step-val-adr (T ctx (@1 (@0 arg))))
                 (iter-adr     (T ctx (@2 (@0 arg))))
-                (for-ret-adr  (.new-tmp-pos (F: ctx)))
+                (ret-adr      (.new-tmp-pos (F: ctx)))
                 (body-pad     (make-code-pad-object (F: ctx)))
                 (body-ret-adr (T (assign ctx [P: body-pad]) (@1 arg))))
             (if (eqv? (@2 body-ret-adr) tmp:)
               (begin
-                (.recycle-pos (F: ctx) for-ret-adr)
-                (set! for-ret-adr body-ret-adr))
-              (.op-mov body-pad for-ret-adr body-ret-adr nil))
+                (.recycle-pos (F: ctx) ret-adr)
+                (set! ret-adr body-ret-adr))
+              (.op-mov body-pad ret-adr body-ret-adr nil))
             (.op-br           (P: ctx) (.count-ops body-pad))
             (.append-code-pad (P: ctx) body-pad)
             (.op-forinc       (P: ctx)
@@ -291,19 +291,19 @@
             (.recycle-pos (F: ctx) step-val-adr)
             (.recycle-pos (F: ctx) iter-adr)
             (.recycle-pos (F: ctx) body-ret-adr)
-            for-ret-adr))]
+            ret-adr))]
        ['#1#while
         (lambda (ctx arg T gtx)
           (let ((cond-pad       (make-code-pad-object (F: ctx)))
                 (cond-adr       (T (assign ctx [P: cond-pad]) (@0 arg)))
-                (while-ret-adr  (.new-tmp-pos (F: ctx)))
+                (ret-adr        (.new-tmp-pos (F: ctx)))
                 (body-pad       (make-code-pad-object (F: ctx)))
                 (body-ret-adr   (T (assign ctx [P: body-pad]) (@1 arg))))
             (if (eqv? (@2 body-ret-adr) tmp:)
               (begin
-                (.recycle-pos (F: ctx) while-ret-adr)
-                (set! while-ret-adr body-ret-adr))
-              (.op-mov body-pad while-ret-adr body-ret-adr nil))
+                (.recycle-pos (F: ctx) ret-adr)
+                (set! ret-adr body-ret-adr))
+              (.op-mov body-pad ret-adr body-ret-adr nil))
             (.op-br           (P: ctx) (.count-ops body-pad))
             (.append-code-pad (P: ctx) body-pad)
             (.append-code-pad (P: ctx) cond-pad)
@@ -313,7 +313,87 @@
                             (.count-ops cond-pad)
                             (.count-ops body-pad)))
                       cond-adr)
-            while-ret-adr))]
+            (.recycle-pos (F: ctx) cond-adr)
+            ret-adr))]
+       ['#1#do-each
+
+;         (define ret-adr (.new-tmp-pos self))
+;         (.push-env self)
+;         (let ((body-pad    (.make-code-pad self))
+;               (map-adr     (.compile self obj-atom code-pad))
+;               (ok-adr      (.new-pos self))
+;               (val-adr     (.new-pos self))
+;               (iter-adr    (.new-pos self))
+;               (key-adr     nil)
+;               (with-key?   (eqv? (length iter-desc) 3)))
+;           ; initialization:
+;           (if with-key?
+;             (begin
+;               (.define-var self (@1 iter-desc) [var: (@0 val-adr)])
+;               (set! key-adr (.new-pos self))
+;               (.define-var self (@0 iter-desc)
+;                            [var: (@0 key-adr)]))
+;             (.define-var self (@0 iter-desc) [var: (@0 val-adr)]))
+;           (define body-ret-adr
+;                   (.compile-block self (drop atom 2) body-pad))
+;           (.op-load-nil code-pad ret-adr)
+;           ; start iteration:
+;           (.op-iter     code-pad iter-adr map-adr)
+;           (.op-next     code-pad ok-adr val-adr iter-adr)
+;           (when with-key?
+;             (.op-ikey code-pad key-adr iter-adr))
+;           ; branch:
+;           (define body-op-count (.count-ops body-pad))
+;           (.op-br  code-pad (+ 2 body-op-count))
+;           (.append-code-pad code-pad body-pad)
+;           (.op-mov code-pad ret-adr body-ret-adr nil)
+;           (.op-next  code-pad ok-adr val-adr iter-adr)
+;           (when with-key?
+;             (.op-ikey code-pad key-adr iter-adr))
+;           (.op-brnif code-pad
+;                      (- 0 (+ (if with-key? 4 3)
+;                              body-op-count))
+;                      ok-adr)
+;           ; cleanup:
+;           (.pop-env self)
+;           ret-adr)))
+        (lambda (ctx arg T gtx)
+          (let ((body-pad       (make-code-pad-object (F: ctx)))
+                (body-ret-adr   (T (assign ctx [P: body-pad]) (@2 arg)))
+                (struct-adr     (T ctx (@1 arg)))
+                (ret-adr        (.new-tmp-pos (F: ctx)))
+                (ok-adr         (.new-tmp-pos (F: ctx)))
+                (val-adr        (T ctx (@0 (@0 arg))))
+                (iter-adr       (.new-tmp-pos (F: ctx)))
+                (key-adr        nil))
+            (when (@1 (@0 arg))
+              (set! key-adr (T ctx (@1 (@0 arg)))))
+            (if (eqv? (@2 body-ret-adr) tmp:)
+              (begin
+                (.recycle-pos (F: ctx) ret-adr)
+                (set! ret-adr body-ret-adr))
+              (.op-mov body-pad ret-adr body-ret-adr nil))
+            (.op-load-nil (P: ctx) ret-adr)
+            (.op-iter  (P: ctx) iter-adr struct-adr)
+            (.op-next  (P: ctx) ok-adr val-adr iter-adr)
+            (when key-adr
+              (.op-ikey (P: ctx) key-adr iter-adr))
+            (.op-br    (P: ctx) (+ (if key-adr 2 1)
+                                   (.count-ops body-pad)))
+            (.append-code-pad (P: ctx) body-pad)
+            (.op-next  (P: ctx) ok-adr val-adr iter-adr)
+            (when key-adr
+              (.op-ikey (P: ctx) key-adr iter-adr))
+            (.op-brnif (P: ctx) (- 0 (+ (if key-adr 3 2)
+                                        (.count-ops body-pad)))
+                       ok-adr)
+            (.recycle-pos (F: ctx) struct-adr)
+            (.recycle-pos (F: ctx) ok-adr)
+            (.recycle-pos (F: ctx) val-adr)
+            (.recycle-pos (F: ctx) iter-adr)
+            (when key-adr
+              (.recycle-pos (F: ctx) key-adr))
+            ret-adr))]
        ['#1#if
         (lambda (ctx arg T gtx)
           (let ((is-negated?        (eqv? (first (@0 arg)) '#1#not))
@@ -463,81 +543,14 @@
 ;----------------------------------------------------------------------------
 
 ;(PUSH-DEBUG)
-;(error XXX:)
-
-; Test do-each
-(T '(let ((o []))
-      (do-each (x [1 2 3])
-        (push! o x))
-      o)
-   [1 2 3])
-
-(T '(let ((o []))
-      (do-each (x [])
-        (push! o x))
-      o)
-   [])
-
-(T '(let ((sum 0))
-      (do-each (v {a: 1 b: 2 c: 3 e: 5 f: 11})
-        (set! sum (+ sum v)))
-      sum)
-   22)
-
-(T '(let ((o []))
-      (do-each (k v [5 6 7])
-        (push! o k)
-        (push! o v))
-      o)
-   [0 5 1 6 2 7])
-
-(T '(let ((o []))
-      (do-each (k v {a: 12})
-        (push! o k)
-        (push! o v))
-      o)
-   [a: 12])
-
-(T '(let ((o []))
-      (do-each (k v {})
-        (push! o k)
-        (push! o v))
-      o)
-   [])
-
-; Testing some shallow copy operations and assignments
-(T '(let ((v [1 2 3])
-          (v_ (list-copy v)))
-      [(eqv? v v) (eqv? v v_) v_])
-   [#t #f [1 2 3]])
-
-(T '(let ((m {a: 10})
-          (m_ (map-copy m)))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f {a: 10}])
-
-(T '(let ((m {a: 10})
-          (m_ (assign m [a: 20])))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f {a: 20}])
-
-(T '(let ((m {a: 10})
-          (m_ (assign m {a: 20})))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f {a: 20}])
-
-(T '(let ((m [1 2 3 4])
-          (m_ (assign m {0 10 2 30})))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f [10 2 30 4]])
-
-(T '(let ((m [1 2 3 4])
-          (m_ (assign m [0 10 2 30])))
-      [(eqv? m m) (eqv? m m_) m_])
-   [#t #f [10 2 30 4]])
-
-
-(error X:)
+;;(error XXX:)
+;
+;(T '(begin
+;      (define x 10000000)
+;      (let ((inco (lambda (a) (set! x (+ x a)))))
+;        (while (> x 0)
+;               (inco -1)))) 0)
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ; Test basic (lambda ...) and (let ...)
@@ -1753,4 +1766,76 @@
              (set! j (* j 2))
              (set! i (+ i 1)))
       j)
-   0)
+   8)
+
+; Test do-each
+(T '(let ((o []))
+      (do-each (x [1 2 3])
+        (push! o x))
+      o)
+   [1 2 3])
+
+(T '(let ((o []))
+      (do-each (x [])
+        (push! o x))
+      o)
+   [])
+
+(T '(let ((sum 0))
+      (do-each (v {a: 1 b: 2 c: 3 e: 5 f: 11})
+        (set! sum (+ sum v)))
+      sum)
+   22)
+
+(T '(let ((o []))
+      (do-each (k v [5 6 7])
+        (push! o k)
+        (push! o v))
+      o)
+   [0 5 1 6 2 7])
+
+(T '(let ((o []))
+      (do-each (k v {a: 12})
+        (push! o k)
+        (push! o v))
+      o)
+   [a: 12])
+
+(T '(let ((o []))
+      (do-each (k v {})
+        (push! o k)
+        (push! o v))
+      o)
+   [])
+
+; Testing some shallow copy operations and assignments
+(T '(let ((v [1 2 3])
+          (v_ (list-copy v)))
+      [(eqv? v v) (eqv? v v_) v_])
+   [#t #f [1 2 3]])
+
+(T '(let ((m {a: 10})
+          (m_ (map-copy m)))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f {a: 10}])
+
+(T '(let ((m {a: 10})
+          (m_ (assign m [a: 20])))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f {a: 20}])
+
+(T '(let ((m {a: 10})
+          (m_ (assign m {a: 20})))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f {a: 20}])
+
+(T '(let ((m [1 2 3 4])
+          (m_ (assign m {0 10 2 30})))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f [10 2 30 4]])
+
+(T '(let ((m [1 2 3 4])
+          (m_ (assign m [0 10 2 30])))
+      [(eqv? m m) (eqv? m m_) m_])
+   [#t #f [10 2 30 4]])
+

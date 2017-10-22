@@ -392,8 +392,8 @@
                     [(@1 iter-desc) nil]])
           (lambda (ctx T gtx)
             ['#1#do-each
-             [(T ctx (@0 iter-desc))
-              (T ctx (@1 iter-desc))]
+             [(T ctx (@1 iter-desc))
+              (T ctx (@0 iter-desc))]
              obj
              (s1-begin T ctx (drop args 2))])))
       (begin
