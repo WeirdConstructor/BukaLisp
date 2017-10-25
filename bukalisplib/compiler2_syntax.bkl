@@ -111,11 +111,19 @@
     (when (not (nil? (lambda-name: ctx)))
       (set! lambda-name (lambda-name: ctx))
       (set! ctx (assign ctx [lambda-name: nil])))
-    (unless (> (length args) 2)
+    (define is-coroutine?
+      (if (eqv? (@1 args) coroutine:)
+        (begin
+          (set! args (drop args 2))
+          #t)
+        (begin
+          (set! args (drop args 1))
+          #f)))
+    (unless (> (length args) 1)
       (error "'lambda' needs more than 1 argument" args))
     (define lambda-params
       (parse-lambda-params
-        (@1 args)
+        (@0 args)
         (lambda (msg a)
           (error (str "'lambda' parameter error: " msg) a))))
     (let ((new-env {" PARENT "         (env: ctx)
@@ -135,7 +143,7 @@
           (@!va-arg-name new-env [var: new-var-name va-arg-name])
           (set! va-arg new-var-name)))
       (let ((compiled-body
-              (.AM gtx (s1-begin T new-ctx (drop args 2))))
+              (.AM gtx (s1-begin T new-ctx (drop args 1))))
             (lambda-upv
               (if (> (length (@" LAMBDA-UPV " new-env)) 0)
                 (keys-in-map (@" LAMBDA-UPV " new-env))
@@ -158,8 +166,8 @@
         (append
           '#1#lambda
           (.AM gtx (if (nil? va-arg)
-                     [[lambda-name new-args nil    lambda-upv]]
-                     [[lambda-name new-args va-arg lambda-upv]]))
+                     [[lambda-name new-args nil    lambda-upv is-coroutine?]]
+                     [[lambda-name new-args va-arg lambda-upv is-coroutine?]]))
           lambda-body)))))
 ;----------------------------------------------------------------------------
 
@@ -684,5 +692,16 @@
                                          else-clause
                                          (drop else-clause 1)))])))
           out-cond))))))
+;----------------------------------------------------------------------------
+
+(define eval-syntax
+  (lambda (ctx arg T gtx)
+    (when (> (length arg) 3)
+      (error "Too many arguments to 'eval'" arg))
+    (when (< (length arg) 2)
+      (error "Too few arguments to 'eval'" arg))
+    (if (= (length arg) 2)
+      ['#1#eval (T ctx (@1 arg))]
+      ['#1#eval (T ctx (@1 arg)) (T ctx (@2 arg))])))
 ;----------------------------------------------------------------------------
 

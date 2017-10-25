@@ -12,6 +12,8 @@
 
 class BukaLISPModule;
 
+#define VM_CLOS_SIZE 4
+
 //---------------------------------------------------------------------------
 
 namespace bukalisp
@@ -45,6 +47,7 @@ class VMException : public std::exception
     X(NEW_MAP,        8) /*                                        */ \
     X(CSET_VEC,       9) /*                                        */ \
     X(NEW_UPV,       10) /* (O: upvalue-adr)                       */ \
+    X(EVAL,          11) /*                                        */ \
     X(DUMP_ENV_STACK,13) /*                                        */ \
     X(CALL,          15) /*                                        */ \
     X(NEW_CLOSURE,   16) /* (O: closure A: VM-PROG B: is_coro?)    */ \
@@ -87,15 +90,15 @@ OP_CODE_DEF(X)
 
 struct INST
 {
-    uint32_t op;
+    uint8_t op;
     int32_t  o;
-    int32_t  oe;
     int32_t  a;
-    int32_t  ae;
     int32_t  b;
-    int32_t  be;
     int32_t  c;
-    int32_t  ce;
+    int8_t  oe;
+    int8_t  ae;
+    int8_t  be;
+    int8_t  ce;
 //    union {
 //        double  d;
 //        int64_t i;
@@ -110,10 +113,10 @@ struct INST
         while (op_name.size() < 14)
            op_name = " " + op_name;
         ss << "#" << op_name << ": ("
-           << o << "/" << oe
-           << ", [" << a << "/" << ae
-           << ":" << b << "/" << be
-           << ":" << c << "/" << ce
+           << o << "/" << (int32_t) oe
+           << ", [" << a << "/" << (int32_t) ae
+           << ":" << b << "/" << (int32_t) be
+           << ":" << c << "/" << (int32_t) ce
            << "]";
     }
 
@@ -237,7 +240,7 @@ class VM
         GC_ROOT_MEMBER_MAP(m_documentation);
         bool       m_trace;
         std::function<Atom(Atom func, AtomVec *args)> m_interpreter_call;
-        typedef std::function<Atom(Atom prog, AtomVec *root_env, const std::string &input_name, bool only_compile)> compiler_func;
+        typedef std::function<Atom(Atom prog, AtomMap *root_env, const std::string &input_name, bool only_compile)> compiler_func;
         compiler_func m_compiler_call;
 
     public:
@@ -382,7 +385,7 @@ class VM
             }
         }
 
-        Atom eval(Atom at_ud, AtomVec *root_env, AtomVec *args = nullptr);
+        Atom eval(Atom at_ud, AtomMap *root_env, AtomVec *args = nullptr);
 };
 //---------------------------------------------------------------------------
 

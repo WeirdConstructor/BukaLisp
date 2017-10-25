@@ -1,0 +1,6 @@
+(define x {})
+(eval '1 x)
+(eval '(define M 10) x)
+(unless (eqv? 12 (eval '(+ 1 (eval '(+ 1 (eval M)))) x))
+  (error "NOT OK"))
+(displayln OK:)

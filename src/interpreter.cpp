@@ -90,13 +90,13 @@ void Interpreter::init()
         });
 
         m_vm->set_compiler_call([=](Atom prog,
-                                    AtomVec *root_env,
+                                    AtomMap *root_env,
                                     const std::string &input_name,
                                     bool only_compile)
         {
             GC_ROOT(m_rt->m_gc,     prog_r)           = prog;
             GC_ROOT_MAP(m_rt->m_gc, debug_info_map_r) = debug_info_map_r;
-            GC_ROOT_VEC(m_rt->m_gc, root_env_r)       = root_env;
+            GC_ROOT_MAP(m_rt->m_gc, root_env_r)       = root_env;
             return this->call_compiler(prog, root_env,
                                        input_name, only_compile);
         });
@@ -656,7 +656,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
 
         GC_ROOT_VEC(m_rt->m_gc, old_env) = m_env_stack;
 
-        m_env_stack = env.m_d.vec;
+        m_env_stack = m_rt->m_gc.clone_vector(env.m_d.vec);
 
         {
             AtomMap *am_bind_env = m_rt->m_gc.allocate_map();
@@ -701,7 +701,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
     }
     else if (m_vm && func == T_UD && func.m_d.ud->type() == "VM-PROG")
     {
-        ret = m_vm->eval(func, av);
+        ret = m_vm->eval(func, nullptr, av);
     }
     else
         error("Non callable function element in list", func);
@@ -916,7 +916,7 @@ Atom Interpreter::eval(Atom e)
 
 Atom Interpreter::call_compiler(
     Atom prog,
-    AtomVec *root_env,
+    AtomMap *root_env,
     const std::string &input_name,
     bool only_compile)
 {
@@ -927,9 +927,8 @@ Atom Interpreter::call_compiler(
         AtomVec *args = m_rt->m_gc.allocate_vector(5);
         args->push(Atom(T_STR, m_rt->m_gc.new_symbol(input_name)));
         args->push(prog);
-        args->push(Atom());
+        args->push(Atom(T_MAP, root_env));
         args->push(Atom(T_BOOL, only_compile));
-        args->push(Atom(T_VEC, root_env));
 
         return call(compiler_func, args, false);
     }
@@ -988,7 +987,7 @@ Atom Interpreter::get_compiler_func()
 Atom Interpreter::call_compiler(
     const std::string &code_name,
     const std::string &code,
-    AtomVec *root_env,
+    AtomMap *root_env,
     bool only_compile)
 {
     Atom compiler_func = get_compiler_func();

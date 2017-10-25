@@ -220,13 +220,47 @@ void VM::report_arity_error(Atom &arity, size_t argc)
 }
 //---------------------------------------------------------------------------
 
-Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
+#define VM_CALL_FRAME_SIZE 7
+#define VM_CF_CLOS  0
+#define VM_CF_PROG  1
+#define VM_CF_FRAME 2
+#define VM_CF_ROOT  3
+#define VM_CF_PC    4
+#define VM_CF_OUT_I 5
+#define VM_CF_OUT_E 6
+
+//---------------------------------------------------------------------------
+
+Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 {
     using namespace std::chrono;
 
 //    cout << "BUKKLIROOT" << Atom(T_VEC, root_env).to_write_str() << endl;
 
-    if (!root_env) root_env = m_rt->m_gc.allocate_vector(0);
+    AtomVec *root_env = nullptr;
+    if (root_env_map)
+    {
+        Atom root_env_regs =
+            root_env_map->at(
+                Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")));
+        if (root_env_regs.m_type == T_NIL)
+        {
+            root_env = m_rt->m_gc.allocate_vector(0);
+            root_env_map->set(
+                Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")),
+                Atom(T_VEC, root_env));
+        }
+        else if (root_env_regs.m_type != T_VEC)
+        {
+            error("Bad registers from root_env in VM", root_env_regs);
+        }
+        else
+        {
+            root_env = root_env_regs.m_d.vec;
+        }
+    }
+    else
+        root_env = m_rt->m_gc.allocate_vector(0);
 
     AtomVec *rr_frame   = nullptr;
     Atom    *rr_v_frame = nullptr;
@@ -244,10 +278,11 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
         &reg_row[3],
         &root_env));
 
-#define SET_FRAME_ROW(row_ptr)  rr_frame = row_ptr; rr_v_frame = rr_frame->m_data; // cout << "SET FRM ROW: " << reg_row[REG_ROW_FRAME] << endl;
-#define SET_DATA_ROW(row_ptr)   rr_data = row_ptr; rr_v_data = rr_data->m_data; // cout << "SET FRM DATA: " << reg_row[REG_ROW_DATA] << endl;
-#define SET_PRIM_ROW(row_ptr)   reg_row[REG_ROW_PRIM]  = row_ptr; // cout << "SET FRM PRIM: " << reg_row[REG_ROW_PRIM] << endl;
-#define SET_UPV_ROW(row_ptr)    reg_row[REG_ROW_UPV]   = row_ptr; // cout << "SET FRM UPV: " << reg_row[REG_ROW_UPV] << endl;
+#define SET_FRAME_ROW(row_ptr)  rr_frame = row_ptr;  rr_v_frame = rr_frame->m_data;
+#define SET_DATA_ROW(row_ptr)   rr_data  = row_ptr;  rr_v_data  = rr_data->m_data;
+#define SET_ROOT_ENV(vecptr)    root_env = (vecptr); rr_v_root  = root_env->m_data;
+//#define SET_PRIM_ROW(row_ptr)   reg_row[REG_ROW_PRIM]  = row_ptr;
+//#define SET_UPV_ROW(row_ptr)    reg_row[REG_ROW_UPV]   = row_ptr;
 
     PROG *prog = nullptr;
     INST *pc   = nullptr;
@@ -266,7 +301,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     }
     else if (callable.m_type == T_CLOS)
     {
-        if (   callable.m_d.vec->m_len == 4
+        if (   callable.m_d.vec->m_len == VM_CLOS_SIZE
             && callable.m_d.vec->m_data[0].m_type == T_UD)
         {
             prog = dynamic_cast<PROG*>(callable.m_d.vec->m_data[0].m_d.ud);
@@ -276,6 +311,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
             if (callable.m_d.vec->m_data[1].m_d.vec)
                 clos_upvalues = callable.m_d.vec->m_data[1].m_d.vec;
             // TODO: Handle calling a coroutine!
+            // FIXME: Handle copying upvalues into current frame (aka 'args')!
         }
         else if (callable.m_d.vec->m_len == 3)
         {
@@ -313,20 +349,20 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     VMProgStateGuard psg(m_prog, m_pc, prog, pc);
 
     SET_DATA_ROW(m_prog->data_array());
-    SET_UPV_ROW(clos_upvalues);
-    SET_PRIM_ROW(m_prim_table);
     SET_FRAME_ROW(args);
+//    SET_UPV_ROW(clos_upvalues);
+//    SET_PRIM_ROW(m_prim_table);
 
     // XXX: The root-call-frame actually keeps alive the whole code-tree, including
     //      any callable sub-m_prog objects. Thus, we don't have to explicitly
     //      keep alive the m-prog or it's data_array().
     //
     //      => We just need to keep alive the UPV_ROW and the FRAME_ROW.
-    cont_stack = m_rt->m_gc.allocate_vector(0);
+    cont_stack = m_rt->m_gc.allocate_vector(VM_CALL_FRAME_SIZE);
     {
         AtomVec *call_frame = m_rt->m_gc.allocate_vector(7);
-        call_frame->set(0, callable);
-        call_frame->set(6, Atom());
+        call_frame->set(VM_CF_CLOS, callable);
+        call_frame->set(VM_CALL_FRAME_SIZE - 1, Atom());
         cont_stack->push(Atom(T_VEC, call_frame));
     }
 
@@ -335,27 +371,23 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
     Atom static_nil_atom;
-#define P_A  ((PC.a))
-#define P_B  ((PC.b))
-#define P_C  ((PC.c))
-#define P_O  ((PC.o))
-#define PE_A ((PC.ae))
-#define PE_B ((PC.be))
-#define PE_C ((PC.ce))
-#define PE_O ((PC.oe))
+#define P_A  ((m_pc->a))
+#define P_B  ((m_pc->b))
+#define P_C  ((m_pc->c))
+#define P_O  ((m_pc->o))
+#define PE_A ((m_pc->ae))
+#define PE_B ((m_pc->be))
+#define PE_C ((m_pc->ce))
+#define PE_O ((m_pc->oe))
 
 #define E_SET_CHECK_REALLOC_D(env_idx, idx) do { \
     switch ((env_idx)) { \
+    case REG_ROW_UPV: \
     case REG_ROW_FRAME: if (rr_frame->m_len <= (size_t) (idx)) { rr_frame->check_size((idx)); rr_v_frame = rr_frame->m_data; } break; \
     case REG_ROW_ROOT: if (root_env->m_len <= (size_t) (idx)) { root_env->check_size((idx)); rr_v_root = root_env->m_data; } break; \
     case REG_ROW_DATA: if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((idx)); rr_v_data = rr_data->m_data; } break; \
     default: \
-        if ((env_idx) < REG_ROWS) \
-        { \
-            reg_row[(env_idx)]->check_size((idx)); \
-        } \
-        else \
-            error("out of reg_row range (" #env_idx ")", Atom(T_INT, (env_idx))); \
+        error("bad reg_row reference (" #env_idx ")", Atom(T_INT, (env_idx))); \
     }\
 } while (0)
 #define E_SET_CHECK_REALLOC(env_idx_reg, idx_reg) \
@@ -366,11 +398,17 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     case REG_ROW_FRAME: val_ptr = &(rr_v_frame[(idx)]); break; \
     case REG_ROW_DATA:  val_ptr = &(rr_v_data[(idx)]); break; \
     case REG_ROW_ROOT:  val_ptr = &(rr_v_root[(idx)]); break; \
-    default: \
-        { \
-            val_ptr = &(reg_row[(env_idx)]->m_data[(idx)]); \
-            if (env_idx == REG_ROW_UPV) val_ptr = &(val_ptr->m_d.vec->m_data[0]); \
-        } \
+    case REG_ROW_UPV: \
+    { \
+        val_ptr = &(rr_v_frame[(idx)]); \
+        if (env_idx == REG_ROW_UPV) val_ptr = &(val_ptr->m_d.vec->m_data[0]); \
+        break; \
+    } \
+    case REG_ROW_PRIM: \
+    { \
+        val_ptr = &(m_prim_table->m_data[(idx)]); \
+        break; \
+    } \
     } \
 } while (0)
 
@@ -379,8 +417,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     case REG_ROW_FRAME: rr_v_frame[(idx)] = (val); break; \
     case REG_ROW_DATA: rr_v_data[(idx)] = (val); break; \
     case REG_ROW_ROOT: rr_v_root[(idx)] = (val); break; \
-    case REG_ROW_UPV: reg_row[(env_idx)]->m_data[(idx)].m_d.vec->m_data[0] = (val); break; \
-    default: reg_row[(env_idx)]->m_data[(idx)] = (val); \
+    case REG_ROW_UPV: rr_v_frame[(idx)].m_d.vec->m_data[0] = (val); break; \
     } \
 } while (0)
 
@@ -391,18 +428,16 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     case REG_ROW_FRAME: (out_ptr) = &(rr_v_frame[(idx)]); break; \
     case REG_ROW_DATA: (out_ptr) = &(rr_v_data[(idx)]); break; \
     case REG_ROW_ROOT: (out_ptr) = &(rr_v_root[(idx)]); break; \
-    default: \
-        if ((idx) >= (int32_t) reg_row[(eidx)]->m_len) \
-            (out_ptr) = &static_nil_atom; \
-        else { \
-            (out_ptr) = &(reg_row[(eidx)]->m_data[(idx)]); \
-            if ((eidx) == REG_ROW_UPV) \
-            { \
-                if (out_ptr->m_type != T_VEC || out_ptr->m_d.vec->m_len <= 0) \
-                    error("Bad upvalue access", Atom(T_INT, (idx))); \
-                (out_ptr) = &(out_ptr->m_d.vec->m_data[0]); \
-            } \
-        } \
+    case REG_ROW_UPV: \
+    { \
+        (out_ptr) = &(rr_v_frame[(idx)]); \
+        if (out_ptr->m_type != T_VEC || out_ptr->m_d.vec->m_len <= 0) \
+            error("Bad upvalue access", Atom(T_INT, (idx))); \
+        (out_ptr) = &(out_ptr->m_d.vec->m_data[0]); \
+        break; \
+    } \
+    case REG_ROW_PRIM: \
+        (out_ptr) = &(m_prim_table->m_data[(idx)]); \
     } \
 } while (0)
 
@@ -410,7 +445,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
 #define RESTORE_FROM_CALL_FRAME(call_frame, ret_val)  \
     do {                                              \
-        Atom *cv = (call_frame).m_d.vec->m_data;        \
+        Atom *cv = (call_frame).m_d.vec->m_data;      \
         if (cv[1].m_type == T_NIL)                    \
         {                                             \
             ret = (ret_val);                          \
@@ -419,18 +454,18 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                     m_prog->m_instructions_len - 2]); \
             break;                                    \
         }                                             \
-        Atom proc    = cv[1];                         \
-        Atom upvs    = cv[2];                         \
-        Atom frame   = cv[3];                         \
-        Atom pc      = cv[4];                         \
-        int32_t oidx = (int32_t) cv[5].m_d.i;         \
-        int32_t eidx = (int32_t) cv[6].m_d.i;         \
+        Atom proc    = cv[VM_CF_PROG];                \
+        Atom frame   = cv[VM_CF_FRAME];               \
+        Atom r_env   = cv[VM_CF_ROOT];                \
+        Atom pc      = cv[VM_CF_PC];                  \
+        int32_t oidx = (int32_t) cv[VM_CF_OUT_I].m_d.i; \
+        int8_t  eidx = (int8_t)  cv[VM_CF_OUT_E].m_d.i; \
                                                       \
         m_prog   = static_cast<PROG*>(proc.m_d.ud);   \
         m_pc     = (INST *) pc.m_d.ptr;               \
         SET_DATA_ROW(m_prog->data_array());           \
-        SET_UPV_ROW(upvs.m_d.vec);                    \
         SET_FRAME_ROW(frame.m_d.vec);                 \
+        SET_ROOT_ENV(r_env.m_d.vec);                  \
                                                       \
         E_SET_CHECK_REALLOC_D(eidx, oidx);            \
         E_SET_D(eidx, oidx, (ret_val));               \
@@ -442,19 +477,19 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
 #define RECORD_CALL_FRAME(func, call_frame)             \
     Atom call_frame(T_VEC,                              \
-        m_rt->m_gc.allocate_vector(7));                 \
+        m_rt->m_gc.allocate_vector(VM_CALL_FRAME_SIZE));\
     do {                                                \
         AtomVec *cv = call_frame.m_d.vec;               \
-        cv->m_len = 7;                                  \
+        cv->m_len = VM_CALL_FRAME_SIZE;                 \
         Atom *data = cv->m_data;                        \
                                                         \
-        data[0].set_clos((func).m_d.vec);                 \
-        data[1].set_ud((UserData *) m_prog);            \
-        data[2].set_vec(reg_row[REG_ROW_UPV]);          \
-        data[3].set_vec(rr_frame);        \
-        data[4].set_ptr(m_pc);                          \
-        data[5].set_int(P_O);                           \
-        data[6].set_int(PE_O);                          \
+        data[VM_CF_CLOS].set_clos((func).m_d.vec);      \
+        data[VM_CF_PROG].set_ud((UserData *) m_prog);   \
+        data[VM_CF_FRAME].set_vec(rr_frame);            \
+        data[VM_CF_ROOT].set_vec(root_env);             \
+        data[VM_CF_PC].set_ptr(m_pc);                   \
+        data[VM_CF_OUT_I].set_int(P_O);                 \
+        data[VM_CF_OUT_E].set_int(PE_O);                \
     } while(0)
 
     Atom ret;
@@ -465,13 +500,13 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
     {
         while (m_pc->op != OP_END)
         {
-            INST &PC = *m_pc;
+//            INST &PC = *m_pc;
 
             if (m_trace)
             {
                 cout << "VMTRC FRMS(" << cont_stack->m_len << "): ";
                 m_pc->to_string(cout);
-                cout << "ROOT: (" << Atom(T_VEC, root_env).to_write_str() << ")";
+                cout << "ROOT: (" << Atom(T_VEC, root_env).id() << ")";
                 cout << " {ENV= ";
                 for (size_t i = 0; i < rr_frame->m_len; i++)
                 {
@@ -521,7 +556,8 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                         error("Bad argument index vector!", *tmp);
                     AtomVec *av = tmp->m_d.vec;
 
-                    out_av->m_len = P_A;
+                    if (P_A > 0)
+                        out_av->check_size(P_A - 1);
                     for (size_t i = 0, j = 0; i < av->m_len; i += 2, j++)
                     {
                         E_GET_D(
@@ -573,30 +609,32 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
                 case OP_CSET_VEC:
                 {
-                    E_GET(tmp, O);
-                    Atom &vec = *tmp;
+                    Atom *vec;
+                    E_GET(vec, O);
 
                     E_GET(tmp, B);
-                    if (vec.m_type == T_VEC)
+                    switch (vec->m_type)
                     {
-                        // XXX: Attention, *tmp is taken as reference and assigned
-                        //      to a vector it is itself part of. In this case, the
-                        //      vector might get reallocated and the *tmp reference
-                        //      might be invalidated!
-                        //      However, as *tmp comes from the current environment
-                        //      frame, this should not happen, until we get
-                        //      direct access to the environment/frame vector.
-                        vec.m_d.vec->set(P_A, *tmp);
+                        case T_VEC:
+                            // XXX: Attention, *tmp is taken as reference and assigned
+                            //      to a vector it is itself part of. In this case, the
+                            //      vector might get reallocated and the *tmp reference
+                            //      might be invalidated!
+                            //      However, as *tmp comes from the current environment
+                            //      frame, this should not happen, until we get
+                            //      direct access to the environment/frame vector.
+                            vec->m_d.vec->set(P_A, *tmp);
+                            break;
+                        case T_MAP:
+                        {
+                            Atom *key;
+                            E_GET(key, A);
+                            vec->m_d.map->set(*key, *tmp);
+                            break;
+                        }
+                        default:
+                            error("Can CSET_VEC on vector and map", *vec);
                     }
-                    else if (vec.m_type == T_MAP)
-                    {
-                        Atom *key;
-                        E_GET(key, A);
-                        vec.m_d.map->set(*key, *tmp);
-                    }
-                    else
-                        error("Can CSET_VEC on vector and map", vec);
-
                     break;
                 }
 
@@ -684,19 +722,24 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                             m_rt->m_gc.allocate_vector(clos_upv_idxes->m_len);
                         for (size_t i = 0; i < clos_upv_idxes->m_len; i++)
                         {
-                            AtomVec *upv_reg_row = reg_row[REG_ROW_UPV];
-                            size_t upv_idx =
-                                (size_t) clos_upv_idxes->m_data[i].m_d.i;
-                            if (upv_idx >= upv_reg_row->m_len)
-                                error("Bad upvalue index", Atom(T_INT, upv_idx));
-                            upvalues->set(i, upv_reg_row->m_data[upv_idx]);
+                            if (i % 2 == 0)
+                            {
+                                AtomVec *upv_reg_row = rr_frame;
+                                size_t upv_idx =
+                                    (size_t) clos_upv_idxes->m_data[i].m_d.i;
+                                if (upv_idx >= upv_reg_row->m_len)
+                                    error("Bad upvalue index", Atom(T_INT, upv_idx));
+                                upvalues->set(i, upv_reg_row->m_data[upv_idx]);
+                            }
+                            else
+                                upvalues->set(i, clos_upv_idxes->m_data[i]);
                         }
                     }
 
     //                std::cout << "NEW CLOS " << ((void *) cl.m_d.vec) << "@" << ((void *) cl.m_d.vec->m_data) << std::endl;
 
-                    Atom cl(T_CLOS, m_rt->m_gc.allocate_vector(4));
-                    cl.m_d.vec->m_len = 4;
+                    Atom cl(T_CLOS, m_rt->m_gc.allocate_vector(VM_CLOS_SIZE));
+                    cl.m_d.vec->m_len = VM_CLOS_SIZE;
                     cl.m_d.vec->m_data[0].set_ud(prog.m_d.ud);
                     cl.m_d.vec->m_data[1].set_vec(upvalues);
                     cl.m_d.vec->m_data[2].set_bool(is_coroutine);
@@ -716,7 +759,8 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
 
                     Atom upv(T_VEC, m_rt->m_gc.allocate_vector(1));
                     upv.m_d.vec->set(0, val);
-                    reg_row[REG_ROW_UPV]->set(P_O, upv);
+                    rr_frame->set(P_O, upv);
+                    rr_v_frame = rr_frame->m_data;
                     break;
                 }
 
@@ -753,17 +797,25 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                     if (tmp->m_type != T_VEC)
                         error("Bad argument index vector!", *tmp);
                     AtomVec *av    = tmp->m_d.vec;
-                    size_t len     = tmp->m_d.vec->m_len >> 1;
-                    AtomVec *frame = m_rt->m_gc.allocate_vector(len);
-                    frame->m_len   = len;
+                    AtomVec *frame = nullptr;
 
-                    for (size_t i = 0, j = 0; i < av->m_len; i += 2, j++)
+                    if (PE_B == REG_ROW_DATA)
                     {
-                        E_GET_D(
-                            tmp,
-                            av->m_data[i + 1].m_d.i,
-                            av->m_data[i].m_d.i);
-                        frame->m_data[j] = *tmp;
+                        size_t len = av->m_len;
+                        frame = m_rt->m_gc.allocate_vector(len);
+                        frame->m_len = len >> 1;
+                        for (size_t i = 0, j = 0; i < av->m_len; i += 2, j++)
+                        {
+                            E_GET_D(
+                                tmp,
+                                av->m_data[i + 1].m_d.i,
+                                av->m_data[i].m_d.i);
+                            frame->m_data[j] = *tmp;
+                        }
+                    }
+                    else
+                    {
+                        frame = av;
                     }
 
                     switch (func->m_type)
@@ -781,7 +833,7 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                         }
                         case T_CLOS:
                         {
-                            if (func->m_d.vec->m_len < 4)
+                            if (func->m_d.vec->m_len < VM_CLOS_SIZE)
                                 error("Bad closure found", *func);
                             if (func->m_d.vec->m_data[0].m_type != T_UD)
                                 error("Bad closure found", *func);
@@ -826,9 +878,16 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                                 m_pc--;
 
                                 SET_DATA_ROW(m_prog->data_array());
-                                SET_UPV_ROW(
-                                    m_rt->m_gc.clone_vector(
-                                        func->m_d.vec->m_data[1].m_d.vec));
+                                AtomVec *upvs = func->m_d.vec->m_data[1].m_d.vec;
+                                if (upvs->m_len > 0)
+                                {
+                                    for (size_t i = 0; i < upvs->m_len; i += 2)
+                                    {
+                                        frame->set(
+                                            (size_t) upvs->m_data[i + 1].m_d.i,
+                                            upvs->m_data[i]);
+                                    }
+                                }
                                 SET_FRAME_ROW(frame);
                             }
                             break;
@@ -837,6 +896,55 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                             error("CALL does not support that function type yet", *func);
                     }
 
+                    break;
+                }
+
+                case OP_EVAL:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    Atom *code;
+                    E_GET(code, A);
+                    Atom *env;
+                    E_GET(env, B);
+
+                    if (!root_env->m_meta
+                        || root_env->m_meta->at(1).m_type != T_MAP)
+                    {
+                        error("Bad environment passed, REGS has no meta env attached",
+                              Atom(T_VEC, root_env));
+                    }
+                    AtomMap *eval_env = root_env->m_meta->at(1).m_d.map;
+                    if (env->m_type != T_NIL)
+                    {
+                        if (env->m_type != T_MAP)
+                            error("Bad environment (not a map) to 'eval'", *env);
+                        eval_env = env->m_d.map;
+                    }
+                    Atom prog =
+                        m_compiler_call(*code, eval_env, "<vm-op-eval>", true);
+                    if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
+                        error("In 'eval' compiler did not return proper VM-PROG",
+                              prog);
+
+                    // save the current execution context:
+                    // FIXME: we should save the root-env-map in the call stack too!
+                    RECORD_CALL_FRAME(*code, call_frame);
+                    cont_stack->push(call_frame);
+
+                    m_prog   = dynamic_cast<PROG*>(prog.m_d.ud);
+                    m_pc     = &(m_prog->m_instructions[0]);
+                    m_pc--;
+
+                    SET_DATA_ROW(m_prog->data_array());
+                    AtomVec *eval_frame = m_rt->m_gc.allocate_vector(0);
+                    SET_FRAME_ROW(eval_frame);
+                    Atom cf_root_env =
+                        eval_env->at(Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")));
+                    if (cf_root_env.m_type != T_VEC)
+                        error("Bad environment with 'eval', no [\" REGS \"] given",
+                              cf_root_env);
+                    SET_ROOT_ENV(cf_root_env.m_d.vec);
                     break;
                 }
 
@@ -865,78 +973,71 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                         error("Empty or bad call frame stack item!", call_frame);
 
                     Atom *cv = call_frame.m_d.vec->m_data;
-                    if (cv[1].m_type == T_NIL)
-                    {
-                        ret = ret_val;
-                        m_pc = &(m_prog->m_instructions[m_prog->m_instructions_len - 2]);
-                        break;
-                    }
-
                     RESTORE_FROM_CALL_FRAME(call_frame, ret_val);
                     break;
                 }
 
-//                case OP_YIELD:
-//                {
-//                    E_GET(tmp, A);
-//                    Atom ret_val = *tmp;
-//
-//                    Atom cur_func = cont_stack->last()->at(0);
-//                    RECORD_CALL_FRAME(cur_func, coro_cont_frame);
-//
-//                    AtomVec *cont_copy =
-//                        m_rt->m_gc.allocate_vector(cont_stack->m_len);
-//
-//                    // We need to copy all call frames except the one
-//                    // with the coroutine in it (as that is the one,
-//                    // where we need to return to now).
-//                    // Additionally we need to record a "return point"
-//                    // which we point to when recalling the coroutine.
-//                    // This might be inside the call of a completely
-//                    // other closure in fact.
-//
-//                    // =>
-//                    // 1. record current program state (m_prog, m_pc, frm_stack)
-//                    //    (current T_CLOS is part of the call frame on top of cont_stack)
-//                    // 1b. save the O register where to put the continuation-value
-//                    //     with the program state!
-//                    // 2. copy all cont_stack frames except the one with the coroutine in it.
-//                    // 3. save the prog-state and the cont_stack in the T_CLOS of
-//                    //    the coroutine.
-//                    // 4. return from the T_CLOS call as "usual" with the value
-//                    //    passed into YIELD as 'A'.
-//                    Atom ret_call_frame;
-//                    Atom func;
-//                    size_t ret_cont_stack_idx = 0;
-//                    for (size_t i = cont_stack->m_len; i > 0; i--)
-//                    {
-//                        Atom &frm = cont_stack->m_data[i - 1];
-//                        //d// cout << "FRM: " << frm.m_type << " F: " << frm.at(0).at(2).to_write_str() << endl;
-//                        if (!frm.at(0).at(2).is_false())
-//                        {
-//                            //d// cout << "FOUND COROUTINE CALL AT DEPTH="
-//                            //d//      << i << " of " << cont_stack->m_len << endl;
-//                            ret_call_frame = frm;
-//                            func           = frm.at(0);
-//                            ret_cont_stack_idx = i - 1;
-//                            break;
-//                        }
-//
-//                        cont_copy->set((cont_stack->m_len - i), frm);
-//                    }
-//
-//                    if (func.m_type == T_CLOS)
-//                    {
-//                        cont_copy->push(coro_cont_frame);
-//                        func.m_d.vec->set(2, Atom(T_VEC, cont_copy));
-//                    }
-//                    else
-//                        error("Can't 'yield' from a non-coroutine call!", ret_val);
-//
-//                    cont_stack->m_len = ret_cont_stack_idx;
-//                    RESTORE_FROM_CALL_FRAME(ret_call_frame, ret_val);
-//                    break;
-//                }
+                case OP_YIELD:
+                {
+                    E_GET(tmp, A);
+                    Atom ret_val = *tmp;
+
+                    Atom cur_func = cont_stack->last()->at(0);
+                    RECORD_CALL_FRAME(cur_func, coro_cont_frame);
+
+                    AtomVec *cont_copy =
+                        m_rt->m_gc.allocate_vector(cont_stack->m_len);
+
+                    // We need to copy all call frames except the one
+                    // with the coroutine in it (as that is the one,
+                    // where we need to return to now).
+                    // Additionally we need to record a "return point"
+                    // which we point to when recalling the coroutine.
+                    // This might be inside the call of a completely
+                    // other closure in fact.
+
+                    // =>
+                    // 1. record current program state (m_prog, m_pc, frm_stack)
+                    //    (current T_CLOS is part of the call frame on top of cont_stack)
+                    // 1b. save the O register where to put the continuation-value
+                    //     with the program state!
+                    // 2. copy all cont_stack frames except the one with the coroutine in it.
+                    // 3. save the prog-state and the cont_stack in the T_CLOS of
+                    //    the coroutine.
+                    // 4. return from the T_CLOS call as "usual" with the value
+                    //    passed into YIELD as 'A'.
+                    Atom ret_call_frame;
+                    Atom func;
+                    size_t ret_cont_stack_idx = 0;
+                    for (size_t i = cont_stack->m_len; i > 0; i--)
+                    {
+                        Atom &frm = cont_stack->m_data[i - 1];
+                        //d// cout << "FRM: " << frm.m_type << " F: " << frm.at(0).at(2).to_write_str() << endl;
+                        if (!frm.at(0).at(2).is_false())
+                        {
+                            //d// cout << "FOUND COROUTINE CALL AT DEPTH="
+                            //d//      << i << " of " << cont_stack->m_len << endl;
+                            ret_call_frame = frm;
+                            func           = frm.at(0);
+                            ret_cont_stack_idx = i - 1;
+                            break;
+                        }
+
+                        cont_copy->set((cont_stack->m_len - i), frm);
+                    }
+
+                    if (func.m_type == T_CLOS)
+                    {
+                        cont_copy->push(coro_cont_frame);
+                        func.m_d.vec->set(2, Atom(T_VEC, cont_copy));
+                    }
+                    else
+                        error("Can't 'yield' from a non-coroutine call!", ret_val);
+
+                    cont_stack->m_len = ret_cont_stack_idx;
+                    RESTORE_FROM_CALL_FRAME(ret_call_frame, ret_val);
+                    break;
+                }
 
                 case OP_BR:
                 {
@@ -974,66 +1075,57 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                 {
                     E_SET_CHECK_REALLOC(O, O);
 
-                    size_t idx_o = P_O + 1;
-                    if (idx_o >= rr_frame->m_len)
-                    {
-                        rr_frame->set(idx_o, Atom(T_INT));
-                        rr_v_frame = rr_frame->m_data;
-                    }
-
                     Atom *step;
                     E_GET(step, A);
                     E_GET(tmp, B);
 
                     Atom *ot;
                     E_GET(ot, C);
-                    Atom &o = *ot;
 
                     Atom *condt;
                     E_SET_D_PTR(PE_O, P_O, condt);
-                    Atom &cond = *condt;
 
-                    bool update = cond.m_type == T_BOOL;
+                    bool update = condt->m_type == T_BOOL;
 
-                    switch (o.m_type)
+                    switch (ot->m_type)
                     {
-                        case T_DBL:
-                        {
-                            double step_i = step->m_d.d;
-                            double i = o.m_d.d;
-                            if (update) i += step_i;
-                            cond.m_type = T_BOOL;
-                            cond.m_d.b =
-                                step_i > 0.0
-                                ? i > tmp->m_d.d
-                                : i < tmp->m_d.d;
-                            o.m_d.d = i;
-                            break;
-                        }
                         case T_INT:
                         {
                             int64_t step_i = step->m_d.i;
-                            int64_t i = o.m_d.i;
+                            int64_t i = ot->m_d.i;
                             if (update) i += step_i;
-                            cond.m_type = T_BOOL;
-                            cond.m_d.b =
+                            condt->m_type = T_BOOL;
+                            condt->m_d.b =
                                 step_i > 0
                                 ? i > tmp->m_d.i
                                 : i < tmp->m_d.i;
-                            o.m_d.i = i;
+                            ot->m_d.i = i;
+                            break;
+                        }
+                        case T_DBL:
+                        {
+                            double step_i = step->m_d.d;
+                            double i = ot->m_d.d;
+                            if (update) i += step_i;
+                            condt->m_type = T_BOOL;
+                            condt->m_d.b =
+                                step_i > 0.0
+                                ? i > tmp->m_d.d
+                                : i < tmp->m_d.d;
+                            ot->m_d.d = i;
                             break;
                         }
                         default:
                         {
                             int64_t step_i = step->to_int();
-                            int64_t i = o.m_d.i;
+                            int64_t i = ot->m_d.i;
                             if (update) i += step_i;
-                            cond.m_type = T_BOOL;
-                            cond.m_d.b =
+                            condt->m_type = T_BOOL;
+                            condt->m_d.b =
                                 step_i > 0
                                 ? i > tmp->to_int()
                                 : i < tmp->to_int();
-                            o.m_d.i = i;
+                            ot->m_d.i = i;
                             break;
                         }
                     }
@@ -1186,16 +1278,17 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                 case OP_##opname:                             \
                 {                                             \
                     E_SET_CHECK_REALLOC(O, O); \
-                    E_GET(tmp, A);                            \
-                    Atom &a = *tmp;                           \
-                    E_GET(tmp, B);                            \
-                    Atom &b = *tmp;                           \
+                    Atom *a, *b; \
+                    E_GET(a, A);                            \
+                    E_GET(b, B);                            \
                                                               \
                     Atom o(T_BOOL);                           \
-                    if (a.m_type == T_DBL)                    \
-                        o.m_d.b = a.to_dbl() oper b.to_dbl(); \
+                    if (a->m_type == T_DBL)                    \
+                        o.m_d.b = a->m_d.d    oper b->to_dbl(); \
+                    else if (a->m_type == T_INT)               \
+                        o.m_d.b = a->m_d.i    oper b->to_int(); \
                     else                                      \
-                        o.m_d.b = a.to_int() oper b.to_int(); \
+                        o.m_d.b = a->to_int() oper b->to_int(); \
                     E_SET(O, o);                              \
                     break;                                    \
                 }
@@ -1204,37 +1297,45 @@ Atom VM::eval(Atom callable, AtomVec *root_env, AtomVec *args)
                 case OP_##opname:                                        \
                 {                                                        \
                     E_SET_CHECK_REALLOC(O, O);      \
-                    E_GET(tmp, A);                                       \
-                    Atom &a = *tmp;                                      \
-                    E_GET(tmp, B);                                       \
-                    Atom &b = *tmp;                                      \
+                    Atom *a, *b; \
+                    E_GET(a, A);                                       \
+                    E_GET(b, B);                                       \
                                                                          \
                     Atom *ot;                                            \
                     E_SET_D_PTR(PE_O, P_O, ot);                          \
-                    Atom &o = *ot;                                       \
-                    if (a.m_type == T_DBL)                               \
+                    if (a->m_type == T_DBL)                               \
                     {                                                    \
-                        o.m_d.d = a.to_dbl() oper b.to_dbl();            \
-                        o.m_type = T_DBL;                                \
+                        ot->m_d.d = a->m_d.d    oper b->to_dbl();            \
+                        ot->m_type = T_DBL;                                \
                     }                                                    \
-                    else if (a.m_type == T_NIL)                          \
+                    else if (a->m_type == T_INT)                          \
                     {                                                    \
-                        if (b.m_type == T_DBL)                           \
+                        ot->m_d.i = a->m_d.i    oper b->to_int();            \
+                        ot->m_type = T_INT;                                \
+                    }                                                    \
+                    else if (a->m_type == T_NIL)                          \
+                    {                                                    \
+                        if (b->m_type == T_DBL)                           \
                         {                                                \
-                            o.m_d.d = (double) neutr;                    \
-                            o.m_d.d = ((double) neutr) oper b.to_dbl();  \
+                            ot->m_d.d = (double) neutr;                    \
+                            ot->m_d.d = ((double) neutr) oper b->to_dbl();  \
+                        }                                                \
+                        else if (b->m_type == T_INT)                      \
+                        {                                                \
+                            ot->m_d.i = (int64_t) neutr;                    \
+                            ot->m_d.i = ((int64_t) neutr) oper b->m_d.i;     \
                         }                                                \
                         else                                             \
                         {                                                \
-                            o.m_d.i = (int64_t) neutr;                   \
-                            o.m_d.i = ((int64_t) neutr) oper b.to_int(); \
+                            ot->m_d.i = (int64_t) neutr;                   \
+                            ot->m_d.i = ((int64_t) neutr) oper b->to_int(); \
                         }                                                \
-                        o.m_type = b.m_type;                             \
+                        ot->m_type = b->m_type;                             \
                     }                                                    \
                     else                                                 \
                     {                                                    \
-                        o.m_d.i = a.to_int() oper b.to_int();            \
-                        o.m_type = T_INT;                                \
+                        ot->m_d.i = a->to_int() oper b->to_int();            \
+                        ot->m_type = T_INT;                                \
                     }                                                    \
                     break;                                               \
                 }

@@ -57,6 +57,35 @@ size_t count_elements(const Atom &a)
 }
 //---------------------------------------------------------------------------
 
+size_t AtomHashTable::HASH_TABLE_SIZES[] = {
+    23,53,97,193,389,769,1543,3079,6151,12289,24593,49157,98317,196613,393241,
+    786433,1572869,3145739,6291469,12582917,25165843,50331653,
+    100663319,201326611,402653189,805306457,1610612741
+};
+//---------------------------------------------------------------------------
+
+void AtomHashTable::free_tbl(Atom *tbl)
+{
+#if WITH_MEM_POOL
+    g_atom_array_pool.free(tbl);
+#else
+    delete[] tbl;
+#endif
+}
+//---------------------------------------------------------------------------
+
+Atom *AtomHashTable::alloc_new_tbl(size_t val_count)
+{
+    Atom *data;
+#       if WITH_MEM_POOL
+       data = g_atom_array_pool.allocate(val_count * 3);
+#       else
+       data = new Atom[val_count * 3];
+#       endif
+    return data;
+}
+//---------------------------------------------------------------------------
+
 bool Atom::is_simple() const
 {
     switch (m_type)

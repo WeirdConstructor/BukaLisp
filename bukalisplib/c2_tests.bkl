@@ -66,7 +66,7 @@
       x)
     '(#1#begin
       (#1#set! (#1#glob-var x 0)
-       (#1#lambda (x (a_0 b_1) nil nil)
+       (#1#lambda (x (a_0 b_1) nil nil #f)
         (#1#var b_1 b)))
       (#1#glob-var x 0)))
 (T '(if #t 1 2)
@@ -85,30 +85,30 @@
 
 ; Test lambda expressions:
 (T '(lambda (x) (lambda (y) (+ x y)))
-   '(#1#lambda (nil (x_0) nil nil)
+   '(#1#lambda (nil (x_0) nil nil #f)
      (#1#create-upv lambda: (x_0)
-      (#1#lambda (nil (y_1) nil (x_0))
+      (#1#lambda (nil (y_1) nil (x_0) #f)
        (#1#add (#1#var x_0 x) (#1#var y_1 y))))))
 (T '(lambda (x) (lambda (v) (lambda (y) (+ x y v))))
-   '(#1#lambda (nil (x_0) nil nil)
+   '(#1#lambda (nil (x_0) nil nil #f)
      (#1#create-upv lambda: (x_0)
-      (#1#lambda (nil (v_1) nil (x_0))
+      (#1#lambda (nil (v_1) nil (x_0) #f)
        (#1#create-upv lambda: (v_1)
-        (#1#lambda (nil (y_2) nil (x_0 v_1))
+        (#1#lambda (nil (y_2) nil (x_0 v_1) #f)
          (#1#add
           (#1#add (#1#var x_0 x) (#1#var y_2 y)) (#1#var v_1 v))))))))
 (T '(lambda x x)
-   '(#1#lambda (nil () x_0 nil) (#1#var x_0 x)))
+   '(#1#lambda (nil () x_0 nil #f) (#1#var x_0 x)))
 (T '(lambda (. x) x)
-   '(#1#lambda (nil () x_0 nil) (#1#var x_0 x)))
+   '(#1#lambda (nil () x_0 nil #f) (#1#var x_0 x)))
 (T '(lambda (y . x) x)
-   '(#1#lambda (nil (y_0) x_1 nil) (#1#var x_1 x)))
+   '(#1#lambda (nil (y_0) x_1 nil #f) (#1#var x_1 x)))
 (T '(lambda (a y . x) x)
-   '(#1#lambda (nil (a_0 y_1) x_2 nil) (#1#var x_2 x)))
+   '(#1#lambda (nil (a_0 y_1) x_2 nil #f) (#1#var x_2 x)))
 (T '(define (foo . x)
       x)
    '(#1#set! (#1#glob-var foo 0)
-     (#1#lambda (foo () x_0 nil) (#1#var x_0 x))))
+     (#1#lambda (foo () x_0 nil #f) (#1#var x_0 x))))
 
 ; Test quoting:
 (T ''1 '(#1#data 1))
@@ -163,13 +163,13 @@
 (T '(lambda ()
       (define y 20)
       (lambda () y))
-   '(#1#lambda (nil () nil nil)
+   '(#1#lambda (nil () nil nil #f)
      (#1#let (y_0)
       (#1#create-upv
       lambda:
       (y_0)
       (#1#begin (#1#set! (#1#var y_0 y) (#1#data 20))
-       (#1#lambda (nil () nil (y_0)) (#1#var y_0 y)))))))
+       (#1#lambda (nil () nil (y_0) #f) (#1#var y_0 y)))))))
 
 (T '(let ((x 10))
       (define y 20)
@@ -180,29 +180,29 @@
       (y_1)
       (#1#begin (#1#set! (#1#var x_0 x) (#1#data 10))
        (#1#begin (#1#set! (#1#var y_1 y) (#1#data 20))
-        (#1#lambda (nil () nil (y_1)) (#1#var y_1 y)))))))
+        (#1#lambda (nil () nil (y_1) #f) (#1#var y_1 y)))))))
 
 (T '(lambda ()
       (let ((x 20) (y 2))
         (lambda (b) x)
         y))
-  '(#1#lambda (nil () nil nil)
+  '(#1#lambda (nil () nil nil #f)
     (#1#let (x_0 y_1)
      (#1#create-upv let: (x_0)
       (#1#begin
        (#1#set! (#1#var x_0 x) (#1#data 20))
        (#1#set! (#1#var y_1 y) (#1#data 2))
        (#1#begin
-        (#1#lambda (nil (b_2) nil (x_0))
+        (#1#lambda (nil (b_2) nil (x_0) #f)
          (#1#var x_0 x))
         (#1#var y_1 y)))))))
 
 (T '(lambda (x)
       (lambda (b)
         x))
-   '(#1#lambda (nil (x_0) nil nil)
+   '(#1#lambda (nil (x_0) nil nil #f)
      (#1#create-upv lambda: (x_0)
-      (#1#lambda (nil (b_1) nil (x_0))
+      (#1#lambda (nil (b_1) nil (x_0) #f)
        (#1#var x_0 x)))))
 
 ; Testing error debug info (line numbers):
@@ -290,11 +290,11 @@
 (T '($define! {} (foo) 0)
    '(#1#set method: (#1#data foo)
      (#1#map)
-     (#1#lambda (foo () nil nil) (#1#data 0))))
+     (#1#lambda (foo () nil nil #f) (#1#data 0))))
 (T '($define! {} (foo a b c) (+ a b c))
    '(#1#set method: (#1#data foo)
      (#1#map)
-     (#1#lambda (foo (a_0 b_1 c_2) nil nil)
+     (#1#lambda (foo (a_0 b_1 c_2) nil nil #f)
       (#1#add (#1#add (#1#var a_0 a) (#1#var b_1 b))
        (#1#var c_2 c)))))
 
@@ -324,11 +324,11 @@
        let:
        (x_0)
        (#1#begin (#1#set! (#1#var x_0 x) (#1#data 20))
-        (#1#lambda (nil () nil (x_0))
+        (#1#lambda (nil () nil (x_0) #f)
          (#1#begin (#1#var x_0 x) (#1#glob-var y 1))))))))
 (T '(define (x) x)
    '(#1#set! (#1#glob-var x 0)
-     (#1#lambda (x () nil nil) (#1#glob-var x 0))))
+     (#1#lambda (x () nil nil #f) (#1#glob-var x 0))))
 (T '(begin
       (define x 10)
       x)
@@ -343,7 +343,7 @@
      (#1#begin
       (#1#set! (#1#var i_0 i) (#1#nil))
       (#1#set! (#1#var v_1 v) (#1#nil))
-      (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
+      (#1#do-each ((#1#var v_1 v) (#1#var i_0 i))
        (#1#list (#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4))
        (#1#begin (#1#add (#1#var i_0 i) (#1#data 1))
         (#1#sub (#1#var v_1 v) (#1#data 20)))))))
@@ -358,9 +358,9 @@
        (v_1)
        (#1#begin (#1#set! (#1#var i_0 i) (#1#nil))
         (#1#set! (#1#var v_1 v) (#1#nil))
-        (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
+        (#1#do-each ((#1#var v_1 v) (#1#var i_0 i))
          (#1#list)
-         (#1#lambda (nil () nil (v_1))
+         (#1#lambda (nil () nil (v_1) #f)
           (#1#add (#1#glob-var x 0) (#1#var v_1 v)))))))))
 (T '(do-each (i v [1 2 3 4])
       (lambda () (* 2 i)))
@@ -368,9 +368,9 @@
       (#1#create-upv let: (i_0)
        (#1#begin (#1#set! (#1#var i_0 i) (#1#nil))
         (#1#set! (#1#var v_1 v) (#1#nil))
-        (#1#do-each ((#1#var i_0 i) (#1#var v_1 v))
+        (#1#do-each ((#1#var v_1 v) (#1#var i_0 i))
          (#1#list (#1#data 1) (#1#data 2) (#1#data 3) (#1#data 4))
-         (#1#lambda (nil () nil (i_0))
+         (#1#lambda (nil () nil (i_0) #f)
           (#1#mul (#1#data 2) (#1#var i_0 i))))))))
 
 (T '(do-each (v {a: 10})
@@ -440,7 +440,7 @@
        (#1#set! (#1#var cond_0_t_1 cond_0_t)
         (#1#eq (#1#data 2) (#1#data 3)))
        (clause: (#1#var cond_0_t_1 cond_0_t)
-         (#1#apply (#1#lambda (nil (x_2) nil nil)
+         (#1#apply (#1#lambda (nil (x_2) nil nil #f)
                     (#1#add (#1#var x_2 x) (#1#data 4)))
           ((#1#var cond_0_t_1 cond_0_t))))))
      (else: (#1#data 23))))
@@ -482,7 +482,7 @@
       (#1#cond
        (else:
          (#1#apply
-          (#1#lambda (nil (x_2) nil nil) (#1#var x_2 x))
+          (#1#lambda (nil (x_2) nil nil #f) (#1#var x_2 x))
           ((#1#var case_0_t_1 case_0_t))))))))
 
 (T '(case 'foo
@@ -507,7 +507,7 @@
        (clause:
          (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data foo))
          (#1#apply
-          (#1#lambda (nil (x_2) nil nil) (#1#var x_2 x))
+          (#1#lambda (nil (x_2) nil nil #f) (#1#var x_2 x))
           ((#1#var case_0_t_1 case_0_t))))))))
 
 ; Test 'while' and some exiting syntaxes:

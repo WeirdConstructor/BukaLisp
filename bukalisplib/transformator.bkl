@@ -35,8 +35,9 @@
     (define do-pop? #f)
     (if (list? leaf-ctx)
       (let ((parent-ctx (@0 leaf-ctx)))
-        (set! leaf-ctx (@1 leaf-ctx))
-        (@!parent-ctx: leaf-ctx parent-ctx))
+        (set! leaf-ctx
+          (assign (@1 leaf-ctx)
+                  [parent-ctx: parent-ctx])))
       (@!parent-ctx: leaf-ctx nil))
     (with-cleanup
       (unless (nil? data-meta-di)

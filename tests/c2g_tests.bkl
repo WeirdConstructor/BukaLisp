@@ -1,523 +1,10 @@
-;----------------------------------------------------------------------------
-
-(include compiler2)
-(include code-pad)
-
-;----------------------------------------------------------------------------
-
-(define REG-ROW-FRAME 0)
-(define REG-ROW-DATA  1)
-(define REG-ROW-PRIM  2)
-(define REG-ROW-UPV   3)
-(define REG-ROW-ROOT  4)
-
-;----------------------------------------------------------------------------
-
-(define eq-adr?
-  (lambda (a b)
-    (and (eqv? (@0 a) (@0 b))
-         (eqv? (@1 a) (@1 b)))))
-;----------------------------------------------------------------------------
-
-(define tmp-pos-or-parent-adr
-  (lambda (ctx)
-    (if (@parent-ctx: ctx)
-      (@parent-ctx: ctx)
-      (.new-tmp-pos (F: ctx)))))
-;----------------------------------------------------------------------------
-
-(define make-s2-frame
-  (lambda (gtx)
-    (let ((self {pad: []
-                 pos: [0 []]}))
-      ($define! self (get-debug-info)
-        (last (meta-stack: gtx)))
-      ($define! self (store-static-data data)
-        (push! (pad: self) data)
-        [(- (length (pad: self)) 1) REG-ROW-DATA])
-      ($define! self (to-vm-prog code-pad)
-        (make-vm-prog [(pad:  self)
-                       (.to-vm-prog-code       code-pad)
-                       (.to-vm-prog-debug-info code-pad)]))
-      ($define! self (new-tmp-pos)
-        (let ((env-pos           (pos: self))
-              (free-tmp-pos-list (@1 env-pos)))
-          (if (> (length free-tmp-pos-list) 0)
-            [(pop! free-tmp-pos-list) REG-ROW-FRAME tmp:]
-            (let ((new-pos (@0 env-pos)))
-              (@!0 env-pos (+ new-pos 1))
-              [new-pos REG-ROW-FRAME tmp:]))))
-      ($define! self (new-pos)
-        (let ((env-pos (pos: self))
-              (new-pos (@0 env-pos)))
-          (@!0 env-pos (+ 1 new-pos))
-          [new-pos REG-ROW-FRAME]))
-      ($define! self (recycle-pos-list pos-list)
-        (do-each (pos pos-list)
-          (.recycle-pos self pos)))
-      ($define! self (recycle-pos pos)
-        (when (eqv? (@2 pos) tmp:)
-          (@!2 pos nil) ; mark it as non-tmp, as we already put it on the free-list
-          (push! (@1 (pos: self)) (@0 pos)))
-        pos)
-      self)))
-;----------------------------------------------------------------------------
-
-(define generate-binary-op
-  (lambda (node-sym op-gen-sym)
-    [node-sym
-      (lambda (ctx arg T gtx)
-        (let ((out-adr (tmp-pos-or-parent-adr ctx))
-              (a-adr  (T ctx (@0 arg)))
-              (b-adr  (T ctx (@1 arg))))
-          (.(begin op-gen-sym) (P: ctx) out-adr a-adr b-adr)
-          (.recycle-pos (F: ctx) a-adr)
-          (.recycle-pos (F: ctx) b-adr)
-          out-adr))]))
-;----------------------------------------------------------------------------
-
-;(define optimize-out-adr!
-;  (lambda (ctx out-adr in-adr)
-;    (if (and
-;          (eqv? (@1 out-adr) REG-ROW-FRAME)
-;          (eqv? (@1 in-adr)  REG-ROW-FRAME))
-;      (if (eqv? (@2 in-adr) tmp:)
-;        (begin
-;          (.recycle-pos (F: ctx) out-adr)
-;          (@!0 out-adr (@0 in-adr))
-;          (@!1 out-adr (@1 in-adr))
-;          (@!2 out-adr (@2 in-adr))
-;          in-adr)
-;        (begin
-;          (.recycle-pos (F: ctx) in-adr)
-;          out-adr))
-;      out-adr)))
-;----------------------------------------------------------------------------
-
-(define primitive-map (bkl-primitive-map))
-
-(define stage2-transformer
-  (lambda (stage-2-data ctx gtx)
-    (find-transform-match
-      [['#1#data
-        (lambda (ctx arg T gtx)
-          (.store-static-data (F: ctx) (first arg)))]
-       ['#1#prim
-        (lambda (ctx arg T gtx)
-          (let ((prim-idx (@(first arg) primitive-map)))
-            (unless prim-idx
-              (error "Bad primitive in stage 2 compilation" arg))
-            [prim-idx REG-ROW-PRIM]))]
-       ['#1#begin
-        (lambda (ctx arg T gtx)
-          (define last-adr nil)
-          (do-each (form arg)
-            (when last-adr
-              (.recycle-pos (F: ctx) last-adr))
-            (let ((adr (T ctx form)))
-              (set! last-adr adr))
-            last-adr))]
-       ['#1#var
-        (lambda (ctx arg T gtx)
-          (let ((adr (@(@0 arg) (env: ctx))))
-            (unless adr
-              (error "Fatal error in stage 2, variable not found!" arg))
-            adr))]
-       ['#1#glob-var
-        (lambda (ctx arg T gtx)
-          (let ((root-var  (@(@0 arg) (root-env: gtx))))
-            (unless root-var
-              (let ((new-root-adr (@1 arg)))
-                (set! root-var [new-root-adr REG-ROW-ROOT])
-                (@!(@0 arg) (root-env: gtx) root-var)))
-            root-var))]
-       ['#1#set!
-        (lambda (ctx arg T gtx)
-          (let ((var-adr (T ctx (@0 arg)))
-                (val-adr (T [var-adr ctx] (@1 arg))))
-            (unless (eq-adr? var-adr val-adr)
-              (.op-mov (P: ctx) var-adr val-adr nil)
-              (.recycle-pos (F: ctx) val-adr))
-            var-adr))]
-       (generate-binary-op '#1#add 'op-add)
-       (generate-binary-op '#1#sub 'op-sub)
-       (generate-binary-op '#1#mul 'op-mul)
-       (generate-binary-op '#1#div 'op-div)
-       (generate-binary-op '#1#gt  'op-gt)
-       (generate-binary-op '#1#lt  'op-lt)
-       (generate-binary-op '#1#ge  'op-ge)
-       (generate-binary-op '#1#le  'op-le)
-       (generate-binary-op '#1#eq  'op-eq)
-       ['#1#not
-        (lambda (ctx arg T gtx)
-          (let ((adr (tmp-pos-or-parent-adr ctx))
-                (in-adr (T ctx (first arg))))
-            (.op-not (P: ctx) adr in-adr)
-            (.recycle-pos (F: ctx) in-adr)
-            adr))]
-       ['#1#nil
-        (lambda (ctx arg T gtx)
-          (let ((adr (.new-tmp-pos (F: ctx))))
-          (.op-load-nil (P: ctx) adr)
-          adr))]
-       ['#1#set
-        (lambda (ctx arg T gtx)
-          (let ((struct-adr (T ctx (@2 arg)))
-                (field-adr  (T ctx (@1 arg)))
-                (val-adr    (T ctx (@3 arg))))
-            (.op-set (P: ctx) struct-adr field-adr val-adr)
-            val-adr))]
-       ['#1#get
-        (lambda (ctx arg T gtx)
-          (let ((out-adr    (tmp-pos-or-parent-adr ctx))
-                (field-adr  (T ctx (@0 arg)))
-                (struct-adr (T ctx (@1 arg))))
-            (.op-get (P: ctx) out-adr struct-adr field-adr)
-            out-adr))]
-       ['#1#let
-        (lambda (ctx arg T gtx)
-          (let ((new-vars []))
-            (do-each (v (@0 arg))
-              (push! new-vars v)
-              (push! new-vars (.new-pos (F: ctx))))
-            (T (assign ctx [env: (assign (env: ctx) new-vars)]) (@1 arg))))]
-       ['#1#map
-        (lambda (ctx arg T gtx)
-          (let ((map-adrs       [])
-                (recycle-adrs   [])
-                (map-init-adrs-vec [])
-                (ret-adr (tmp-pos-or-parent-adr ctx))
-                (map-elements   arg))
-            (do-each (map-pair map-elements)
-              (let ((key-adr (T ctx (@0 map-pair)))
-                    (val-adr (T ctx (@1 map-pair))))
-                (push! map-init-adrs-vec (@0 key-adr))
-                (push! map-init-adrs-vec (@1 key-adr))
-                (push! map-init-adrs-vec (@0 val-adr))
-                (push! map-init-adrs-vec (@1 val-adr))
-                (push! recycle-adrs key-adr)
-                (push! recycle-adrs val-adr)))
-            (.op-new-map (P: ctx)
-                         ret-adr
-                         (.store-static-data (F: ctx) map-init-adrs-vec))
-            (.recycle-pos-list (F: ctx) recycle-adrs)
-            ret-adr))]
-       ['#1#list
-        (lambda (ctx arg T gtx)
-          (let ((list-adrs      [])
-                (recycle-adrs   [])
-                (ret-adr (tmp-pos-or-parent-adr ctx)))
-            (do-each (a arg)
-              (let ((val-adr (T ctx a)))
-                (push! recycle-adrs val-adr)
-                (push! list-adrs (@0 val-adr))
-                (push! list-adrs (@1 val-adr))))
-            (.op-new-arg-vec
-              (P: ctx)
-              ret-adr
-              (length arg)
-              (.store-static-data (F: ctx) list-adrs))
-            (.recycle-pos-list (F: ctx) recycle-adrs)
-            ret-adr))]
-       ['#1#apply
-        (lambda (ctx arg T gtx)
-          (let ((fn-adr         (T ctx (@0 arg)))
-                (arg-adrs       [])
-                (recycle-adrs   [])
-;                (vec-adr        (.new-tmp-pos (F: ctx)))
-                (ret-adr        (tmp-pos-or-parent-adr ctx)))
-            (push! recycle-adrs fn-adr)
-;            (push! recycle-adrs vec-adr)
-            (do-each (a (@1 arg))
-              (let ((val-adr (T ctx a)))
-                (push! recycle-adrs val-adr)
-                (push! arg-adrs (@0 val-adr))
-                (push! arg-adrs (@1 val-adr))))
-;            (.op-new-arg-vec
-;              (P: ctx)
-;              vec-adr
-;              (length (@1 arg))
-;              (.store-static-data (F: ctx) arg-adrs))
-;            (.op-new-arg-vec
-;              (P: ctx)
-;              vec-adr
-;              (length (@1 arg))
-;              )
-            ret-adr
-            (.op-call (P: ctx) ret-adr fn-adr (.store-static-data (F: ctx) arg-adrs))
-            (.recycle-pos-list (F: ctx) recycle-adrs)
-            ret-adr))]
-       ['#1#return
-        (lambda (ctx arg T gtx)
-          (.op-return (P: ctx) (T ctx (@0 arg))))]
-       ['#1#create-upv
-        (lambda (ctx arg T gtx)
-          (let ((new-var-defs []))
-            (do-each (upv-var-name (@1 arg))
-              (let ((upv-adr (@upv-var-name (env: ctx))))
-                (if (= (@1 upv-adr) REG-ROW-UPV)
-                  (.op-new-upv (P: ctx) upv-adr upv-adr)
-                  (begin
-                    (let ((new-upv-adr [(nxt-upv-idx: ctx) REG-ROW-UPV]))
-                      (.op-new-upv (P: ctx) new-upv-adr upv-adr)
-                      (@!nxt-upv-idx: ctx (+ 1 (nxt-upv-idx: ctx)))
-                      (push! new-var-defs upv-var-name)
-                      (push! new-var-defs new-upv-adr))))))
-            (T (assign ctx
-                       [env: (assign (env: ctx)
-                                     new-var-defs)])
-               (@2 arg))))]
-       ['#1#for
-        (lambda (ctx arg T gtx)
-          (let ((cond-res-adr (.new-tmp-pos (F: ctx)))
-                (end-val-adr  (T ctx (@0 (@0 arg))))
-                (step-val-adr (T ctx (@1 (@0 arg))))
-                (iter-adr     (T ctx (@2 (@0 arg))))
-                (ret-adr      (.new-tmp-pos (F: ctx)))
-                (body-pad     (make-code-pad-object (F: ctx)))
-                (body-ret-adr (T (assign ctx [P: body-pad]) (@1 arg))))
-            (if (eqv? (@2 body-ret-adr) tmp:)
-              (begin
-                (.recycle-pos (F: ctx) ret-adr)
-                (set! ret-adr body-ret-adr))
-              (.op-mov body-pad ret-adr body-ret-adr nil))
-            (.op-br           (P: ctx) (.count-ops body-pad))
-            (.append-code-pad (P: ctx) body-pad)
-            (.op-forinc       (P: ctx)
-                              cond-res-adr
-                              iter-adr
-                              step-val-adr
-                              end-val-adr)
-            (.op-brnif        (P: ctx)
-                              (- 0 (+ 2 (.count-ops body-pad)))
-                              cond-res-adr)
-            (.recycle-pos (F: ctx) cond-res-adr)
-            (.recycle-pos (F: ctx) end-val-adr)
-            (.recycle-pos (F: ctx) step-val-adr)
-            (.recycle-pos (F: ctx) iter-adr)
-            (.recycle-pos (F: ctx) body-ret-adr)
-            ret-adr))]
-       ['#1#while
-        (lambda (ctx arg T gtx)
-          (let ((cond-pad       (make-code-pad-object (F: ctx)))
-                (cond-adr       (T (assign ctx [P: cond-pad]) (@0 arg)))
-                (ret-adr        (.new-tmp-pos (F: ctx)))
-                (body-pad       (make-code-pad-object (F: ctx)))
-                (body-ret-adr   (T (assign ctx [P: body-pad]) (@1 arg))))
-            (if (eqv? (@2 body-ret-adr) tmp:)
-              (begin
-                (.recycle-pos (F: ctx) ret-adr)
-                (set! ret-adr body-ret-adr))
-              (.op-mov body-pad ret-adr body-ret-adr nil))
-            (.op-br           (P: ctx) (.count-ops body-pad))
-            (.append-code-pad (P: ctx) body-pad)
-            (.append-code-pad (P: ctx) cond-pad)
-            (.op-brif (P: ctx)
-                      (- 0
-                         (+ 1
-                            (.count-ops cond-pad)
-                            (.count-ops body-pad)))
-                      cond-adr)
-            (.recycle-pos (F: ctx) cond-adr)
-            ret-adr))]
-       ['#1#do-each
-
-;         (define ret-adr (.new-tmp-pos self))
-;         (.push-env self)
-;         (let ((body-pad    (.make-code-pad self))
-;               (map-adr     (.compile self obj-atom code-pad))
-;               (ok-adr      (.new-pos self))
-;               (val-adr     (.new-pos self))
-;               (iter-adr    (.new-pos self))
-;               (key-adr     nil)
-;               (with-key?   (eqv? (length iter-desc) 3)))
-;           ; initialization:
-;           (if with-key?
-;             (begin
-;               (.define-var self (@1 iter-desc) [var: (@0 val-adr)])
-;               (set! key-adr (.new-pos self))
-;               (.define-var self (@0 iter-desc)
-;                            [var: (@0 key-adr)]))
-;             (.define-var self (@0 iter-desc) [var: (@0 val-adr)]))
-;           (define body-ret-adr
-;                   (.compile-block self (drop atom 2) body-pad))
-;           (.op-load-nil code-pad ret-adr)
-;           ; start iteration:
-;           (.op-iter     code-pad iter-adr map-adr)
-;           (.op-next     code-pad ok-adr val-adr iter-adr)
-;           (when with-key?
-;             (.op-ikey code-pad key-adr iter-adr))
-;           ; branch:
-;           (define body-op-count (.count-ops body-pad))
-;           (.op-br  code-pad (+ 2 body-op-count))
-;           (.append-code-pad code-pad body-pad)
-;           (.op-mov code-pad ret-adr body-ret-adr nil)
-;           (.op-next  code-pad ok-adr val-adr iter-adr)
-;           (when with-key?
-;             (.op-ikey code-pad key-adr iter-adr))
-;           (.op-brnif code-pad
-;                      (- 0 (+ (if with-key? 4 3)
-;                              body-op-count))
-;                      ok-adr)
-;           ; cleanup:
-;           (.pop-env self)
-;           ret-adr)))
-        (lambda (ctx arg T gtx)
-          (let ((body-pad       (make-code-pad-object (F: ctx)))
-                (body-ret-adr   (T (assign ctx [P: body-pad]) (@2 arg)))
-                (struct-adr     (T ctx (@1 arg)))
-                (ret-adr        (.new-tmp-pos (F: ctx)))
-                (ok-adr         (.new-tmp-pos (F: ctx)))
-                (val-adr        (T ctx (@0 (@0 arg))))
-                (iter-adr       (.new-tmp-pos (F: ctx)))
-                (key-adr        nil))
-            (when (@1 (@0 arg))
-              (set! key-adr (T ctx (@1 (@0 arg)))))
-            (if (eqv? (@2 body-ret-adr) tmp:)
-              (begin
-                (.recycle-pos (F: ctx) ret-adr)
-                (set! ret-adr body-ret-adr))
-              (.op-mov body-pad ret-adr body-ret-adr nil))
-            (.op-load-nil (P: ctx) ret-adr)
-            (.op-iter  (P: ctx) iter-adr struct-adr)
-            (.op-next  (P: ctx) ok-adr val-adr iter-adr)
-            (when key-adr
-              (.op-ikey (P: ctx) key-adr iter-adr))
-            (.op-br    (P: ctx) (+ (if key-adr 2 1)
-                                   (.count-ops body-pad)))
-            (.append-code-pad (P: ctx) body-pad)
-            (.op-next  (P: ctx) ok-adr val-adr iter-adr)
-            (when key-adr
-              (.op-ikey (P: ctx) key-adr iter-adr))
-            (.op-brnif (P: ctx) (- 0 (+ (if key-adr 3 2)
-                                        (.count-ops body-pad)))
-                       ok-adr)
-            (.recycle-pos (F: ctx) struct-adr)
-            (.recycle-pos (F: ctx) ok-adr)
-            (.recycle-pos (F: ctx) val-adr)
-            (.recycle-pos (F: ctx) iter-adr)
-            (when key-adr
-              (.recycle-pos (F: ctx) key-adr))
-            ret-adr))]
-       ['#1#if
-        (lambda (ctx arg T gtx)
-          (let ((is-negated?        (eqv? (first (@0 arg)) '#1#not))
-                (cond-adr           (if is-negated?
-                                      (T ctx (@1 (@0 arg)))
-                                      (T ctx (@0 arg))))
-                (true-pad           (make-code-pad-object (F: ctx)))
-                (false-pad          (make-code-pad-object (F: ctx)))
-                (if-ret-adr         (tmp-pos-or-parent-adr ctx))
-                (true-branch-adr    (T (assign ctx [P: true-pad])  (@1 arg)))
-                (false-branch-adr   (T (assign ctx [P: false-pad]) (@2 arg))))
-            (.op-mov true-pad  if-ret-adr true-branch-adr  nil)
-            (.op-mov false-pad if-ret-adr false-branch-adr nil)
-            (if is-negated?
-              (.op-brif         (P: ctx) (+ 1 (.count-ops true-pad)) cond-adr)
-              (.op-brnif        (P: ctx) (+ 1 (.count-ops true-pad)) cond-adr))
-            (.append-code-pad (P: ctx) true-pad)
-            (.op-br           (P: ctx) (.count-ops false-pad))
-            (.append-code-pad (P: ctx) false-pad)
-            (.recycle-pos (F: ctx) cond-adr)
-            (.recycle-pos (F: ctx) true-branch-adr)
-            (.recycle-pos (F: ctx) false-branch-adr)
-            if-ret-adr))]
-       ['#1#lambda
-        (lambda (ctx arg T gtx)
-          (let ((lambda-spec        (@0 arg))
-                (arg-var-adrs       [])
-                (lambda-frame       (make-s2-frame gtx))
-                (lambda-pad         (make-code-pad-object lambda-frame))
-                (is-coroutine       #f #| TODO |#)
-                (creator-upv-adrs   [])
-                (nxt-upv-idx         0)
-                (new-upv-env        {})
-                (arity              (if (nil? (@2 lambda-spec))
-                                      (length (@1 lambda-spec))
-                                      (if (> (length (@1 lambda-spec)) 0)
-                                        (- 0 (length (@1 lambda-spec)))
-                                        nil))))
-            ; handle upvalues we need to collect from creating function:
-            (when (list? (@3 lambda-spec))
-              (do-each (upv-var-name (@3 lambda-spec))
-                (let ((upv-adr (@upv-var-name (env: ctx))))
-                  (unless (= (@1 upv-adr) REG-ROW-UPV)
-                    (error "Bad upvalue in stage 2 compilation"
-                           [upv-var-name lambda-spec]))
-                  (push! creator-upv-adrs (@0 upv-adr))
-                  (@!upv-var-name new-upv-env [nxt-upv-idx REG-ROW-UPV])
-                  (set! nxt-upv-idx (+ 1 nxt-upv-idx)))))
-            ; assign new positions to arguments:
-            (do-each (param (@1 lambda-spec))
-              (push! arg-var-adrs (.new-pos lambda-frame))
-              (@!param new-upv-env (last arg-var-adrs)))
-            ; handle var-args:
-            (unless (nil? (@2 lambda-spec))
-              (push! arg-var-adrs (.new-pos lambda-frame))
-              (.op-pack-va lambda-pad (last arg-var-adrs) (last arg-var-adrs))
-              (@!(@2 lambda-spec) new-upv-env (last arg-var-adrs)))
-            ; emit code and compile body with a new environment:
-            (define new-env (assign (env: ctx) new-upv-env))
-            (let ((body-res-adr
-                    (T (assign ctx [P:              lambda-pad
-                                    F:              lambda-frame
-                                    env:            new-env
-                                    nxt-upv-idx:    nxt-upv-idx])
-                       (@1 arg)))
-                  (ret-adr (tmp-pos-or-parent-adr ctx)))
-              (.op-return lambda-pad body-res-adr)
-              (.op-new-closure
-                (P: ctx)
-                ret-adr
-                (.store-static-data
-                  (F: ctx)
-                  (.to-vm-prog lambda-frame lambda-pad))
-                (.store-static-data
-                  (F: ctx)
-                  [is-coroutine arity creator-upv-adrs]))
-              ret-adr)))]]
-      stage-2-data
-      ctx
-      gtx)))
-;----------------------------------------------------------------------------
-(define *DEBUG* #f)
-(define PUSH-DEBUG (lambda () (set! *DEBUG* #t)))
-(define POP-DEBUG (lambda () (set! *DEBUG* #t)))
-
-(define bukalisp-compile
-  (lambda (expr root-env execute?)
-    (let ((s1-ctx   {env:         root-env
-                     include-dir: "bukalisplib"})
-          (s1-gtx   {root-env:    root-env
-                     var-counter: 0})
-          (s1prog (stage1-transformator
-                    (DI! expr (append 'begin expr))
-                    s1-ctx
-                    s1-gtx)))
-      (when *DEBUG* (displayln (pp-str s1prog)))
-      (let ((gtx {root-env:    {" REGS " (@" REGS " root-env)}})
-            (frame (make-s2-frame gtx))
-            (ctx {F:            frame
-                  P:            (make-code-pad-object frame)
-                  env:          {}
-                  nxt-upv-idx:  0})
-            (adr (stage2-transformer s1prog ctx gtx))
-            (P (P: ctx)))
-        (.op-return P adr)
-;        (displayln DEBUG-INFO: adr (pp-str (.to-vm-prog-debug-info P)))
-;        (displayln ROOT-ENV: (pp-str (root-env: gtx)))
-        (let ((prog (.to-vm-prog (F: ctx) P)))
-          (when *DEBUG* (displayln PROG: prog))
-          (if execute?
-            (run-vm-prog prog (@" REGS " (root-env: gtx)))
-            prog))))))
-;----------------------------------------------------------------------------
+(include "compiler")
 
 (define T-env
   (lambda (code expected root-env)
     (set! code (DI! code [code]))
 ;    (when (nil? env) (set! env [{} []]))
-    (let ((r (bukalisp-compile code root-env #t)))
+    (let ((r (bukalisp-compile "tests" code root-env #f)))
 ;      (displayln ROOT_ENV: (pp-str root-env))
 ;      (pp-str root-env)
       (if (eqv? (write-str r) (write-str expected))
@@ -529,54 +16,53 @@
     (T-env code expected (spawn-root-env))))
 ;----------------------------------------------------------------------------
 
-;; TODO
-;; Test eval
-;(T '(eval 1)                    1)
-;(T '(eval '(+ 1 2))             3)
-;(T '(eval '(eval '(+ 1 2)))     3)
-;(T '(eval '(eval '(+ 1 2)))     3)
-;(T '(let ((env (interaction-environment)))
-;      (eval '(define x 12) env)
-;      (eval 'x env))
-;   12)
-;(T '(let ((env (interaction-environment)))
-;      (eval '(define x 12) env)
-;      (eval '(set! x (* x 2)) env)
-;      (eval 'x env))
-;   24)
-
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ;(PUSH-DEBUG)
+;(T '((lambda (x y)
+;       (+ 1 ((lambda () x))))
+;     5 nil)
+;   6)
 ;(error XXX:)
-
+;
+;(PUSH-DEBUG)
+;;(POP-DEBUG)
+;;(error XFFF:)
+;(T '(begin
+;  (define x 0)
+;  (for (i 1 100000000)
+;    (set! x (+ x 1))))
+;   100000000)
 ;(T '(begin
 ;  (define x 0)
 ;  (for (i 1 100000000)
 ;    (set! x (+ x 1))))
 ;   100000000)
 ;;(error o:)
-(T '(begin
-  (define x 0)
-  (define (inc a) (set! x (+ x a)))
-  (for (i 1 10000000)
-    (inc 1)))
-   10000000)
-;;
-;;(error F:)
-(T '(begin
-      (define x 10000000)
-      (let ((inco (lambda (a) (set! x (+ x a)))))
-        (while (> x 0)
-               (inco -1)))) 0)
-(T '(begin
-      (define x 10000000)
-      (while (> x 0)
-             (set! x (- x 1)))) 0)
-(T '(let ((x 10000000))
-      (while (> x 0)
-             (set! x (- x 1)))) 0)
-(error X:)
+;;(T '(begin
+;;  (define x 0)
+;;  (define (inc a) (set! x (+ x a)))
+;;  (for (i 1 10000000)
+;;    (inc 1)))
+;;   10000000)
+;;;;
+;;;(error F:)
+;(T '(let ((x 100000000))
+;      (while (> x 0)
+;             (set! x (- x 1)))) 0)
+;(T '(begin
+;      (define x 100000000)
+;      (while (> x 0)
+;             (set! x (- x 1)))) 0)
+;
+;;(PUSH-DEBUG)
+;;(T '(let ((x 0))
+;;      (define (o a b) x)
+;;      (o 1 2)
+;;      [x])
+;;   [100000 5000050000])
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ; Test basic (lambda ...) and (let ...)
@@ -1411,14 +897,15 @@
 ; test recursive calling into VM:
 (let ((my-env (spawn-root-env))
       (func (bukalisp-compile
+              "tests_x1"
               ['(displayln foo-out: (+ 10 20))]
               my-env
-              #f)))
+              #t)))
   (set-root-env-var my-env 'xxx func)
   (T-env '(begin
             (define k 10)
             ((lambda ()
-               (run-vm-prog xxx [])))
+               (run-vm-prog xxx {})))
             (+ 12.345 k))
          22.345
          my-env))
@@ -1794,6 +1281,14 @@
       j)
    8)
 
+(T '(begin
+      (define x 100000)
+      (define k 0)
+      (let ((inco (lambda (a) (set! x (+ x a)))))
+        (while (> x k)
+               (inco -1))))
+   0)
+
 ; Test do-each
 (T '(let ((o []))
       (do-each (x [1 2 3])
@@ -1865,3 +1360,135 @@
       [(eqv? m m) (eqv? m m_) m_])
    [#t #f [10 2 30 4]])
 
+; Test eval
+(T '(eval 1)                    1)
+(T '(eval '(+ 1 2))             3)
+(T '(eval '(eval '(+ 1 2)))     3)
+(T '(eval '(eval '(+ 1 2)))     3)
+(T '(let ((env (interaction-environment)))
+      (eval '(define x 12) env)
+      (eval 'x env))
+   12)
+(T '(let ((env (interaction-environment)))
+      (eval '(define x 12) env)
+      (eval '(set! x (* x 2)) env)
+      (eval 'x env))
+   24)
+
+; Test nested eval:
+(T '(let ((x {}))
+      (eval '1 x)
+      (eval '(define M 10) x)
+      (eval '(+ 1
+                (eval '(+ 1
+                          (eval M)))) x))
+   12)
+
+; Testing coroutines:
+(T '(let ((x 10)
+          (c (lambda coroutine: ()
+               (set! x 20)
+               (yield 21)
+               (set! x 22))))
+      [x (c) x (c)])
+   [10 21 20 22])
+
+(T '(let ((x 10)
+          (c (lambda coroutine: ()
+               (for (i 0 2)
+                 (yield i))
+               FF:)))
+      [(c) (c) (c) (c) (c) (c)])
+   [0 1 2 FF: 0 1])
+
+(T '(let ((x 10)
+          (mo (lambda ()
+                (for (i 0 2)
+                  (yield i))))
+          (c (lambda coroutine: ()
+               (mo)
+               (mo)
+               (yield OO:)
+               FF:)))
+      [(c) (c) (c) (c) (c) (c)
+       (c) (c) (c) (c)])
+   [0 1 2 0 1 2 OO: FF: 0 1])
+
+; Recursive coroutine calling of the same coroutine:
+; (Works, because the coroutine restores the last save point
+;  only once. We never should re-enter the same execution context
+;  twice, as the temporary work context registers are not correctly
+;  set. For re-callable continuations we need to save them with the stack!)
+(T '(let ((x [])
+          (c nil))
+      (set! c
+        (lambda coroutine: (o)
+          (push! x o)
+          (when (eqv? o rec:)
+            (push! x (yield XX:))
+            (push! x (c foo:))
+            (push! x (c foo:))
+            (push! x (c foo:)))
+          (when (eqv? o foo:)
+            (push! x (yield 10))
+            (push! x (yield 11))
+            (push! x (yield 12)))
+          END:))
+      (c rec:)
+      (c cont:)
+      x)
+   [rec: cont: foo: 10 foo: 11 foo: 12])
+
+; Test 'and' and 'or'
+(T '(or #f 10) 10)
+(T '(let ((x 10) (y 0))
+      (or (begin (set! x 20) #f)
+          (set! y 20))
+      [x y])
+   [20 20])
+(T '(let ((x 10) (y 0))
+      (or (begin (set! x 20))
+          (set! y 20))
+      [x y])
+   [20 0])
+(T '(let ((x 10) (y 0) (f 0))
+      (or (begin (set! x 20) #f)
+          (begin (set! f 20) #f)
+          (set! y 20))
+      [x f y])
+   [20 20 20])
+(T '(let ((x 10) (y 0) (f 0))
+      (or (begin (set! x 20) #f)
+          (set! f 20)
+          (set! y 20))
+      [x f y])
+   [20 20 0])
+(T '(let ((x 10) (y 0) (f 0))
+      (or (set! x 20)
+          (set! f 20)
+          (set! y 20))
+      [x f y])
+   [20 0 0])
+
+(T '(and #t 10) 10)
+(T '(and 10 #t) #t)
+(T '(and 10 #f #t) #f)
+(T '(let ((a 0) (b 0) (c 0))
+      (and (set! a 10)
+           (begin (set! b 20) #f)
+           (set! c 30))
+      [a b c])
+   [10 20 0])
+(T '(let ((a 0) (b 0) (c 0))
+      (and (set! a 10)
+           (set! b 20)
+           (set! c 30))
+      [a b c])
+   [10 20 30])
+(T '(let ((a 0) (b 0) (c 0))
+      (and #f
+           (set! a 10)
+           (set! b 20)
+           (set! c 30))
+      [a b c])
+   [0 0 0])

@@ -85,7 +85,7 @@ class BukaLISPException : public std::exception
 };
 //---------------------------------------------------------------------------
 
-enum Type : int16_t
+enum Type : int8_t
 {
     T_NIL,
     T_INT,
@@ -100,7 +100,8 @@ enum Type : int16_t
     T_SYNTAX,   // m_d.sym
     T_CLOS,     // m_d.vec
     T_UD,       // m_d.ud
-    T_C_PTR     // m_d.ptr
+    T_C_PTR,    // m_d.ptr
+    T_HPAIR     // m_d.hpair
 };
 //---------------------------------------------------------------------------
 
@@ -158,6 +159,155 @@ class AtomHash
 };
 //---------------------------------------------------------------------------
 
+class AtomHashTable
+{
+#   define ATOM_HASH_TABLE_SIZE_COUNT 29
+    static size_t HASH_TABLE_SIZES[ATOM_HASH_TABLE_SIZE_COUNT];
+
+    AtomHash        m_hash_func;
+    size_t          m_table_size;
+    size_t          m_item_count;
+    Atom           *m_begin;
+    Atom           *m_end;
+
+    Atom *alloc_new_tbl(size_t val_count);
+    void free_tbl(Atom *tbl);
+
+#define AT_HT_CALC_IDX_HASH(key, hash, idx)         \
+        size_t hash = m_hash_func(key);             \
+        size_t idx  = hash % m_table_size;
+
+#define AT_HT_ITER_START(cur, end_search, idx)      \
+        Atom *cur = &(m_begin[3 * idx]);            \
+        Atom *end_search = cur - 3;                 \
+        if (cur == m_begin)                         \
+            end_search = m_end;                     \
+
+#define AT_HT_ITER_NEXT(cur)       cur += 3;        if (cur >= m_end) cur = m_begin;
+#define AT_HT_ITER_NEXTI(cur, idx) cur += 3; idx++; if (cur >= m_end) { cur = m_begin; idx = 0; }
+
+    Atom *find_pair(const Atom &key)
+    {
+        AT_HT_CALC_IDX_HASH(key, hash, idx);
+        AT_HT_ITER_START(cur, end_search, idx);
+        while (   cur != end_search
+               && cur[0].m_type != T_NIL)
+        {
+            if (   cur[0].m_type == T_HPAIR
+                && cur[0].m_d.hpair.key == hash)
+            {
+                if (cur[1] == key)
+                    return cur + 1;
+                continue;
+            }
+
+            AT_HT_ITER_NEXT(cur);
+        }
+
+        return nullptr;
+    }
+
+    void grow()
+    {
+        size_t new_size = 0;
+        for (size_t i = 0; i < ATOM_HASH_TABLE_SIZE_COUNT; i++)
+        {
+            if (HASH_TABLE_SIZES[i] > m_table_size)
+                new_size = HASH_TABLE_SIZES[i];
+        }
+
+        if (new_size <= m_table_size)
+            throw BukaLISPException("Can't grow hash table anymore, too big!");
+
+        Atom *new_begin = alloc_new_tbl(new_size);
+        Atom *new_end   = new_begin + (new_size * 3);
+        Atom *cur = new_begin;
+        while (cur != new_end)
+        {
+            cur[0].clear();
+            cur[1].clear();
+            cur[2].clear();
+            cur += 3;
+        }
+
+        if (m_begin)
+        {
+            Atom *cur = m_begin;
+            while (cur != m_end)
+            {
+                if (cur[0].m_type == T_HPAIR)
+                {
+                    size_t new_idx = cur[0].m_d.hpair.key % new_size;
+                    Atom *new_at = new_begin += new_idx;
+                    insert_at(
+                        new_at,
+                        cur[0].m_d.hpair.key,
+                        new_idx,
+                        cur[1],
+                        cur[2]);
+                }
+
+                cur += 3;
+            }
+
+            free_tbl(m_begin);
+        }
+
+        m_begin = new_begin;
+        m_end   = new_end;
+
+        // allocate new
+        // rehash keys
+    }
+
+    void insert_at(
+        Atom *cur,
+        size_t hash, size_t idx,
+        const Atom &key, const Atom &data)
+    {
+        AT_HT_ITER_START(cur, end_search, idx);
+        while (   cur != end_search
+               && cur[0].m_type == T_HPAIR)
+        {
+            AT_HT_ITER_NEXT(cur);
+        }
+        if (cur == end_search)
+        {
+            throw BukaLISPException(
+                "Error while inserting into atom hash table");
+            return;
+        }
+        if (cur[0].m_type != T_INT)
+            m_item_count++;
+
+        cur[0].m_type = T_HPAIR;
+        cur[0].m_d.hpair.key = hash;
+        cur[0].m_d.hpair.idx = idx;
+        cur[1] = key;
+        cur[2] = data;
+    }
+
+    void insert(const Atom &key, const Atom &data)
+    {
+        if (m_item_count >= (m_table_size / 2))
+            grow();
+
+        AT_HT_CALC_IDX_HASH(key, hash, idx);
+        AT_HT_ITER_START(cur, end_search, idx);
+        insert_at(cur, hash, idx, key, data);
+    }
+
+    void delete_key(const Atom &key)
+    {
+        AT_HT_CALC_IDX_HASH(key, hash, idx);
+        AT_HT_ITER_START(cur, end_search, idx);
+        cur[0].set_int(42);
+        cur[1].clear();
+        cur[2].clear();
+    }
+};
+//---------------------------------------------------------------------------
+
 typedef std::unordered_map<Atom, Atom, AtomHash>    UnordAtomMap;
 //---------------------------------------------------------------------------
 
@@ -183,11 +333,11 @@ struct Atom
     typedef std::function<void(AtomVec &args, Atom &out)> PrimFunc;
 
     Type m_type;
-
     union {
         int64_t      i;
         double       d;
         bool         b;
+        struct { size_t key; size_t idx; } hpair;
 
         PrimFunc    *func;
         Sym         *sym;
@@ -196,6 +346,8 @@ struct Atom
         UserData    *ud;
         void        *ptr;
     } m_d;
+//    int64_t m_k;
+
 
     Atom() : m_type(T_NIL)
     {

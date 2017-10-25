@@ -114,14 +114,14 @@ class Interpreter
         Atom get_compiler_func();
         Atom call_compiler(
             Atom prog,
-            AtomVec *root_env,
+            AtomMap *root_env,
             const std::string &input_name = "",
             bool only_compile = false);
 
         Atom call_compiler(
             const std::string &code_name,
             const std::string &code,
-            AtomVec *root_env,
+            AtomMap *root_env,
             bool only_compile = false);
 
         BukaLISPException &add_stack_trace_error(BukaLISPException &e)

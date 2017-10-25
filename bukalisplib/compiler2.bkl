@@ -132,7 +132,9 @@
                ((glob-var:) ['#1#glob-var (@1 value) (@2 value)])
                ((prim:)     ['#1#prim (@1 value)])
                ((syntax:)
-                (error "Variable contains syntax directive, can't use it here" value))
+                (if (procedure? (@2 value))
+                  ['#1#data (@2 value)]
+                  (error "Variable contains syntax directive, can't use it here" value)))
                ((macro:)
                 (error "Variable contains macro, can't use it here" value))
                (else
@@ -263,13 +265,17 @@
 
 (@!" IS-ROOT-ENV " S1-ROOT-ENV #t)
 
-(define spawn-root-env
-  (lambda ()
-    (define root-env {})
+(define init-root-env
+  (lambda (root-env)
     (do-each (k v S1-ROOT-ENV)
       (@!k root-env v))
     (@!" REGS " root-env [])
     root-env))
+
+(define spawn-root-env
+  (lambda ()
+    (define root-env {})
+    (init-root-env root-env)))
 
 (define set-root-env-var
   (lambda (root-env sym content)

@@ -330,18 +330,26 @@ START_PRIM()
 END_PRIM(bkl-prog-serialize)
 
 START_PRIM()
-    REQ_EQ_ARGC(run-vm-prog, 2);
+    REQ_GT_ARGC(run-vm-prog, 1);
 
     if (A0.m_type != T_UD || A0.m_d.ud->type() != "VM-PROG")
         error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
 
-    if (A1.m_type != T_VEC)
-        error("No root env given to run-vm-prog.", A1);
+    if (A1.m_type != T_MAP)
+        error("No proper root env given to run-vm-prog.", A1);
+
+    AtomVec *prog_args = nullptr;
+    if (args.m_len > 2 && A2.m_type != T_NIL)
+    {
+        if (A1.m_type != T_VEC)
+            error("Can't call VM prog with non list arguments", A2);
+        prog_args = A2.m_d.vec;
+    }
 
     if (!m_vm)
         error("Can't execute VM progs, no VM instance loaded into interpreter", A0);
 
-    out = m_vm->eval(A0, A1.m_d.vec);
+    out = m_vm->eval(A0, A1.m_d.map, prog_args);
 END_PRIM(run-vm-prog)
 
 START_PRIM()
@@ -932,19 +940,19 @@ END_PRIM(interaction-environment)
 // (invoke-compiler [code] code-name only-compile root-env)
 START_PRIM()
     REQ_GT_ARGC(invoke-compiler, 4);
-    if (A3.m_type != T_VEC)
-        error("invoke-compiler needs a root-env (<map>, <storage>) "
+    if (A3.m_type != T_MAP)
+        error("invoke-compiler needs a root-env map "
               "to compile and evaluate in", A3);
 
     if (A0.m_type == T_STR)
         out =
             this->call_compiler(
                 A1.to_display_str(), A0.to_display_str(),
-                A3.m_d.vec, !A2.is_false());
+                A3.m_d.map, !A2.is_false());
     else
         out =
             this->call_compiler(
-                A0, A3.m_d.vec, A1.to_display_str(), !A2.is_false());
+                A0, A3.m_d.map, A1.to_display_str(), !A2.is_false());
 END_PRIM(invoke-compiler)
 
 #else
@@ -954,35 +962,33 @@ START_PRIM()
     Atom exprs(T_VEC, m_rt->m_gc.allocate_vector(1));
     exprs.m_d.vec->push(A0);
 
-    AtomVec *env = nullptr;
+    AtomMap *env = nullptr;
     if (args.m_len > 1)
     {
-        if (A1.m_type != T_VEC)
+        if (A1.m_type != T_MAP)
             error("Can invoke 'eval' only with a vec as env", A1);
-        env = A1.m_d.vec;
+        env = A1.m_d.map;
     }
     else
     {
-        env = m_rt->m_gc.allocate_vector(2);
+        env = m_rt->m_gc.allocate_map();
     }
 
     Atom prog =
         m_compiler_call(exprs, env, "eval", true);
-    if (env->m_len < 2 || env->m_data[1].m_type != T_VEC)
-        error("Compiler returned bad environment in 'eval'", Atom(T_VEC, env));
-    out = eval(prog, env->m_data[1].m_d.vec);
+    out = eval(prog, env);
 END_PRIM(eval)
 
 START_PRIM()
     REQ_EQ_ARGC(interaction-environment, 0);
-    GC_ROOT_VEC(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_vector(2);
+    GC_ROOT_MAP(m_rt->m_gc, root_env) = m_rt->m_gc.allocate_map();
     m_compiler_call(Atom(T_INT, 42), root_env, "env-gen", true);
-    out = Atom(T_VEC, root_env);
+    out = Atom(T_MAP, root_env);
 END_PRIM(interaction-environment)
 
 START_PRIM()
     REQ_GT_ARGC(invoke-compiler, 4);
-    if (A3.m_type != T_VEC)
+    if (A3.m_type != T_MAP)
         error("invoke-compiler needs a root-env (<map>, <storage>) "
               "to compile and evaluate in", A3);
 
@@ -992,12 +998,12 @@ START_PRIM()
             m_rt->read(A1.to_display_str(), A0.to_display_str());
         out =
             m_compiler_call(
-                input, A3.m_d.vec, A1.to_display_str(), !A2.is_false());
+                input, A3.m_d.map, A1.to_display_str(), !A2.is_false());
     }
     else
         out =
             m_compiler_call(
-                A0, A3.m_d.vec, A1.to_display_str(), !A2.is_false());
+                A0, A3.m_d.map, A1.to_display_str(), !A2.is_false());
 END_PRIM(invoke-compiler)
 
 

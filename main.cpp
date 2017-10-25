@@ -949,6 +949,7 @@ int main(int argc, char *argv[])
         bool i_trace    = false;
         bool i_force_gc = false;
         bool i_trace_vm = false;
+        bool do_stat    = false;
 
         for (int i = 1; i < argc; i++)
         {
@@ -963,6 +964,8 @@ int main(int argc, char *argv[])
                 i_trace = true;
             else if (arg == "-T")
                 i_trace_vm = true;
+            else if (arg == "-S")
+                do_stat = true;
             else if (arg[0] == '-')
             {
                 std::cerr << "unknown option: " << argv[i] << std::endl;
@@ -1017,6 +1020,12 @@ int main(int argc, char *argv[])
                 cerr << "TESTS FAIL, EXCEPTION: " << e.what() << endl;
             }
         }
+        else if (do_stat)
+        {
+            cout << "Atom size: " << sizeof(Atom) << endl;
+            cout << "AtomVec size: " << sizeof(AtomVec) << endl;
+            cout << "AtomMap size: " << sizeof(AtomMap) << endl;
+        }
         else if (interpret && !input_file_path.empty())
         {
             try
@@ -1047,7 +1056,7 @@ int main(int argc, char *argv[])
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
 
-            GC_ROOT_VEC(rt.m_gc, root_env) = rt.m_gc.allocate_vector(0);
+            GC_ROOT_MAP(rt.m_gc, root_env) = rt.m_gc.allocate_map();
 
             try
             {
@@ -1100,7 +1109,8 @@ int main(int argc, char *argv[])
             i.set_force_always_gc(i_force_gc);
             input_file_path = "<stdin>";
 
-            GC_ROOT_VEC(rt.m_gc, root_env) = rt.m_gc.allocate_vector(0);
+            GC_ROOT_MAP(rt.m_gc, root_env)
+                = rt.m_gc.allocate_map();
 
             std::string line;
             while (std::getline(std::cin, line))
