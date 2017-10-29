@@ -277,7 +277,7 @@ START_PRIM()
     REQ_EQ_ARGC(length, 1);
     out = Atom(T_INT);
     if (A0.m_type == T_VEC)         out.m_d.i = A0.m_d.vec->m_len;
-    else if (A0.m_type == T_MAP)    out.m_d.i = A0.m_d.map->m_map.size();
+    else if (A0.m_type == T_MAP)    out.m_d.i = A0.m_d.map->size();
     else                            out.m_d.i = 0;
 END_PRIM(length)
 
@@ -547,13 +547,10 @@ START_PRIM()
         }
         else if (a.m_type == T_MAP)
         {
-            AtomMap *map = a.m_d.map;
-            for (UnordAtomMap::iterator i = map->m_map.begin();
-                 i != map->m_map.end();
-                 i++)
+            ATOM_MAP_FOR(i, a.m_d.map)
             {
-                av->push(i->first);
-                av->push(i->second);
+                av->push(MAP_ITER_KEY(i));
+                av->push(MAP_ITER_VAL(i));
             }
         }
         else
@@ -681,7 +678,7 @@ START_PRIM()
     if (A0.m_type == T_VEC)
         out.m_d.b = A0.m_d.vec->m_len == 0;
     else if (A0.m_type == T_MAP)
-        out.m_d.b = A0.m_d.map->m_map.empty();
+        out.m_d.b = A0.m_d.map->empty();
     else
         error("Expected map or list to 'empty?'", A0);
 END_PRIM_DOC(empty?,
@@ -765,35 +762,30 @@ START_PRIM()
 
     if (A1.m_type == T_MAP)
     {
-        auto &src_map = A1.m_d.map->m_map;
-
         if (A0.m_type == T_MAP)
         {
             AtomMap *om = m_rt->m_gc.clone_map(A0.m_d.map);
-            for (UnordAtomMap::iterator i = src_map.begin();
-                 i != src_map.end();
-                 i++)
+            ATOM_MAP_FOR(i, A1.m_d.map)
             {
-                om->set(i->first, i->second);
+                om->set(MAP_ITER_KEY(i),
+                        MAP_ITER_VAL(i));
             }
             out.set_map(om);
         }
         else
         {
             AtomVec *av = m_rt->m_gc.clone_vector(A0.m_d.vec);
-            for (UnordAtomMap::iterator i = src_map.begin();
-                 i != src_map.end();
-                 i++)
+            ATOM_MAP_FOR(i, A1.m_d.map)
             {
-                if (i->first.m_type != T_INT
-                    && i->first.m_type != T_DBL)
+                if (   MAP_ITER_KEY(i).m_type != T_INT
+                    && MAP_ITER_KEY(i).m_type != T_DBL)
                 {
-                    Atom e = i->first;
+                    Atom e = MAP_ITER_KEY(i);
                     error("'assign' bad index in assignment, "
                           "expected int or dbl",
                           e);
                 }
-                av->set((size_t) i->first.to_int(), i->second);
+                av->set((size_t) MAP_ITER_KEY(i).to_int(), MAP_ITER_VAL(i));
             }
             out.set_vec(av);
         }
@@ -817,12 +809,13 @@ START_PRIM()
             AtomVec *av = m_rt->m_gc.clone_vector(A0.m_d.vec);
             for (size_t i = 0; i < src_vec->m_len; i += 2)
             {
-                if (src_vec->m_data[i].m_type != T_INT
+                if (   src_vec->m_data[i].m_type != T_INT
                     && src_vec->m_data[i].m_type != T_DBL)
                     error("'assign' bad index in assignment, "
                           "expected int or dbl",
                           src_vec->m_data[i]);
-                av->set((size_t) src_vec->m_data[i].to_int(), src_vec->m_data[i + 1]);
+                av->set((size_t) src_vec->m_data[i].to_int(),
+                        src_vec->m_data[i + 1]);
             }
             out.set_vec(av);
         }
@@ -853,21 +846,21 @@ START_PRIM()
         error("'bkl-doc' can't deal with empty search strings!", A0);
     Atom doc = m_vm->get_documentation();
     AtomVec *found = m_rt->m_gc.allocate_vector(0);
-    for (auto &a : doc.m_d.map->m_map)
+    ATOM_MAP_FOR(a, doc.m_d.map)
     {
-        if (   a.first.m_type != T_SYM
-            && a.first.m_type != T_KW)
+        if (   MAP_ITER_KEY(a).m_type != T_SYM
+            && MAP_ITER_KEY(a).m_type != T_KW)
             continue;
-        if (a.second.m_type != T_STR)
+        if (MAP_ITER_VAL(a).m_type != T_STR)
             continue;
-        const std::string &funcname = a.first.m_d.sym->m_str;
-        const std::string &docstr   = a.second.m_d.sym->m_str;
+        const std::string &funcname = MAP_ITER_KEY(a).m_d.sym->m_str;
+        const std::string &docstr   = MAP_ITER_VAL(a).m_d.sym->m_str;
 
         if (search[0] == '*')
         {
             if (   docstr.find(search.substr(1))   != std::string::npos
                 || funcname.find(search.substr(1)) != std::string::npos)
-                found->push(a.second);
+                found->push(MAP_ITER_VAL(a));
         }
         else if (search[0] == '?')
         {
@@ -876,19 +869,19 @@ START_PRIM()
             {
                 if (docstr.find(search.substr(1))
                     != std::string::npos)
-                    found->push(a.second);
+                    found->push(MAP_ITER_VAL(a));
             }
             else
             {
                 if (docstr.substr(0, p).find(search.substr(1))
                     != std::string::npos)
-                    found->push(a.second);
+                    found->push(MAP_ITER_VAL(a));
             }
         }
         else
         {
             if (funcname.find(search) != std::string::npos)
-                found->push(a.second);
+                found->push(MAP_ITER_VAL(a));
         }
     }
     out = Atom(T_VEC, found);

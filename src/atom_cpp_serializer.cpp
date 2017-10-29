@@ -111,13 +111,12 @@ class Atom2CPP
                 }
                 case T_MAP:
                 {
-                    AtomMap &m = *a.m_d.map;
                     o << "Atom " << nn
                       << "(T_MAP, gc.allocate_map());\n";
-                    for (auto p : m.m_map)
+                    ATOM_MAP_FOR(i, a.m_d.map)
                     {
-                        string nk = write_atom(p.first, o);
-                        string nv = write_atom(p.second, o);
+                        string nk = write_atom(MAP_ITER_KEY(i), o);
+                        string nv = write_atom(MAP_ITER_VAL(i), o);
                         o << nn
                           << ".m_d.vec->set(" << nk << ", " << nv << ");\n";
                     }

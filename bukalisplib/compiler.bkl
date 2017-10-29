@@ -531,6 +531,7 @@
     ; wrap OP_EVAL when used as procedure. For primitives we don't
     ; do this, as primitive calling is usually a bit faster.
     (when (eqv? (@0 (@'eval root-env)) prim:)
+;      (displayln START-COMPILE-EVAL:)
       (let ((local-root (spawn-root-env))
             (eval-closure global-saved-eval-vm-closure))
         (when (nil? eval-closure)
@@ -546,6 +547,7 @@
             (set! global-saved-eval-vm-closure
               (run-vm-prog eval-prog local-root))
             (set! eval-closure global-saved-eval-vm-closure)))
+;        (displayln ENDED-COMPILE-EVAL:)
         (@!'eval root-env [syntax: eval-syntax global-saved-eval-vm-closure])))
     ; Attach the root env map as meta to the root env registers, so we
     ; have a chance to recover it in the VM later.

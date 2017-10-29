@@ -77,13 +77,17 @@ class MemoryPool
         SegmentGroup    m_small;
         SegmentGroup    m_medium;
         SegmentGroup    m_large;
+        SegmentGroup    m_big;
+        SegmentGroup    m_huge;
 
     public:
         MemoryPool()
             : m_tiny(1000,   2),
               m_small(1000, 10),
               m_medium(300, 100),
-              m_large(300, 500)
+              m_large(300, 500),
+              m_big(300,  1500),
+              m_huge(100, 4000)
         {
         }
 
@@ -110,6 +114,14 @@ class MemoryPool
             else if (block_len <= m_large.m_block_size)
             {
                 return m_large.allocate();
+            }
+            else if (block_len <= m_big.m_block_size)
+            {
+                return m_big.allocate();
+            }
+            else if (block_len <= m_huge.m_block_size)
+            {
+                return m_huge.allocate();
             }
 
             buf = new char[block_byte_len];
@@ -141,6 +153,14 @@ class MemoryPool
             else if (d->size == m_large.m_block_size)
             {
                 m_large.free(mem);
+            }
+            else if (d->size == m_big.m_block_size)
+            {
+                m_big.free(mem);
+            }
+            else if (d->size == m_huge.m_block_size)
+            {
+                m_huge.free(mem);
             }
             else
                 delete[] ((char *) d);

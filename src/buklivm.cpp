@@ -235,7 +235,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 {
     using namespace std::chrono;
 
-//    cout << "BUKKLIROOT" << Atom(T_VEC, root_env).to_write_str() << endl;
+    GC_ROOT_MAP(m_rt->m_gc, root_env_map_gcroot) = root_env_map;
 
     AtomVec *root_env = nullptr;
     if (root_env_map)
@@ -263,26 +263,16 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
         root_env = m_rt->m_gc.allocate_vector(0);
 
     AtomVec *rr_frame   = nullptr;
-    Atom    *rr_v_frame = nullptr;
     AtomVec *rr_data    = nullptr;
+    Atom    *rr_v_frame = nullptr;
     Atom    *rr_v_data  = nullptr;
     Atom    *rr_v_root  = root_env->m_data;
-    AtomVec *reg_row[REG_ROWS];
-    for (size_t i = 0; i < REG_ROWS; i++)
-        reg_row[i] = nullptr;
     GC_ROOT(m_rt->m_gc, reg_rows_ref) =
-        Atom(T_UD, new RegRowsReference(
-        &rr_frame,
-        &rr_data,
-        &reg_row[2],
-        &reg_row[3],
-        &root_env));
+        Atom(T_UD, new RegRowsReference(&rr_frame, &rr_data, &root_env));
 
 #define SET_FRAME_ROW(row_ptr)  rr_frame = row_ptr;  rr_v_frame = rr_frame->m_data;
 #define SET_DATA_ROW(row_ptr)   rr_data  = row_ptr;  rr_v_data  = rr_data->m_data;
 #define SET_ROOT_ENV(vecptr)    root_env = (vecptr); rr_v_root  = root_env->m_data;
-//#define SET_PRIM_ROW(row_ptr)   reg_row[REG_ROW_PRIM]  = row_ptr;
-//#define SET_UPV_ROW(row_ptr)    reg_row[REG_ROW_UPV]   = row_ptr;
 
     PROG *prog = nullptr;
     INST *pc   = nullptr;
@@ -513,6 +503,10 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     Atom &a = rr_v_frame[i];
                     if (a.m_type == T_UD && a.m_d.ud->type() == "VM-PROG")
                         cout << i << "[#<prog>] ";
+                    else if (a.m_type == T_MAP && a.size() > 5)
+                        cout << i << "[map:" << ((void *) a.m_d.map) << "] ";
+                    else if (a.m_type == T_VEC && a.size() > 5)
+                        cout << i << "[vec:" << ((void *) a.m_d.vec) << "] ";
                     else
                         cout << i << "[" << a.to_write_str() << "] ";
                 }
@@ -921,7 +915,8 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                             error("Bad environment (not a map) to 'eval'", *env);
                         eval_env = env->m_d.map;
                     }
-                    Atom prog =
+
+                    GC_ROOT(m_rt->m_gc, prog) =
                         m_compiler_call(*code, eval_env, "<vm-op-eval>", true);
                     if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
                         error("In 'eval' compiler did not return proper VM-PROG",
@@ -929,18 +924,31 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     // save the current execution context:
                     // FIXME: we should save the root-env-map in the call stack too!
-                    RECORD_CALL_FRAME(*code, call_frame);
+                    RECORD_CALL_FRAME(prog, call_frame);
+                    // XXX: We should record some kind of fake-closure here for
+                    //      debugging purposes. or some kind of other marker, so
+                    //      we can generate sensible stacktraces.
+                    call_frame.m_d.vec->set(VM_CF_CLOS, prog);
                     cont_stack->push(call_frame);
+
+//                    atom_tree_walker(call_frame, [](std::function<void(Atom &a)> con, unsigned int indent, Atom a)
+//                    {
+//                        for (unsigned int i = 0; i < indent; i++)
+//                            std::cout << "  ";
+//                        std::cout << "WALK " << a.to_shallow_str() << std::endl;
+//                        con(a);
+//                    });
 
                     m_prog   = dynamic_cast<PROG*>(prog.m_d.ud);
                     m_pc     = &(m_prog->m_instructions[0]);
                     m_pc--;
+//                    std::cout << "PUT PROG: " << ((void *) m_pc) << ";" << ((void *) m_prog) << std::endl;
 
                     SET_DATA_ROW(m_prog->data_array());
                     AtomVec *eval_frame = m_rt->m_gc.allocate_vector(0);
                     SET_FRAME_ROW(eval_frame);
                     Atom cf_root_env =
-                        eval_env->at(Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")));
+                    eval_env->at(Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")));
                     if (cf_root_env.m_type != T_VEC)
                         error("Bad environment with 'eval', no [\" REGS \"] given",
                               cf_root_env);

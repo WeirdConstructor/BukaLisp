@@ -3,15 +3,15 @@
 
 #pragma once
 
+#include "config.h"
+
 #include <iostream>
 #include <vector>
 #include <string>
 #include <functional>
-#include <unordered_map>
 #include <memory>
 #include "atom_userdata.h"
-
-#define WITH_MEM_POOL 1
+#include "atom_map.h"
 
 #if WITH_MEM_POOL
 #include "mempool.h"
@@ -48,7 +48,7 @@ class BukaLISPException : public std::exception
     public:
         BukaLISPException(const std::string &err)
         {
-            m_error_message = err;
+            m_err = m_error_message = err;
         }
         BukaLISPException(const std::string place,
                   const std::string file_name,
@@ -56,7 +56,7 @@ class BukaLISPException : public std::exception
                   const std::string &func_name,
                   const std::string &err)
         {
-            m_error_message = err;
+            m_err = m_error_message = err;
             push(place, file_name, line, func_name);
         }
 
@@ -152,180 +152,8 @@ struct AtomVec
 };
 //---------------------------------------------------------------------------
 
-class AtomHash
-{
-    public:
-        size_t operator()(const Atom &a) const;
-};
-//---------------------------------------------------------------------------
+typedef HashTable<Atom, AtomHash> AtomMap;
 
-class AtomHashTable
-{
-#   define ATOM_HASH_TABLE_SIZE_COUNT 29
-    static size_t HASH_TABLE_SIZES[ATOM_HASH_TABLE_SIZE_COUNT];
-
-    AtomHash        m_hash_func;
-    size_t          m_table_size;
-    size_t          m_item_count;
-    Atom           *m_begin;
-    Atom           *m_end;
-
-    Atom *alloc_new_tbl(size_t val_count);
-    void free_tbl(Atom *tbl);
-
-#define AT_HT_CALC_IDX_HASH(key, hash, idx)         \
-        size_t hash = m_hash_func(key);             \
-        size_t idx  = hash % m_table_size;
-
-#define AT_HT_ITER_START(cur, end_search, idx)      \
-        Atom *cur = &(m_begin[3 * idx]);            \
-        Atom *end_search = cur - 3;                 \
-        if (cur == m_begin)                         \
-            end_search = m_end;                     \
-
-#define AT_HT_ITER_NEXT(cur)       cur += 3;        if (cur >= m_end) cur = m_begin;
-#define AT_HT_ITER_NEXTI(cur, idx) cur += 3; idx++; if (cur >= m_end) { cur = m_begin; idx = 0; }
-
-    Atom *find_pair(const Atom &key)
-    {
-        AT_HT_CALC_IDX_HASH(key, hash, idx);
-        AT_HT_ITER_START(cur, end_search, idx);
-        while (   cur != end_search
-               && cur[0].m_type != T_NIL)
-        {
-            if (   cur[0].m_type == T_HPAIR
-                && cur[0].m_d.hpair.key == hash)
-            {
-                if (cur[1] == key)
-                    return cur + 1;
-                continue;
-            }
-
-            AT_HT_ITER_NEXT(cur);
-        }
-
-        return nullptr;
-    }
-
-    void grow()
-    {
-        size_t new_size = 0;
-        for (size_t i = 0; i < ATOM_HASH_TABLE_SIZE_COUNT; i++)
-        {
-            if (HASH_TABLE_SIZES[i] > m_table_size)
-                new_size = HASH_TABLE_SIZES[i];
-        }
-
-        if (new_size <= m_table_size)
-            throw BukaLISPException("Can't grow hash table anymore, too big!");
-
-        Atom *new_begin = alloc_new_tbl(new_size);
-        Atom *new_end   = new_begin + (new_size * 3);
-        Atom *cur = new_begin;
-        while (cur != new_end)
-        {
-            cur[0].clear();
-            cur[1].clear();
-            cur[2].clear();
-            cur += 3;
-        }
-
-        if (m_begin)
-        {
-            Atom *cur = m_begin;
-            while (cur != m_end)
-            {
-                if (cur[0].m_type == T_HPAIR)
-                {
-                    size_t new_idx = cur[0].m_d.hpair.key % new_size;
-                    Atom *new_at = new_begin += new_idx;
-                    insert_at(
-                        new_at,
-                        cur[0].m_d.hpair.key,
-                        new_idx,
-                        cur[1],
-                        cur[2]);
-                }
-
-                cur += 3;
-            }
-
-            free_tbl(m_begin);
-        }
-
-        m_begin = new_begin;
-        m_end   = new_end;
-
-        // allocate new
-        // rehash keys
-    }
-
-    void insert_at(
-        Atom *cur,
-        size_t hash, size_t idx,
-        const Atom &key, const Atom &data)
-    {
-        AT_HT_ITER_START(cur, end_search, idx);
-        while (   cur != end_search
-               && cur[0].m_type == T_HPAIR)
-        {
-            AT_HT_ITER_NEXT(cur);
-        }
-        if (cur == end_search)
-        {
-            throw BukaLISPException(
-                "Error while inserting into atom hash table");
-            return;
-        }
-        if (cur[0].m_type != T_INT)
-            m_item_count++;
-
-        cur[0].m_type = T_HPAIR;
-        cur[0].m_d.hpair.key = hash;
-        cur[0].m_d.hpair.idx = idx;
-        cur[1] = key;
-        cur[2] = data;
-    }
-
-    void insert(const Atom &key, const Atom &data)
-    {
-        if (m_item_count >= (m_table_size / 2))
-            grow();
-
-        AT_HT_CALC_IDX_HASH(key, hash, idx);
-        AT_HT_ITER_START(cur, end_search, idx);
-        insert_at(cur, hash, idx, key, data);
-    }
-
-    void delete_key(const Atom &key)
-    {
-        AT_HT_CALC_IDX_HASH(key, hash, idx);
-        AT_HT_ITER_START(cur, end_search, idx);
-        cur[0].set_int(42);
-        cur[1].clear();
-        cur[2].clear();
-    }
-};
-//---------------------------------------------------------------------------
-
-typedef std::unordered_map<Atom, Atom, AtomHash>    UnordAtomMap;
-//---------------------------------------------------------------------------
-
-struct AtomMap
-{
-    uint8_t         m_gc_color;
-    AtomMap        *m_gc_next;
-    UnordAtomMap    m_map;
-    AtomVec        *m_meta;
-
-    AtomMap() : m_gc_next(nullptr), m_gc_color(0), m_meta(nullptr) { }
-
-    void set(Sym *s, const Atom &a);
-    void set(const Atom &str, const Atom &a);
-
-    Atom at(const Atom &a);
-    Atom at(const Atom &k, bool &defined);
-};
 //---------------------------------------------------------------------------
 
 struct Atom
@@ -346,8 +174,6 @@ struct Atom
         UserData    *ud;
         void        *ptr;
     } m_d;
-//    int64_t m_k;
-
 
     Atom() : m_type(T_NIL)
     {
@@ -395,21 +221,16 @@ struct Atom
         m_d.i  = 0;
     }
 
-    inline int64_t to_int() const 
-    { return m_type == T_INT   ? m_d.i
-             : m_type == T_DBL ? static_cast<int64_t>(m_d.d)
-             : m_type == T_SYM ? (int64_t) m_d.sym
-             : m_type == T_NIL ? 0
-             :                   m_d.i; }
+    inline int64_t to_int() const
+    { return m_type == T_DBL ? static_cast<int64_t>(m_d.d)
+             :                 m_d.i; }
     inline double to_dbl() const
-    { return m_type == T_DBL   ? m_d.d
-             : m_type == T_INT ? static_cast<double>(m_d.i)
-             : m_type == T_SYM ? (double) (int64_t) m_d.sym
-             : m_type == T_NIL ? 0.0
-             :                   m_d.d; }
+    { return m_type == T_INT ? static_cast<double>(m_d.i)
+             :                 m_d.d; }
 
     std::string to_display_str() const;
     std::string to_write_str(bool pretty = false) const;
+    std::string to_shallow_str() const;
     size_t size() const;
     bool is_simple() const;
 
@@ -475,18 +296,9 @@ struct Atom
         return m_d.vec->at(i);
     }
 
-    Atom at(const Atom &a)
-    {
-        if (m_type != T_MAP) return Atom();
-        return m_d.map->at(a);
-    }
+    Atom at(const Atom &a);
 
-    Atom meta()
-    {
-        if      (m_type == T_VEC && m_d.vec->m_meta) return Atom(T_VEC, m_d.vec->m_meta);
-        else if (m_type == T_MAP && m_d.map->m_meta) return Atom(T_VEC, m_d.map->m_meta);
-        else return Atom();
-    }
+    Atom meta();
 
     bool eqv(const Atom &o)
     {
@@ -600,6 +412,7 @@ struct Atom
     }
 };
 //---------------------------------------------------------------------------
+
 
 class AtomException : public std::exception
 {
@@ -873,12 +686,10 @@ class GC
             if (map && map->m_meta)
                 m_gc_vec_stack.push_back(map->m_meta);
 
-            for (UnordAtomMap::iterator i = map->m_map.begin();
-                 i != map->m_map.end();
-                 i++)
+            ATOM_MAP_FOR(i, map)
             {
-                mark_atom(i->first);
-                mark_atom(i->second);
+                mark_atom(MAP_ITER_KEY(i));
+                mark_atom(MAP_ITER_VAL(i));
             }
         }
 
@@ -1260,11 +1071,9 @@ class GC
         {
             AtomMap *outm = allocate_map();
 
-            for (UnordAtomMap::iterator i = am->m_map.begin();
-                 i != am->m_map.end();
-                 i++)
+            ATOM_MAP_FOR(i, am)
             {
-                outm->set(i->first, i->second);
+                outm->set(MAP_ITER_KEY(i), MAP_ITER_VAL(i));
             }
 
             return outm;
@@ -1346,32 +1155,107 @@ class GC
 };
 //---------------------------------------------------------------------------
 
-class AtomMapIterator : public UserData
-{
-    public:
-        Atom                     m_map;
-        UnordAtomMap            &m_map_ref;
-        UnordAtomMap::iterator   m_iterator;
-        bool                     m_init;
+#if WITH_STD_UNORDERED_MAP
 
-    public:
-        AtomMapIterator(Atom &map);
+    class AtomMapIterator : public UserData
+    {
+        public:
+            Atom                     m_map;
+            UnordAtomMap            &m_map_ref;
+            UnordAtomMap::iterator   m_iterator;
+            bool                     m_init;
 
-        bool ok();
-        void next();
+        public:
+            AtomMapIterator::AtomMapIterator(Atom &map)
+                : m_map(map),
+                  m_init(true),
+                  m_map_ref(map.m_d.map->m_map),
+                  m_iterator(m_map_ref.begin())
+            {
+            }
+            //---------------------------------------------------------------------------
 
-        Atom key();
-        Atom value();
+            virtual std::string type()      { return "MAP-ITER"; }
+            virtual std::string as_string() { return "#<map-iterator>"; }
 
-        virtual std::string type()      { return "MAP-ITER"; }
-        virtual std::string as_string() { return "#<map-iterator>"; }
+            //---------------------------------------------------------------------------
 
-        virtual void mark(GC *gc, uint8_t clr);
 
-        virtual ~AtomMapIterator()
-        {
-        }
-};
+            bool ok()
+            {
+                return m_iterator != m_map_ref.end();
+            }
+            //---------------------------------------------------------------------------
+
+            void next()
+            {
+                if (m_init) { m_init = false; return; }
+                m_iterator++;
+            }
+            //---------------------------------------------------------------------------
+
+            Atom key()    { return m_iterator->first; }
+            Atom &value() { return m_iterator->second; }
+            //---------------------------------------------------------------------------
+
+            virtual void mark(GC *gc, uint8_t clr)
+            {
+                UserData::mark(gc, clr);
+                gc->mark_atom(m_map);
+            }
+            //---------------------------------------------------------------------------
+
+            virtual ~AtomMapIterator()
+            {
+            }
+    };
+
+#else // NOT WITH_STD_UNORDERED_MAP
+
+    class AtomMapIterator : public UserData
+    {
+        public:
+            Atom                     m_map;
+            AtomMap                 *m_map_ref;
+            Atom                    *m_iterator;
+            bool                     m_init;
+            Atom                     m_nil;
+
+        public:
+            AtomMapIterator(Atom &map)
+                : m_map(map),
+                  m_map_ref(map.m_d.map),
+                  m_init(true),
+                  m_iterator(m_map_ref->next(nullptr))
+
+            {
+            }
+
+            bool ok()   { return !!m_iterator; }
+            void next()
+            {
+                if (m_init) { m_init = false; return; }
+                m_iterator = m_map_ref->next(m_iterator);
+            }
+
+            Atom &key()   { return m_iterator ? MAP_ITER_KEY(m_iterator) : m_nil; }
+            Atom &value() { return m_iterator ? MAP_ITER_VAL(m_iterator) : m_nil; }
+
+            virtual std::string type()      { return "MAP-ITER"; }
+            virtual std::string as_string() { return "#<map-iterator>"; }
+
+            virtual void mark(GC *gc, uint8_t clr)
+            {
+                UserData::mark(gc, clr);
+                gc->mark_atom(m_map);
+            }
+
+            virtual ~AtomMapIterator()
+            {
+            }
+    };
+
+#endif
 //---------------------------------------------------------------------------
 
 #define REG_ROW_FRAME   0
@@ -1387,16 +1271,12 @@ class RegRowsReference : public UserData
         AtomVec                **m_rr0;
         AtomVec                **m_rr1;
         AtomVec                **m_rr2;
-        AtomVec                **m_rr3;
-        AtomVec                **m_rr4;
 
     public:
         RegRowsReference(
             AtomVec **rr0,
             AtomVec **rr1,
-            AtomVec **rr2,
-            AtomVec **rr3,
-            AtomVec **rr4);
+            AtomVec **rr2);
 
         virtual std::string type()      { return "REG-ROWS-REF"; }
         virtual std::string as_string() { return "#<reg-rows-reference>"; }
@@ -1408,6 +1288,11 @@ class RegRowsReference : public UserData
             std::cout << "DIED REG ROWS REF" << std::endl;
         }
 };
+//---------------------------------------------------------------------------
+
+void atom_tree_walker(
+    Atom a,
+    std::function<void(std::function<void(Atom &a)> cont, unsigned int indent, Atom a)> cb);
 //---------------------------------------------------------------------------
 
 #if WITH_MEM_POOL

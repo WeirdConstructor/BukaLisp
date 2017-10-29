@@ -405,11 +405,11 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
         }
         else if (ds.m_type == T_MAP)
         {
-            for (auto &p : ds.m_d.map->m_map)
+            ATOM_MAP_FOR(p, ds.m_d.map)
             {
-                Atom key_val = p.first;
+                Atom key_val = MAP_ITER_KEY(p);
                 env_map->set(bnd_spec->m_data[0], key_val);
-                env_map->set(bnd_spec->m_data[1], p.second);
+                env_map->set(bnd_spec->m_data[1], MAP_ITER_VAL(p));
                 last = eval_begin(e, av, 2);
             }
         }
@@ -430,9 +430,9 @@ Atom Interpreter::eval_do_each(Atom e, AtomVec *av)
         }
         else if (ds.m_type == T_MAP)
         {
-            for (auto &p : ds.m_d.map->m_map)
+            ATOM_MAP_FOR(p, ds.m_d.map)
             {
-                env_map->set(bnd_spec->m_data[0], p.second);
+                env_map->set(bnd_spec->m_data[0], MAP_ITER_VAL(p));
                 last = eval_begin(e, av, 2);
             }
         }
@@ -801,10 +801,10 @@ Atom Interpreter::eval(Atom e)
             ret = Atom(T_MAP, nm);
 
             GC_ROOT(m_rt->m_gc, key) = Atom();
-            for (auto el : e.m_d.map->m_map)
+            ATOM_MAP_FOR(el, e.m_d.map)
             {
-                key = eval(el.first);
-                Atom val = eval(el.second);
+                key = eval(MAP_ITER_KEY(el));
+                Atom val = eval(MAP_ITER_VAL(el));
                 nm->set(key, val);
             }
             break;

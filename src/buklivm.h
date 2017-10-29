@@ -338,15 +338,14 @@ class VM
 
         void run_module_destructors()
         {
-            AtomMap &m = *m_modules;
-            for (auto p : m.m_map)
+            ATOM_MAP_FOR(p, m_modules)
             {
-                Atom mod_funcs = p.second;
+                Atom mod_funcs = MAP_ITER_VAL(p);
                 if (mod_funcs.m_type != T_MAP)
                 {
                     throw VMException(
                             "On destruction: In module '"
-                            + p.first.m_d.sym->m_str
+                            + MAP_ITER_KEY(p).m_d.sym->m_str
                             + "': bad function map");
                 }
                 Atom destr_func =
@@ -357,7 +356,7 @@ class VM
                 {
                     throw VMException(
                             "On destruction: In module '"
-                            + p.first.m_d.sym->m_str
+                            + MAP_ITER_KEY(p).m_d.sym->m_str
                             + "': bad destroy function");
                 }
                 else if (destr_func.m_type == T_PRIM)

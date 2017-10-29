@@ -160,20 +160,19 @@ VV atom2vv(VM *vm, Atom &a)
         }
         case T_MAP:
         {
-            AtomMap &m = *a.m_d.map;
             VV vmap(vv_map());
-            for (auto p : m.m_map)
+            ATOM_MAP_FOR(p, a.m_d.map)
             {
                 string key;
-                if (   p.first.m_type == T_STR
-                    || p.first.m_type == T_SYM
-                    || p.first.m_type == T_KW)
+                if (   MAP_ITER_KEY(p).m_type == T_STR
+                    || MAP_ITER_KEY(p).m_type == T_SYM
+                    || MAP_ITER_KEY(p).m_type == T_KW)
                 {
-                    key = p.first.m_d.sym->m_str;
+                    key = MAP_ITER_KEY(p).m_d.sym->m_str;
                 }
                 else
-                    key = p.first.to_write_str();
-                vmap << vv_kv(key, atom2vv(vm, p.second));
+                    key = MAP_ITER_KEY(p).to_write_str();
+                vmap << vv_kv(key, atom2vv(vm, MAP_ITER_VAL(p)));
             }
             return vmap;
         }

@@ -3,6 +3,7 @@
 
 #include "atom.h"
 #include "atom_printer.h"
+#include <sstream>
 
 using namespace std;
 
@@ -12,6 +13,39 @@ namespace bukalisp
 
 size_t AtomVec::s_alloc_count = 0;
 
+//---------------------------------------------------------------------------
+
+const size_t HASH_TABLE_SIZES[] = {
+    7,          // Used only by "bklisp tests"
+    11,         // Used only by "bklisp tests"
+    23,         // Used only by "bklisp tests"
+    53,         // First size the table actually grows to, as the
+    97,         // initial included table size is 23!
+    193,
+    389,
+    769,
+    1543,
+    3079,
+    6151,
+    12289,
+    24593,
+    49157,
+    98317,
+    196613,
+    393241,
+    786433,
+    1572869,
+    3145739,
+    6291469,
+    12582917,
+    25165843,
+    50331653,
+    100663319,
+    201326611,
+    402653189,
+    805306457,
+    1610612741
+};
 //---------------------------------------------------------------------------
 
 #if WITH_MEM_POOL
@@ -39,11 +73,13 @@ size_t count_elements(const Atom &a)
                     to_count.push_back(at.m_d.vec->m_data[i]);
                 break;
             case T_MAP:
-                s++;
-                for (auto i : at.m_d.map->m_map)
                 {
-                    to_count.push_back(i.first);
-                    to_count.push_back(i.second);
+                    s++;
+                    ATOM_MAP_FOR(i, at.m_d.map)
+                    {
+                        to_count.push_back(MAP_ITER_KEY(i));
+                        to_count.push_back(MAP_ITER_VAL(i));
+                    }
                 }
                 break;
             default:
@@ -57,32 +93,18 @@ size_t count_elements(const Atom &a)
 }
 //---------------------------------------------------------------------------
 
-size_t AtomHashTable::HASH_TABLE_SIZES[] = {
-    23,53,97,193,389,769,1543,3079,6151,12289,24593,49157,98317,196613,393241,
-    786433,1572869,3145739,6291469,12582917,25165843,50331653,
-    100663319,201326611,402653189,805306457,1610612741
-};
-//---------------------------------------------------------------------------
-
-void AtomHashTable::free_tbl(Atom *tbl)
+Atom Atom::at(const Atom &a)
 {
-#if WITH_MEM_POOL
-    g_atom_array_pool.free(tbl);
-#else
-    delete[] tbl;
-#endif
+    if (m_type != T_MAP) return Atom();
+    return m_d.map->at(a);
 }
 //---------------------------------------------------------------------------
 
-Atom *AtomHashTable::alloc_new_tbl(size_t val_count)
+Atom Atom::meta()
 {
-    Atom *data;
-#       if WITH_MEM_POOL
-       data = g_atom_array_pool.allocate(val_count * 3);
-#       else
-       data = new Atom[val_count * 3];
-#       endif
-    return data;
+    if      (m_type == T_VEC && m_d.vec->m_meta) return Atom(T_VEC, m_d.vec->m_meta);
+    else if (m_type == T_MAP && m_d.map->m_meta) return Atom(T_VEC, m_d.map->m_meta);
+    else return Atom();
 }
 //---------------------------------------------------------------------------
 
@@ -136,7 +158,35 @@ std::string Atom::to_write_str(bool pretty) const
     else
         return write_atom(*this);
 }
+//---------------------------------------------------------------------------
 
+std::string Atom::to_shallow_str() const
+{
+    std::stringstream ss;
+    ss << "#<atom:";
+    const Atom &a = *this;
+    switch (a.m_type)
+    {
+        case T_NIL:   ss << "nil";                                                           break;
+        case T_INT:   ss << "int:"    << a.m_d.i;                                            break;
+        case T_DBL:   ss << "dbl:"    << a.m_d.d;                                            break;
+        case T_BOOL:  ss << "bool:"   <<a.m_d.b;                                             break;
+        case T_STR:   ss << "str:"    << a.m_d.sym->m_str;                                   break;
+        case T_SYM:   ss << "sym:"    << a.m_d.sym->m_str;                                   break;
+        case T_KW:    ss << "kw:"     << a.m_d.sym->m_str;                                   break;
+        case T_VEC:   ss << "vec:"    << ((void *) a.m_d.vec) << "," << a.m_d.vec->m_len;    break;
+        case T_MAP:   ss << "map:"    << ((void *) a.m_d.map) << "," << a.m_d.map->size();   break;
+        case T_PRIM:  ss << "prim:"   << ((void *) a.m_d.func);                              break;
+        case T_SYNTAX:ss << "syntax"  << a.m_d.sym->m_str;                                   break;
+        case T_CLOS:  ss << "clos:"   << ((void *) a.m_d.vec) << "," << (a.m_d.vec->m_len);  break;
+        case T_UD:    ss << "ud:"     << a.m_d.ud->type() << "," << ((void *) a.m_d.ud);     break;
+        case T_C_PTR: ss << "cptr:"   << ((void *) a.m_d.ptr);                               break;
+        case T_HPAIR: ss << "hpair";                                                         break;
+        default: ss << "?";
+    }
+    ss << ">";
+    return ss.str();
+}
 //---------------------------------------------------------------------------
 std::string Atom::to_display_str() const
 {
@@ -308,37 +358,6 @@ AtomVec::~AtomVec()
 }
 //---------------------------------------------------------------------------
 
-void AtomMap::set(Sym *s, const Atom &a)
-{
-    Atom sym(T_SYM, s);
-    m_map[sym] = a;
-}
-//---------------------------------------------------------------------------
-
-void AtomMap::set(const Atom &k, const Atom &a)
-{
-    m_map[k] = a;
-}
-//---------------------------------------------------------------------------
-
-Atom AtomMap::at(const Atom &k)
-{
-    auto it = m_map.find(k);
-    if (it == m_map.end()) return Atom();
-    return it->second;
-}
-//---------------------------------------------------------------------------
-
-Atom AtomMap::at(const Atom &k, bool &defined)
-{
-    defined = false;
-    auto it = m_map.find(k);
-    if (it == m_map.end()) return Atom();
-    defined = true;
-    return it->second;
-}
-//---------------------------------------------------------------------------
-
 GCRootRefPool::GCRootRef::~GCRootRef()
 {
     m_pool.unreg(m_idx);
@@ -421,51 +440,14 @@ Atom GC::get_statistics()
 }
 //---------------------------------------------------------------------------
 
-AtomMapIterator::AtomMapIterator(Atom &map)
-    : m_map(map),
-      m_init(true),
-      m_map_ref(map.m_d.map->m_map),
-      m_iterator(m_map_ref.begin())
-{
-}
-//---------------------------------------------------------------------------
-
-bool AtomMapIterator::ok()
-{
-    return m_iterator != m_map_ref.end();
-}
-//---------------------------------------------------------------------------
-
-void AtomMapIterator::next()
-{
-    if (m_init) { m_init = false; return; }
-    m_iterator++;
-}
-//---------------------------------------------------------------------------
-
-Atom AtomMapIterator::key()   { return m_iterator->first; }
-Atom AtomMapIterator::value() { return m_iterator->second; }
-//---------------------------------------------------------------------------
-
-void AtomMapIterator::mark(GC *gc, uint8_t clr)
-{
-    UserData::mark(gc, clr);
-    gc->mark_atom(m_map);
-}
-//---------------------------------------------------------------------------
-
 RegRowsReference::RegRowsReference(
             AtomVec **rr0,
             AtomVec **rr1,
-            AtomVec **rr2,
-            AtomVec **rr3,
-            AtomVec **rr4)
+            AtomVec **rr2)
     :
     m_rr0(rr0),
     m_rr1(rr1),
-    m_rr2(rr2),
-    m_rr3(rr3),
-    m_rr4(rr4)
+    m_rr2(rr2)
 {
 }
 //---------------------------------------------------------------------------
@@ -476,8 +458,6 @@ void RegRowsReference::mark(GC *gc, uint8_t clr)
     gc->mark_atom(Atom(T_VEC, *m_rr0));
     gc->mark_atom(Atom(T_VEC, *m_rr1));
     gc->mark_atom(Atom(T_VEC, *m_rr2));
-    gc->mark_atom(Atom(T_VEC, *m_rr3));
-    gc->mark_atom(Atom(T_VEC, *m_rr4));
 }
 //---------------------------------------------------------------------------
 
@@ -494,6 +474,52 @@ BukaLISPException &BukaLISPException::push(Atom &err_stack)
             err_stack.at(i).at(3).to_display_str());
     }
     return *this;
+}
+//---------------------------------------------------------------------------
+
+void atom_tree_walker(
+    Atom a,
+    std::function<void(std::function<void(Atom &a)> cont, unsigned int indent, Atom a)> cb)
+{
+    unsigned int indent = 0;
+    std::function<void(Atom &a)> walker;
+    walker = [&](Atom &a)
+    {
+        switch (a.m_type)
+        {
+            case T_MAP:
+                {
+                    AtomMap *map = a.m_d.map;
+                    if (map && map->m_meta)
+                    {
+                        indent++;
+                        cb(walker, indent, Atom(T_VEC, map->m_meta));
+                        indent--;
+                    }
+
+                    ATOM_MAP_FOR(i, map)
+                    {
+                        indent++;
+                        cb(walker, indent, MAP_ITER_KEY(i));
+                        cb(walker, indent, MAP_ITER_VAL(i));
+                        indent--;
+                    }
+                }
+                break;
+
+            case T_CLOS:
+            case T_VEC:
+                for (size_t i = 0; i < a.m_d.vec->m_len; i++)
+                {
+                    indent++;
+                    cb(walker, indent, a.m_d.vec->m_data[i]);
+                    indent--;
+                }
+                break;
+        }
+    };
+
+    cb(walker, indent, a);
 }
 //---------------------------------------------------------------------------
 

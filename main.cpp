@@ -284,6 +284,139 @@ void test_symbols_and_keywords()
 }
 //---------------------------------------------------------------------------
 
+void test_atom_hash_table()
+{
+#if !WITH_STD_UNORDERED_MAP
+    {
+        AtomMap ht(true);
+        ht.m_inhibit_grow = true;
+
+        ht.set(Atom(T_INT, 1), Atom(T_INT, 2));
+//        cout << ht.debug_dump();
+        TEST_EQ(ht.at(Atom(T_INT, 1)).m_d.i, 2, "first set/get");
+
+        ht.set(Atom(T_INT, 2), Atom(T_INT, 22));
+        ht.set(Atom(T_INT, 3), Atom(T_INT, 23));
+        ht.set(Atom(T_INT, 4), Atom(T_INT, 24));
+        ht.set(Atom(T_INT, 5), Atom(T_INT, 25));
+        ht.set(Atom(T_INT, 6), Atom(T_INT, 26));
+        ht.set(Atom(T_INT, 7), Atom(T_INT, 27));
+//        cout << ht.debug_dump();
+        TEST_EQ(ht.at(Atom(T_INT, 2)).m_d.i, 22, "small ht get 1");
+        TEST_EQ(ht.at(Atom(T_INT, 3)).m_d.i, 23, "small ht get 2");
+        TEST_EQ(ht.at(Atom(T_INT, 4)).m_d.i, 24, "small ht get 3");
+        TEST_EQ(ht.at(Atom(T_INT, 5)).m_d.i, 25, "small ht get 4");
+        TEST_EQ(ht.at(Atom(T_INT, 6)).m_d.i, 26, "small ht get 5");
+        TEST_EQ(ht.size(), 7, "correct size of small ht");
+
+        ht.delete_key(Atom(T_INT, 1));
+        TEST_EQ(ht.at(Atom(T_INT, 1)).m_type, T_NIL, "deleted key not present anymore");
+//        cout << ht.debug_dump();
+        ht.set(Atom(T_INT, 8), Atom(T_INT, 28));
+//        cout << ht.debug_dump();
+        TEST_EQ(ht.at(Atom(T_INT, 8)).m_d.i, 28, "overwrote deleted key successfully");
+
+        ht.m_inhibit_grow = false;
+        ht.set(Atom(T_INT, 9), Atom(T_INT, 29));
+//        cout << ht.debug_dump();
+        TEST_EQ(ht.at(Atom(T_INT, 8)).m_d.i, 28, "grew table successfully");
+        TEST_EQ(ht.size(), 8, "correct size of bigger ht");
+
+        TEST_EQ(ht.at(Atom(T_INT, 2)).m_d.i, 22, "bigger ht get 1");
+        TEST_EQ(ht.at(Atom(T_INT, 3)).m_d.i, 23, "bigger ht get 2");
+        TEST_EQ(ht.at(Atom(T_INT, 4)).m_d.i, 24, "bigger ht get 3");
+        TEST_EQ(ht.at(Atom(T_INT, 5)).m_d.i, 25, "bigger ht get 4");
+        TEST_EQ(ht.at(Atom(T_INT, 6)).m_d.i, 26, "bigger ht get 5");
+        TEST_EQ(ht.at(Atom(T_INT, 7)).m_d.i, 27, "bigger ht get 6");
+        TEST_EQ(ht.at(Atom(T_INT, 8)).m_d.i, 28, "bigger ht get 7");
+
+        ht.m_inhibit_grow = true;
+        ht.set(Atom(T_INT, 10), Atom(T_INT, 110));
+        ht.set(Atom(T_INT, 11), Atom(T_INT, 111));
+        ht.set(Atom(T_INT, 12), Atom(T_INT, 112));
+        TEST_EQ(ht.size(), 11, "correct size 2 of bigger ht");
+
+        std::string except;
+        try
+        { ht.set(Atom(T_INT, 13), Atom(T_INT, 113)); }
+        catch (std::exception &e) { except = e.what(); }
+        TEST_EQ(!!except.find("inserting"), true,
+                "exception on overly full, corner case");
+
+
+        // cout << ht.debug_dump();
+        int64_t sum = 0;
+        Atom *cur = nullptr;
+        while (cur = ht.next(cur))
+        {
+            // cout << "ITER : " << cur[1].to_write_str() << endl;
+            sum += cur[1].m_d.i;
+        }
+
+        TEST_EQ(sum, 111 + 23 + 112 + 27 + 22 + 29 + 25 + 110 + 113 + 26 + 28,
+                "hash iteration works");
+
+        // cout << "SUM: " << sum << endl;
+    }
+
+    {
+        // Testing worst case here:
+
+        AtomMap ht(true);
+        ht.m_inhibit_grow = true;
+        std::vector<unsigned int> idxes;
+        for (unsigned int i = 0; ht.size() < 7 && i < 10000000000; i++)
+        {
+            if ((AtomHash()(Atom(T_INT, i)) % 7) == 6)
+            {
+                ht.set(Atom(T_INT, i), Atom(T_INT, i * 10));
+                idxes.push_back(i);
+            }
+        }
+
+        for (auto i : idxes)
+        {
+            TEST_EQ(ht.at(Atom(T_INT, i)).m_d.i, i * 10, "worst case test");
+        }
+
+        // cout << ht.debug_dump();
+    }
+
+    {
+        for (size_t c = 0; c < 20000; c++)
+        {
+            AtomMap am;
+            for (size_t i = 0; i < c; i++)
+            {
+                am.set(Atom(T_INT, i), Atom(T_INT, i * 10));
+            }
+
+            size_t sum1 = 0;
+            size_t sum2 = 0;
+
+            for (size_t i = 0; i < c; i++)
+            {
+                sum1 += (size_t) am.at(Atom(T_INT, i)).m_d.i;
+            }
+
+            Atom *cur = nullptr;
+            while (cur = am.next(cur))
+            {
+                sum2 += (size_t) cur[1].m_d.i;
+            }
+
+            TEST_EQ(sum1, sum2, "summing up different table sizes");
+
+            if (c > 10000)
+                c += 53;
+            else if (c > 5000)
+                c += 11;
+        }
+    }
+#endif
+}
+//---------------------------------------------------------------------------
+
 void test_maps2()
 {
     Reader tc;
@@ -759,10 +892,10 @@ void test_ieval_index_procs()
     Interpreter i(&rt);
     Atom r;
 
-    TEST_EVAL("(@0 [1 2 3])",       "1");
-    TEST_EVAL("(@1 [1 2 3])",       "2");
-    TEST_EVAL("(@2 [1 2 3])",       "3");
-    TEST_EVAL("(@3 [1 2 3])",       "nil");
+//    TEST_EVAL("(@0 [1 2 3])",       "1");
+//    TEST_EVAL("(@1 [1 2 3])",       "2");
+//    TEST_EVAL("(@2 [1 2 3])",       "3");
+//    TEST_EVAL("(@3 [1 2 3])",       "nil");
 
     TEST_EVAL("(xxx:      {a: 123 'b 444 \"xxx\" 3.4})",               "nil");
     TEST_EVAL("(@\"xxx\"  {a: 123 'b 444 \"xxx\" 3.4})",               "3.4");
@@ -991,14 +1124,15 @@ int main(int argc, char *argv[])
             try
             {
 #               define RUN_TEST(name)   test_##name(); std::cout << "OK - " << #name << std::endl;
-//                RUN_TEST(gc1);
-//                RUN_TEST(gc2);
+////                RUN_TEST(gc1);
+////                RUN_TEST(gc2);
                 RUN_TEST(atom_gen1);
                 RUN_TEST(atom_gen2);
                 RUN_TEST(symbols_and_keywords);
                 RUN_TEST(maps);
                 RUN_TEST(atom_printer);
                 RUN_TEST(maps2);
+                RUN_TEST(atom_hash_table);
                 RUN_TEST(atom_debug_info);
                 RUN_TEST(ieval_atoms);
                 RUN_TEST(ieval_vars);
@@ -1022,9 +1156,54 @@ int main(int argc, char *argv[])
         }
         else if (do_stat)
         {
-            cout << "Atom size: " << sizeof(Atom) << endl;
-            cout << "AtomVec size: " << sizeof(AtomVec) << endl;
-            cout << "AtomMap size: " << sizeof(AtomMap) << endl;
+            cout << "Atom size:          " << sizeof(Atom)          << endl;
+            cout << "AtomVec size:       " << sizeof(AtomVec)       << endl;
+            cout << "AtomMap size:       " << sizeof(AtomMap)       << endl;
+
+            std::vector<size_t> counts;
+            counts.push_back(5);
+            counts.push_back(10);
+            counts.push_back(50);
+            counts.push_back(200);
+            counts.push_back(1000);
+            counts.push_back(2000);
+            counts.push_back(4000);
+            counts.push_back(8000);
+            counts.push_back(32000);
+            for (auto c : counts)
+            {
+                size_t repeat = c < 1000 ? 100000 : 1000;
+
+                {
+                    BenchmarkTimer t;
+
+                    int64_t sum = 0;
+
+                    for (size_t j = 0; j < repeat; j++)
+                    {
+                        AtomMap am;
+                        for (size_t i = 0; i < c; i++)
+                        {
+                            am.set(Atom(T_INT, i), Atom(T_INT, i * 10));
+                        }
+
+                        for (size_t j = 0; j < 10; j++)
+                        {
+                            for (size_t i = 0; i < c; i++)
+                            {
+                                sum += am.at(Atom(T_INT, i)).m_d.i;
+                            }
+
+                            ATOM_MAP_FOR(i, &am)
+                            {
+                                sum += MAP_ITER_VAL(i).m_d.i;
+                            }
+                        }
+                    }
+
+                    cout << "O[" << c << "](" << sum << "): " << t.diff() << endl;
+                }
+            }
         }
         else if (interpret && !input_file_path.empty())
         {

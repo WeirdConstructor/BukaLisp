@@ -88,16 +88,15 @@ void write_atom(const Atom &a, std::ostream &o)
         }
         case T_MAP:
         {
-            AtomMap &m = *a.m_d.map;
             bool is_first = true;
             o << "{";
-            for (auto p : m.m_map)
+            ATOM_MAP_FOR(i, a.m_d.map)
             {
                 if (is_first) is_first = false;
                 else          o << " ";
-                write_atom(p.first, o);
+                write_atom(MAP_ITER_KEY(i), o);
                 o << " ";
-                write_atom(p.second, o);
+                write_atom(MAP_ITER_VAL(i), o);
             }
             o << "}";
             break;
@@ -175,27 +174,26 @@ void write_atom_pp_rec(const Atom &a, std::stringstream &o, size_t indent)
                 return;
             }
 
-            AtomMap &m = *a.m_d.map;
             bool is_first = true;
             o << "{";
             indent += 2;
-            for (auto p : m.m_map)
+            ATOM_MAP_FOR(p, a.m_d.map)
             {
                 o << "\n";
                 print_indent(o, indent);
-                write_atom_pp_rec(p.first, o, indent);
-                if (!p.first.is_simple())
+                write_atom_pp_rec(MAP_ITER_KEY(p), o, indent);
+                if (!MAP_ITER_KEY(p).is_simple())
                 {
                     o << "\n";
                     print_indent(o, indent);
-                    write_atom_pp_rec(p.second, o, indent);
+                    write_atom_pp_rec(MAP_ITER_VAL(p), o, indent);
                 }
                 else
                 {
                     o << " ";
-                    size_t fs = p.first.size();
+                    size_t fs = MAP_ITER_KEY(p).size();
                     indent += fs + 1;
-                    write_atom_pp_rec(p.second, o, indent);
+                    write_atom_pp_rec(MAP_ITER_VAL(p), o, indent);
                     indent -= fs + 1;
                 }
             }

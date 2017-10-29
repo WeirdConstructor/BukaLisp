@@ -1,30 +1,28 @@
 // Copyright (C) 2017 Weird Constructor
 // For more license info refer to the the bottom of this file.
 
-#include <string>
-#include <chrono>
+//---------------------------------------------------------------------------
 
-std::string slurp_str(const std::string &filepath);
+// Without this, all Atom arrays of AtomVec and AtomMap
+// will be allocated directly in the heap in some unspecified order.
+// If WITH_MEM_POOL is 1, Atom arrays will be allocated from a
+// more compact pool that reduces memory fragmentation a bit.
+// If WITH_MEM_POOL is 0 less memory is preallocated and for small
+// programs this might mean less memory usage.
+#define WITH_MEM_POOL           1
 
-class BenchmarkTimer
-{
-        std::chrono::high_resolution_clock::time_point m_t1;
+//---------------------------------------------------------------------------
 
-    public:
-        BenchmarkTimer()
-            : m_t1(std::chrono::high_resolution_clock::now())
-        {
-        }
+// If you enable WITH_STD_UNORDERED_MAP AtomMap will use std::unordered_map.
+// This has slight performance implications, as the AtomMap that BukaLisp
+// provides does not use linked lists, in the hope of optimizing for better
+// cache performance. Benchmarks have shown, that BukaLisp AtomMaps are
+// twice as fast as std::unordered_map based implementations. For small
+// maps (around 10 key/value pairs) the performance is even better (almost
+// 3 times faster).
+#define WITH_STD_UNORDERED_MAP  0
 
-        double diff()
-        {
-            std::chrono::high_resolution_clock::time_point t2 =
-                std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> time_span
-                = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - m_t1);
-            return time_span.count();
-        }
-};
+//---------------------------------------------------------------------------
 
 /******************************************************************************
 * Copyright (C) 2017 Weird Constructor
