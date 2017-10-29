@@ -97,9 +97,6 @@
       ($define! self (op-new-closure out-idx in-idx cl-info-idx)
         (push-op NEW_CLOSURE: out-idx in-idx cl-info-idx 0))
 
-      ($define! self (op-pack-va out-idx env-pos-idx)
-        (push-op PACK_VA: out-idx env-pos-idx 0 0))
-
       ($define! self (op-br jmp-offs)
         (push-op BR: jmp-offs 0 0 0))
 

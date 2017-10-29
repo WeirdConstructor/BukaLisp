@@ -1494,3 +1494,19 @@
            (set! c 30))
       [a b c])
    [0 0 0])
+
+; Test varargs in combination with upvals:
+(T '((lambda ()
+       (let ((y 10))
+         ((lambda (. x)
+            [x y])
+          1 2 3))))
+   [[1 2 3] 10])
+
+(T '((lambda ()
+       (let ((y 10))
+         ((lambda (a . x)
+            [a x y])
+          1 2 3))))
+   [1 [2 3] 10])
+

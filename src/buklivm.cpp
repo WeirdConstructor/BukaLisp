@@ -758,29 +758,6 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     break;
                 }
 
-                case OP_PACK_VA:
-                {
-                    size_t pack_idx = P_A;
-                    AtomVec *frame = rr_frame;
-                    if (pack_idx < frame->m_len)
-                    {
-                        size_t va_len = frame->m_len - pack_idx;
-                        AtomVec *v = m_rt->m_gc.allocate_vector(va_len);
-                        for (size_t i = 0; i < va_len; i++)
-                            v->m_data[i] = frame->m_data[i + pack_idx];
-                        v->m_len = va_len;
-                        Atom vv(T_VEC, v);
-                        E_SET_CHECK_REALLOC(O, O);
-                        E_SET(O, vv);
-                    }
-                    else
-                    {
-                        E_SET_CHECK_REALLOC(O, O);
-                        E_SET(O, Atom(T_VEC, m_rt->m_gc.allocate_vector(0)));
-                    }
-                    break;
-                }
-
                 case OP_CALL:
                 {
                     E_SET_CHECK_REALLOC(O, O);
@@ -832,10 +809,35 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                             if (func->m_d.vec->m_data[0].m_type != T_UD)
                                 error("Bad closure found", *func);
 
-                            if (CHECK_ARITY(func->m_d.vec->m_data[3],
-                                            frame->m_len) != 0)
-                                report_arity_error(func->m_d.vec->m_data[3],
-                                                   frame->m_len);
+                            Atom &arity = func->m_d.vec->m_data[3];
+                            if (CHECK_ARITY(arity, frame->m_len) != 0)
+                                report_arity_error(arity, frame->m_len);
+
+//                            std::cout << "ARITY" << func->m_d.vec->m_data[3].to_write_str() << std::endl;
+                            if (arity.m_type == T_NIL
+                                || (arity.m_type == T_INT && arity.m_d.i < 0))
+                            {
+                                unsigned int va_pos =
+                                    arity.m_type == T_NIL ? 0
+                                    : (arity.m_type == T_INT && arity.m_d.i < 0)
+                                    ? ((unsigned int) (-arity.m_d.i))
+                                    : frame->m_len;
+
+//                                    std::cout << "VAVA" << frame->m_len << "," << va_pos << std::endl;
+
+                                AtomVec *v = nullptr;
+                                if (frame->m_len > va_pos)
+                                {
+                                    size_t va_len = frame->m_len - va_pos;
+                                    v = m_rt->m_gc.allocate_vector(va_len);
+                                    for (size_t i = 0; i < va_len; i++)
+                                        v->m_data[i] = frame->m_data[i + va_pos];
+                                    v->m_len = va_len;
+                                }
+                                else
+                                    v = m_rt->m_gc.allocate_vector(0);
+                                frame->set(va_pos, Atom(T_VEC, v));
+                            }
 
                             alloc = true;
                             // save the current execution context:

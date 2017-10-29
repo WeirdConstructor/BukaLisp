@@ -481,7 +481,6 @@
             ; handle var-args:
             (unless (nil? (@2 lambda-spec))
               (push! arg-var-adrs (.new-pos lambda-frame))
-              (.op-pack-va lambda-pad (last arg-var-adrs) (last arg-var-adrs))
               (@!(@2 lambda-spec) new-env (last arg-var-adrs)))
             ; handle upvalues we need to collect from creating function:
             (when (list? (@3 lambda-spec))
