@@ -100,6 +100,24 @@ Atom Atom::at(const Atom &a)
 }
 //---------------------------------------------------------------------------
 
+void Atom::set(const Atom &a, const Atom &v)
+{
+    if (m_type == T_VEC)
+        m_d.vec->set((size_t) a.to_int(), v);
+    else if (m_type == T_MAP)
+        m_d.map->set(a, v);
+}
+//---------------------------------------------------------------------------
+
+void Atom::set(size_t i, const Atom &v)
+{
+    if (m_type == T_VEC)
+        m_d.vec->set(i, v);
+    else if (m_type == T_MAP)
+        m_d.map->set(Atom(T_INT, i), v);
+}
+//---------------------------------------------------------------------------
+
 Atom Atom::meta()
 {
     if      (m_type == T_VEC && m_d.vec->m_meta) return Atom(T_VEC, m_d.vec->m_meta);

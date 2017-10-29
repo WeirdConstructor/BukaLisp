@@ -298,6 +298,9 @@ struct Atom
 
     Atom at(const Atom &a);
 
+    void set(const Atom &a, const Atom &v);
+    void set(size_t i, const Atom &v);
+
     Atom meta();
 
     bool eqv(const Atom &o)
