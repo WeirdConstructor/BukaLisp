@@ -275,6 +275,10 @@
 (T '(eqv? + (let ((o +)) (let ((y +)) y o))) #true)
 (T '(let ((m { x: 11 }) (l #f)) (set! l m) (eqv? m l)) #true)
 
+; eqv? as procedure:
+(T '(let ((e eqv?)) (e { x: 11 } { x: 10 })) #false)
+(T '(let ((e eqv?)) (e 2 (/ 5 2))) #true)
+
 (T '(not #t) #false)
 (T '(not 1) #false)
 (T '(not '()) #false)
@@ -1509,4 +1513,53 @@
             [a x y])
           1 2 3))))
    [1 [2 3] 10])
+
+; Test cond
+(T '(cond (else 20)) 20)
+
+(T '(cond ((= 1 1) 10)) 10)
+(T '(cond ((= 1 0) 10)) nil)
+(T '(cond ((= 1 0) 10) (else 13)) 13)
+(T '(cond ((= 1 0) 10)
+          ((= 1 1) 14)
+          (else 13))
+   14)
+
+; Test case
+(T '(case 1
+      ((1)  10)
+      ((a:) 11)
+      ((l)  12)
+      (else 30))
+   10)
+
+(T '(case 'l
+      ((1)  10)
+      ((a:) 11)
+      ((l)  12)
+      (else 30))
+   12)
+
+(T '(case a:
+      ((1)  10)
+      ((a:) 11)
+      ((l)  12)
+      (else 30))
+   11)
+
+(T '(case b:
+      ((1)  10)
+      ((a:) 11)
+      ((l)  12)
+      (else 30))
+   30)
+
+(T '(case a: (else 30))
+   30)
+
+(T '(case a: ((b: c: a:) 10))
+   10)
+
+(T '(case e: ((b: c: a:) 10))
+   nil)
 

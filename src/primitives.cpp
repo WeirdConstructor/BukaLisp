@@ -558,8 +558,18 @@ START_PRIM()
             av->push(a);
         }
     }
-    out = Atom(T_VEC, av);
+    out.set_vec(av);
 END_PRIM(append)
+
+START_PRIM()
+    REQ_EQ_ARGC(reverse, 1);
+    if (A0.m_type != T_VEC)
+        error("Can't reverse non-vector", A0);
+    AtomVec *av = m_rt->m_gc.allocate_vector(A0.m_d.vec->m_len);
+    for (size_t i = A0.m_d.vec->m_len; i > 0; i--)
+        av->push(A0.m_d.vec->m_data[i - 1]);
+    out.set_vec(av);
+END_PRIM(reverse)
 
 START_PRIM()
     REQ_EQ_ARGC(write-str, 1);

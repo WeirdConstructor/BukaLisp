@@ -594,9 +594,11 @@
       (error "'cond' clause must have at least one clause" arg))
     (do-each (clause (drop arg 1))
       (unless (list? clause)
-        (error "'cond' has an improper clause" clause))
-      (when (= (length clause) 0)
-        (error "'cond' clauses may not be empty" clause))
+        (error "'cond' has an improper clause (not a list)" clause))
+      (when (< (length clause) 2)
+        (error (str "'cond' clauses must at least contain a test "
+                    "expression and result expression")
+               clause))
       (if (eqv? (@0 clause) 'else)
         (begin
           (when else-clause
@@ -619,7 +621,7 @@
                           [tmp-var]])])))
             [clause:
               (T ctx (first clause))
-              (DI! clause (s1-begin T ctx (drop clause 2)))]))))
+              (DI! clause (s1-begin T ctx (drop clause 1)))]))))
     (if else-clause
       (push! out [else: (s1-begin T ctx (DI! else-clause (drop else-clause 1)))])
       (push! out [else: (T ctx nil)]))

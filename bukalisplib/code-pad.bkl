@@ -112,6 +112,9 @@
       ($define! self (op-eq out-idx a-idx b-idx)
         (push-op EQ: out-idx a-idx b-idx 0))
 
+      ($define! self (op-eqv out-idx a-idx b-idx)
+        (push-op EQV: out-idx a-idx b-idx 0))
+
       ($define! self (op-add out-idx a-idx b-idx)
         (push-op ADD: out-idx a-idx b-idx 0))
 

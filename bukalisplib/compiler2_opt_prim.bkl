@@ -89,9 +89,10 @@
 (add-optimized-prim S1-ROOT-ENV '* (make-left-assoc-tree '#1#mul    1))
 (add-optimized-prim S1-ROOT-ENV '/ (make-left-assoc-tree '#1#div    1))
 
-(add-optimized-prim S1-ROOT-ENV '=  (make-cmp-op-tree '#1#eq))
-(add-optimized-prim S1-ROOT-ENV '<  (make-cmp-op-tree '#1#lt))
-(add-optimized-prim S1-ROOT-ENV '>  (make-cmp-op-tree '#1#gt))
-(add-optimized-prim S1-ROOT-ENV '<= (make-cmp-op-tree '#1#le))
-(add-optimized-prim S1-ROOT-ENV '>= (make-cmp-op-tree '#1#ge))
+(add-optimized-prim S1-ROOT-ENV 'eqv?   (make-cmp-op-tree '#1#eqv))
+(add-optimized-prim S1-ROOT-ENV '=      (make-cmp-op-tree '#1#eq))
+(add-optimized-prim S1-ROOT-ENV '<      (make-cmp-op-tree '#1#lt))
+(add-optimized-prim S1-ROOT-ENV '>      (make-cmp-op-tree '#1#gt))
+(add-optimized-prim S1-ROOT-ENV '<=     (make-cmp-op-tree '#1#le))
+(add-optimized-prim S1-ROOT-ENV '>=     (make-cmp-op-tree '#1#ge))
 

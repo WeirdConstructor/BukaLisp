@@ -194,6 +194,7 @@
        (generate-binary-op '#1#ge  'op-ge)
        (generate-binary-op '#1#le  'op-le)
        (generate-binary-op '#1#eq  'op-eq)
+       (generate-binary-op '#1#eqv 'op-eqv)
        ['#1#not
         (lambda (ctx arg T gtx)
           (let ((adr (tmp-pos-or-parent-adr ctx))
@@ -460,6 +461,52 @@
             (.recycle-pos (F: ctx) true-branch-adr)
             (.recycle-pos (F: ctx) false-branch-adr)
             if-ret-adr))]
+       ['#1#cond
+;(#1#cond
+;  (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data 1))
+;           (#1#data 10))
+;  (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data a:))
+;           (#1#data 11))
+;  (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data l))
+;           (#1#data 12))
+;  (else: (#1#data 30)))
+;#test1:
+;op-brif 
+        (lambda (ctx arg T gtx)
+          (let ((out-adr            (tmp-pos-or-parent-adr ctx))
+                (clause-cond-adrs   [])
+                (clause-bodies      [])
+                (out-bodies         [])
+                (else-branch        nil)
+                (last-body          nil)
+                (to-end-branch-offs 0))
+            (do-each (clause (reverse arg))
+              (if (eqv? (@0 clause) clause:)
+                (let ((test-body  (make-code-pad-object (F: ctx)))
+                      (cl-body    (make-code-pad-object (F: ctx)))
+                      (test-adr   (T (assign ctx [P: test-body])
+                                     (@1 clause)))
+                      (val-adr    (T (assign ctx [P: cl-body])
+                                     (@2 clause))))
+                  (.op-mov cl-body out-adr val-adr nil)
+                  (.op-br cl-body to-end-branch-offs)
+                  (.op-brnif test-body (.count-ops cl-body) test-adr)
+                  (.append-code-pad test-body cl-body)
+                  (push! out-bodies test-body)
+                  (set! to-end-branch-offs
+                    (+ to-end-branch-offs
+                       (.count-ops test-body))))
+                (let ((else-body  (make-code-pad-object (F: ctx)))
+                      (else-adr   (T (assign ctx [P: else-body])
+                                     (@1 clause))))
+                  (.op-mov else-body out-adr else-adr nil)
+                  (push! out-bodies else-body)
+                  (set! to-end-branch-offs
+                    (+ to-end-branch-offs
+                       (.count-ops else-body))))))
+            (do-each (body (reverse out-bodies))
+              (.append-code-pad (P: ctx) body))
+            out-adr))]
        ['#1#lambda
         (lambda (ctx arg T gtx)
           (let ((lambda-spec        (@0 arg))

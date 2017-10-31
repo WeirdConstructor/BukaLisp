@@ -74,6 +74,7 @@ class VMException : public std::exception
     X(EQ,           109) /*                                        */ \
     X(NEQ,          110) /*                                        */ \
     X(NOT,          111) /*                                        */ \
+    X(EQV,          112) /*                                        */ \
     X(RETURN,       250) /*                                        */ \
     X(END,          254) /*                                        */
 

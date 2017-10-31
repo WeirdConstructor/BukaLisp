@@ -1153,6 +1153,21 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     break;
                 }
 
+                case OP_EQV:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom &a = *tmp;
+                    E_GET(tmp, B);
+                    Atom &b = *tmp;
+
+                    Atom o(T_BOOL);
+                    o.m_d.b = a.eqv(b);
+                    E_SET(O, o);
+                    break;
+                }
+
                 case OP_EQ:
                 {
                     E_SET_CHECK_REALLOC(O, O);
