@@ -28,26 +28,40 @@ class AtomGenerator : public bukalisp::SEX_Builder
 {
     private:
         GC                       *m_gc;
-        Atom                      m_root;
-
-        typedef std::function<void(Atom &a)>  AddFunc;
-        std::vector<std::pair<Atom, AddFunc>> m_add_stack;
+        bool                      m_include_debug_info;
+        GC_ROOT_MEMBER(m_last);
+        GC_ROOT_MEMBER(m_last_key);
+        GC_ROOT_MEMBER_VEC(m_stack);
 
     public:
         AtomGenerator(GC *gc)
-            : m_gc(gc)
+            : m_gc(gc), m_include_debug_info(true),
+              GC_ROOT_MEMBER_INITALIZE_VEC(*gc, m_stack),
+              GC_ROOT_MEMBER_INITALIZE(*gc, m_last),
+              GC_ROOT_MEMBER_INITALIZE(*gc, m_last_key)
         {
+            m_stack = gc->allocate_vector(10);
         }
         virtual ~AtomGenerator() { }
 
-        void start()
+        void disable_debug_info()
         {
-            m_add_stack.push_back(
-                std::pair<Atom, AddFunc>(
-                    m_root, [this](Atom &a) { m_root = a; }));
+            m_include_debug_info = false;
         }
 
-        Atom &root() { return m_root; }
+        void clear()
+        {
+            m_last.clear();
+            m_last_key.clear();
+            m_stack->clear();
+        }
+
+        void start()
+        {
+            clear();
+        }
+
+        Atom &root() { return m_last; }
 
         virtual void error(const std::string &what,
                            const std::string &inp_name,
@@ -60,71 +74,80 @@ class AtomGenerator : public bukalisp::SEX_Builder
         virtual void start_list()
         {
             AtomVec *new_vec = m_gc->allocate_vector(0);
-            Atom a(T_VEC, new_vec);
+            Atom new_vec_atom(T_VEC, new_vec);
 
-            AtomVec *meta_info = m_gc->allocate_vector(2);
-            meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));
-            meta_info->push(Atom(T_INT, m_dbg_line));
-            m_gc->set_meta_register(a, 0, Atom(T_VEC, meta_info));
+            if (m_include_debug_info)
+            {
+                AtomVec *meta_info = m_gc->allocate_vector(2);
+                meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));
+                meta_info->push(Atom(T_INT, m_dbg_line));
+                m_gc->set_meta_register(new_vec_atom, 0, Atom(T_VEC, meta_info));
+            }
 
-            m_add_stack.push_back(
-                std::pair<Atom, AddFunc>(
-                    a,
-                    [=](Atom &a) { new_vec->push(a); }));
+            m_stack->push(new_vec_atom);
         }
 
         virtual void end_list()
         {
-            auto add_pair = m_add_stack.back();
-            m_add_stack.pop_back();
-            add(add_pair.first);
+            m_last = *(m_stack->last());
+            m_stack->pop();
+            add(m_last);
         }
 
         virtual void start_map()
         {
             AtomMap *new_map = m_gc->allocate_map();
-            Atom a(T_MAP, new_map);
+            Atom new_map_atom(T_MAP, new_map);
 
-            AtomVec *meta_info = m_gc->allocate_vector(2);
-            meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));
-            meta_info->push(Atom(T_INT, m_dbg_line));
-            m_gc->set_meta_register(a, 0, Atom(T_VEC, meta_info));
+            if (m_include_debug_info)
+            {
+                AtomVec *meta_info = m_gc->allocate_vector(2);
+                meta_info->push(Atom(T_STR, m_gc->new_symbol(m_dbg_input_name)));
+                meta_info->push(Atom(T_INT, m_dbg_line));
+                m_gc->set_meta_register(new_map_atom, 0, Atom(T_VEC, meta_info));
+            }
 
-            std::shared_ptr<std::pair<bool, Atom>> key_data
-                = std::make_shared<std::pair<bool, Atom>>(true, Atom());
-
-            m_add_stack.push_back(
-                std::pair<Atom, AddFunc>(
-                    a,
-                    [=](Atom &a)
-                    {
-                        if (key_data->first)
-                        {
-                            key_data->second = a;
-                            key_data->first = false;
-                        }
-                        else
-                        {
-                            new_map->set(key_data->second, a);
-                            key_data->first = true;
-                        }
-                    }));
+            m_stack->push(new_map_atom);
         }
 
         virtual void start_kv_pair() { }
-        virtual void end_kv_key() { }
-        virtual void end_kv_pair() { }
+        virtual void end_kv_key()
+        {
+            m_stack->push(m_last);
+            m_stack->push(Atom(T_INT, 1));
+        }
+        virtual void end_kv_pair()
+        {
+        }
 
         virtual void end_map()
         {
-            auto add_pair = m_add_stack.back();
-            m_add_stack.pop_back();
-            add(add_pair.first);
+            m_last = *(m_stack->last());
+            m_stack->pop();
+            add(m_last);
         }
 
         void add(Atom &a)
         {
-            m_add_stack.back().second(a);
+            // std::cout << "ADD: " << a.to_write_str() << std::endl;
+            if (m_stack->m_len > 0)
+            {
+                Atom *elem = m_stack->last();
+                if (elem->m_type == T_VEC)
+                    elem->m_d.vec->push(a);
+                else if (elem->m_type == T_INT)
+                {
+                    m_stack->pop();
+                    Atom key = *(m_stack->last());
+                    m_stack->pop();
+                    m_stack->last()->m_d.map->set(key, a);
+                    m_last = *(m_stack->last());
+                }
+                else
+                    m_last = a;
+            }
+            else
+                m_last = a;
         }
 
         virtual void atom_string(const std::string &str)

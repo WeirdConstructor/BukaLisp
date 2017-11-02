@@ -1,4 +1,4 @@
-(include "compiler")
+(include "compiler.bkl")
 
 (define T-env
   (lambda (code expected root-env)
@@ -1090,7 +1090,7 @@
 
 ; Test include
 (T '(begin
-      (include "..\\bukalisplib\\test-compiler.bkl")
+      (include "..\\tests\\compiler\\test_compiler_incl.bkl")
       test-include-ok)
    1)
 

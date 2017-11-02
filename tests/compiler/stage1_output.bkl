@@ -1,4 +1,4 @@
-(include compiler2)
+(include "compiler.bkl")
 
 (define s1-transform
  (lambda (val)
@@ -94,7 +94,7 @@
      (#1#create-upv lambda: (x_0)
       (#1#lambda (nil (v_1) nil (x_0) #f)
        (#1#create-upv lambda: (v_1)
-        (#1#lambda (nil (y_2) nil (x_0 v_1) #f)
+        (#1#lambda (nil (y_2) nil (v_1 x_0) #f)
          (#1#add
           (#1#add (#1#var x_0 x) (#1#var y_2 y)) (#1#var v_1 v))))))))
 (T '(lambda x x)
@@ -149,7 +149,7 @@
        (#1#data 10)))
      (#1#add (#1#var x_0 x)
       (#1#var y_1 y)))))
-(T '(include "c2_test_incl.bkl")
+(T '(include "..\\tests\\compiler\\stage1_out_incl.bkl")
    '(#1#begin
      (#1#data test-include:)
      (#1#apply (#1#prim str)
@@ -206,14 +206,14 @@
        (#1#var x_0 x)))))
 
 ; Testing error debug info (line numbers):
-(let ((inc-trans (s1-transform '(include "c2_test_incl.bkl"))))
+(let ((inc-trans (s1-transform '(include "..\\tests\\compiler\\stage1_out_incl.bkl"))))
   #;(displayln (bkl-get-meta (@1 (@2 (@2 inc-trans)))))
   (when (not (= (@1 (@0 (bkl-get-meta (@1 inc-trans)))) 1))
-    (error "Include file first statement wrong line (c2_test_incl.bkl)"))
+    (error "Include file first statement wrong line (stage1_out_incl.bkl)"))
   (when (not (= (@1 (@0 (bkl-get-meta (@2 inc-trans)))) 2))
-    (error "Include file second statement wrong line (c2_test_incl.bkl)"))
+    (error "Include file second statement wrong line (stage1_out_incl.bkl)"))
   (when (not (= (@1 (@0 (bkl-get-meta (@1 (@2 (@2 inc-trans)))))) 3))
-    (error "Include deep statement wrong line (c2_test_incl.bkl)")))
+    (error "Include deep statement wrong line (stage1_out_incl.bkl)")))
 
 ; Test macros:
 (T '(let ((k 11))
@@ -434,7 +434,10 @@
       ((= 2 3) => (lambda (x) (+ x 4)))
       (else 23))
    '(#1#cond
-     (clause: (#1#eq (#1#data 0) (#1#data 1)) (#1#data 3))
+     (clause: (#1#eq (#1#data 0) (#1#data 1))
+              (#1#begin
+               (#1#add (#1#data 1) (#1#data 2))
+               (#1#data 3)))
      (#1#let (cond_0_t_1)
       (#1#begin
        (#1#set! (#1#var cond_0_t_1 cond_0_t)
@@ -447,7 +450,7 @@
 
 (T '(cond ((= 0 0) 1))
    '(#1#cond
-     (clause: (#1#eq (#1#data 0) (#1#data 0)) (#1#nil))
+     (clause: (#1#eq (#1#data 0) (#1#data 0)) (#1#data 1))
      (else: (#1#nil))))
 
 (T '(cond (else 1))

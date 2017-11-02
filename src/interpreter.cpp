@@ -724,7 +724,7 @@ Atom Interpreter::eval_include(Atom e, AtomVec *av)
     }
 
     std::string libpath  = ".\\bukalisplib\\";
-    std::string filepath = libpath + av->m_data[1].m_d.sym->m_str + ".bkl";
+    std::string filepath = libpath + av->m_data[1].m_d.sym->m_str;
 
     std::string code = slurp_str(filepath);
     return eval(filepath, code);

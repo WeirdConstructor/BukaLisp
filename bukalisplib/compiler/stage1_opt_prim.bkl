@@ -62,7 +62,6 @@
             (cur-tree nil))
         (do-each (v (drop args 1))
           (let ((c-v (T ctx v)))
-;            (displayln FL: v last-op out-tree)
             (if last-op
               (let ((cur-op
                       (DI! args

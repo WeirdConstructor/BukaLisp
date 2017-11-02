@@ -1,4 +1,4 @@
-(include transformator)
+(include "compiler/transformator.bkl")
 
 ;----------------------------------------------------------------------------
 (define DI!
@@ -249,7 +249,7 @@
   (lambda (sym fn)
     (@!sym S1-ROOT-ENV [syntax: fn])))
 
-(include "compiler2_syntax")
+(include "compiler/stage1_syntax.bkl")
 
 (do-each (k v (bkl-primitive-map))
   (@!k S1-ROOT-ENV [prim: k]))
@@ -261,7 +261,7 @@
         (error "Unknown primitive to optimize" prim-k))
       (@!2 var compile-func))))
 
-(include "compiler2_opt_prim")
+(include "compiler/stage1_opt_prim.bkl")
 
 (@!" IS-ROOT-ENV " S1-ROOT-ENV #t)
 
@@ -279,17 +279,17 @@
 
 (define set-root-env-var
   (lambda (root-env sym content)
-    (let ((var (@sym root-env)))
-      (let ((reg-idx nil))
-        (if var
-          (if (eqv? (first var) glob-var:)
-            (set! reg-idx (@2 var))
-            (begin
-              (set! var [glob-var: sym])
-              (@!sym root-env var)))
-          (set! var [glob-var: sym]))
-        (unless reg-idx
-          (set! reg-idx (length (@" REGS " root-env))))
-        (@!sym root-env var)
-        (@!reg-idx (@" REGS " root-env) content)
-        (@!2 var reg-idx)))))
+    (let ((var      (@sym root-env))
+          (reg-idx  nil))
+      (if var
+        (if (eqv? (first var) glob-var:)
+          (set! reg-idx (@2 var))
+          (begin
+            (set! var [glob-var: sym])
+            (@!sym root-env var)))
+        (set! var [glob-var: sym]))
+      (unless reg-idx
+        (set! reg-idx (length (@" REGS " root-env))))
+      (@!sym root-env var)
+      (@!reg-idx (@" REGS " root-env) content)
+      (@!2 var reg-idx))))

@@ -132,7 +132,11 @@ class Reader
 
         void make_always_alive(Atom a) { m_root_set->push(a); }
 
-        void collect() { m_gc.collect(); }
+        void collect()
+        {
+            m_ag.clear();
+            m_gc.collect();
+        }
 
         bool parse(const std::string &codename, const std::string &in)
         {
@@ -245,10 +249,10 @@ void test_maps()
     tc.make_always_alive(m.at(tc.a_kw("b")));
 
     TEST_EQ(tc.pot_alive_maps(), 2, "alive map count");
-    TEST_EQ(tc.pot_alive_vecs(), 13, "alive vec count");
+    TEST_EQ(tc.pot_alive_vecs(), 14, "alive vec count");
     tc.collect();
     TEST_EQ(tc.pot_alive_maps(), 1, "alive map count after gc");
-    TEST_EQ(tc.pot_alive_vecs(), 8, "alive vec count after gc");
+    TEST_EQ(tc.pot_alive_vecs(), 9, "alive vec count after gc");
 }
 //---------------------------------------------------------------------------
 

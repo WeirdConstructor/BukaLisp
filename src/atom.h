@@ -136,6 +136,8 @@ struct AtomVec
         s_alloc_count++;
     }
 
+    void clear() { m_len = 0; }
+
     void alloc(size_t len);
     void init(uint8_t current_gc_color, size_t len);
 
