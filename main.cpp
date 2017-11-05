@@ -1094,6 +1094,19 @@ void test_bukalisp_instance()
         ((*factory).open_list()(1)(2)(3).close_list().value()->to_write_str()),
         "(1 2 3)",
         "list 1");
+
+    TEST_EQ(val->_i(0), 1, "get 1");
+    TEST_EQ(val->_i(1), 2, "get 2");
+    TEST_EQ(val->_i(2), 3, "get 3");
+    TEST_EQ(val->_i(3), 0, "get 4");
+
+    auto val2 = (*factory).open_list().read("foo:").close_list().value();
+    TEST_EQSTR(val2->to_write_str(), "(foo:)", "read 1");
+    val2 = (*factory).open_list().read("foo:").read("{x:(1 2 3)}").close_list().value();
+    TEST_EQSTR(val2->to_write_str(), "(foo: {x: (1 2 3)})", "read 2");
+    TEST_EQSTR(val2->_(1)->_("x")->to_write_str(),
+               "(1 2 3)",
+               "read 2b");
 }
 //---------------------------------------------------------------------------
 
