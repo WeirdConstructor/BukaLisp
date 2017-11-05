@@ -262,6 +262,12 @@
   (lambda (ctx args T gtx)
     (define is-root-env?
       (@" IS-ROOT-ENV " (env: ctx)))
+    (define is-coroutine?
+      (if (eqv? (@1 args) :coroutine)
+        (begin
+          (set! args (append 'define (drop args 2)))
+          #true)
+        #false))
     (case (type (@1 args))
       ((symbol) (unless (= (length args) 3)
                   (error (str "'define' needs exactly 2 arguments if "
@@ -313,10 +319,16 @@
                 ['#1#set! (append var-s1-sym (drop var 1))
                  (T (assign ctx [lambda-name: func-name])
                     (.AM gtx
-                         (append
-                           'lambda
-                           (.AM gtx [(drop (@1 args) 1)])
-                           (drop args 2))))]))
+                         (if is-coroutine?
+                           (append
+                             'lambda
+                             :coroutine
+                             (.AM gtx [(drop (@1 args) 1)])
+                             (drop args 2))
+                           (append
+                             'lambda
+                             (.AM gtx [(drop (@1 args) 1)])
+                             (drop args 2)))))]))
       (else
         (error "'define' unexpected first argument" args)))))
 ;----------------------------------------------------------------------------

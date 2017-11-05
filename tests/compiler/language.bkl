@@ -1436,6 +1436,20 @@
        (c) (c) (c) (c)])
    [0 1 2 0 1 2 OO: FF: 0 1])
 
+; Test define coroutine syntax:
+(T '(begin
+      (define k 0)
+      (define :coroutine (fn x)
+        (set! k x)
+        (set! k (yield 20))
+        30)
+      [k
+       (fn 10)
+       k
+       (fn 31)
+       k])
+   [0 20 10 30 31])
+
 ; Recursive coroutine calling of the same :coroutine
 ; (Works, because the coroutine restores the last save point
 ;  only once. We never should re-enter the same execution context
