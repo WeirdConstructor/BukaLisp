@@ -183,7 +183,8 @@ class Tokenizer
                 {
                     m_u8buf.skip_bytes(1);
                     c = m_u8buf.first_byte();
-                    if (c == '\'')
+                    char delim_char = c;
+                    if (c == delim_char)
                     {
                         m_u8buf.skip_bytes(1);
                         push(Token(TOK_STR_DELIM, c));
@@ -197,7 +198,7 @@ class Tokenizer
                                 char peek_c = m_u8buf.first_byte();
 
                                 if (checkEOF()) return;
-                                if (peek_c == '\'')
+                                if (peek_c == delim_char)
                                     m_u8tmp.append_byte(m_u8buf.first_byte(true));
                                 else if (peek_c == '\\')
                                     m_u8tmp.append_byte(m_u8buf.first_byte(true));
@@ -210,7 +211,7 @@ class Tokenizer
                                     m_u8tmp.append_byte(m_u8buf.first_byte(true));
                                 }
                             }
-                            else if (c == '\'')
+                            else if (c == delim_char)
                             {
                                 push(Token(m_u8tmp.as_string()));
                                 push(Token(TOK_STR_DELIM, c));
@@ -393,7 +394,8 @@ class Tokenizer
 
                     if (checkEOF()) return;
                 }
-                else if (c == ';')
+                else if (    c == ';'
+                         || (c == '#' && m_u8buf.first_byte() == '!'))
                 {
                     while (m_u8buf.length() > 0
                            && m_u8buf.first_byte(true) != '\n')

@@ -15,6 +15,7 @@
 #include "buklivm.h"
 #include "atom.h"
 #include "atom_printer.h"
+#include "bukalisp.h"
 #include "util.h"
 
 //#include <modules/util/utillib.h>
@@ -45,7 +46,7 @@ using namespace std;
         throw bukalisp::BukLiVMException( \
             std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
             std::string(msg) + ", not eq: " \
-            + a + " != " + b);
+            + (a) + " != " + (b));
 
 void test_gc1()
 {
@@ -263,7 +264,7 @@ void test_symbols_and_keywords()
     TEST_EQ(tc.pot_alive_syms(), 0, "no syms alive at start");
 
     tc.parse("test_symbols_and_keywords",
-             "(foo bar foo foo: baz: baz: foo:)");
+             "(foo bar foo foo: baz: :baz :foo:)");
 
     Atom r = tc.root();
 
@@ -507,6 +508,9 @@ void test_ieval_atoms()
     TEST_EVAL("#q'fo\\'\\\\oobar\\\\'",   "\"fo'\\\\oobar\\\\\"");
     TEST_EVAL("#q'fo\\'\\\\oo\"bar\\\\'", "\"fo'\\\\oo\\\"bar\\\\\"");
     TEST_EVAL("#q'\\s\\x\\foobar+[]\\''", "\"\\\\s\\\\x\\\\foobar+[]'\"");
+
+    TEST_EVAL("#q|foobar'xxx|", "\"foobar'xxx\"");
+    TEST_EVAL("#q/f\\xoobar'xxx/", "\"f\\\\xoobar'xxx\"");
 
     TEST_EVAL("\"\\xFF;\\xFE;\"",         "\"\\xff;\\xfe;\"");
     TEST_EVAL("\"\xFF\xFE\"",             "\"\\xff;\\xfe;\"");
@@ -1047,6 +1051,9 @@ void test_ieval_comments()
     TEST_EVAL("(begin 13 #;#t)",                    "13");
     TEST_EVAL("(begin 13 #;nil)",                   "13");
 
+    TEST_EVAL("(let ((x 10))\n;(set! x 20)\nx)",    "10");
+    TEST_EVAL("(let ((x 10))\n#!(set! x 20)\nx)",   "10");
+
     TEST_EVAL("(begin 13 #|nil|#)",                 "13");
     TEST_EVAL("#|\n    test\n foo |#\n123",         "123");
     TEST_EVAL("(begin 13 #||#)",                    "13");
@@ -1068,6 +1075,25 @@ void test_ieval_eval()
               "  (eval '(define x 12) env) "
               "  (eval 'x env))",
               "12");
+}
+//---------------------------------------------------------------------------
+
+void test_bukalisp_instance()
+{
+    Instance i;
+
+    auto factory = i.create_value_factory();
+
+    auto val = (*factory).open_list()(1)(2)(3).close_list().value();
+
+    TEST_EQSTR((*factory)(10).value()->to_write_str(),     "10",        "int");
+    TEST_EQSTR((*factory)(10.2).value()->to_write_str(),   "10.2",      "dbl");
+    TEST_EQSTR((*factory)(false).value()->to_write_str(),  "#false",    "bool");
+    TEST_EQSTR((*factory)().value()->to_write_str(),       "nil",       "nil");
+    TEST_EQSTR(
+        ((*factory).open_list()(1)(2)(3).close_list().value()->to_write_str()),
+        "(1 2 3)",
+        "list 1");
 }
 //---------------------------------------------------------------------------
 
@@ -1130,26 +1156,27 @@ int main(int argc, char *argv[])
 #               define RUN_TEST(name)   test_##name(); std::cout << "OK - " << #name << std::endl;
 ////                RUN_TEST(gc1);
 ////                RUN_TEST(gc2);
-                RUN_TEST(atom_gen1);
-                RUN_TEST(atom_gen2);
-                RUN_TEST(symbols_and_keywords);
-                RUN_TEST(maps);
-                RUN_TEST(atom_printer);
-                RUN_TEST(maps2);
-                RUN_TEST(atom_hash_table);
-                RUN_TEST(atom_debug_info);
-                RUN_TEST(ieval_atoms);
-                RUN_TEST(ieval_vars);
-                RUN_TEST(ieval_basic_stuff);
-                RUN_TEST(ieval_proc);
-                RUN_TEST(ieval_let);
-                RUN_TEST(ieval_cond);
-                RUN_TEST(ieval_lambda);
-                RUN_TEST(ieval_index_procs);
-                RUN_TEST(ieval_loops);
-                RUN_TEST(ieval_objs);
-                RUN_TEST(ieval_comments);
-                RUN_TEST(ieval_eval);
+//                RUN_TEST(atom_gen1);
+//                RUN_TEST(atom_gen2);
+//                RUN_TEST(symbols_and_keywords);
+//                RUN_TEST(maps);
+//                RUN_TEST(atom_printer);
+//                RUN_TEST(maps2);
+//                RUN_TEST(atom_hash_table);
+//                RUN_TEST(atom_debug_info);
+//                RUN_TEST(ieval_atoms);
+//                RUN_TEST(ieval_vars);
+//                RUN_TEST(ieval_basic_stuff);
+//                RUN_TEST(ieval_proc);
+//                RUN_TEST(ieval_let);
+//                RUN_TEST(ieval_cond);
+//                RUN_TEST(ieval_lambda);
+//                RUN_TEST(ieval_index_procs);
+//                RUN_TEST(ieval_loops);
+//                RUN_TEST(ieval_objs);
+//                RUN_TEST(ieval_comments);
+//                RUN_TEST(ieval_eval);
+                RUN_TEST(bukalisp_instance);
 
                 cout << "TESTS OK" << endl;
             }

@@ -162,7 +162,6 @@
                 (case (@0 value)
                   ((syntax:) ((@1 value) ctx arg T gtx))
                   ((macro:)
-                   (displayln VAL: value arg)
                    (let ((transformed
                            (apply (@1 value) (drop arg 1))))
 

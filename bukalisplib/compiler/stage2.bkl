@@ -183,6 +183,22 @@
               (.op-mov (P: ctx) var-adr val-adr nil)
               (.recycle-pos (F: ctx) val-adr))
             var-adr))]
+       ['#1#set*
+        (lambda (ctx arg T gtx)
+          (let ((val-adrs []))
+            (do-each (v arg)
+              (push! val-adrs (T ctx (@1 v))))
+            (let ((i            0)
+                  (last-var-adr nil))
+              (do-each (v arg)
+                (.op-mov (P: ctx)
+                         (set! last-var-adr (T ctx (@0 v)))
+                         (@i val-adrs)
+                         nil)
+                (.recycle-pos (F: ctx) (@i val-adrs))
+                (set! i (+ i 1)))
+              #;(displayln SET*: (pp-str (code: (P: ctx))))
+              last-var-adr)))]
        (generate-binary-op '#1#add 'op-add)
        (generate-binary-op '#1#sub 'op-sub)
        (generate-binary-op '#1#mul 'op-mul)
@@ -202,7 +218,7 @@
             adr))]
        ['#1#nil
         (lambda (ctx arg T gtx)
-          (let ((adr (.new-tmp-pos (F: ctx))))
+          (let ((adr (tmp-pos-or-parent-adr ctx)))
           (.op-load-nil (P: ctx) adr)
           adr))]
        ['#1#set
@@ -228,11 +244,11 @@
             (T (assign ctx [env: (assign (env: ctx) new-vars)]) (@1 arg))))]
        ['#1#map
         (lambda (ctx arg T gtx)
-          (let ((map-adrs       [])
-                (recycle-adrs   [])
-                (map-init-adrs-vec [])
-                (ret-adr (tmp-pos-or-parent-adr ctx))
-                (map-elements   arg))
+          (let ((map-adrs           [])
+                (recycle-adrs       [])
+                (map-init-adrs-vec  [])
+                (ret-adr            (tmp-pos-or-parent-adr ctx))
+                (map-elements       arg))
             (do-each (map-pair map-elements)
               (let ((key-adr (T ctx (@0 map-pair)))
                     (val-adr (T ctx (@1 map-pair))))
@@ -268,12 +284,17 @@
             ret-adr))]
        ['#1#return
         (lambda (ctx arg T gtx)
-          (.op-return (P: ctx) (T ctx (@0 arg))))]
+          (.op-return (P: ctx) (T ctx (@0 arg)))
+          (.new-tmp-pos (F: ctx)))]
        ['#1#yield
         (lambda (ctx arg T gtx)
           (let ((ret-adr (.new-tmp-pos (F: ctx))))
             (.op-yield (P: ctx) ret-adr (T ctx (@0 arg)))
             ret-adr))]
+       ['#1#raise
+        (lambda (ctx arg T gtx)
+          (.op-ctrl-jmp (P: ctx) (T ctx (@0 arg)))
+          (.new-tmp-pos (F: ctx)))]
        ['#1#eval
         (lambda (ctx arg T gtx)
           (let ((code-adr (T ctx (@0 arg)))
@@ -283,7 +304,7 @@
                                (.op-load-nil (P: ctx) e-adr)
                                e-adr))
                            (T ctx (@1 arg))))
-                (out-adr (.new-tmp-pos (F: ctx))))
+                (out-adr (tmp-pos-or-parent-adr ctx)))
             (.op-eval (P: ctx) out-adr code-adr env-adr)
             (.recycle-pos (F: ctx) env-adr)
             (.recycle-pos (F: ctx) code-adr)
@@ -310,7 +331,7 @@
                 (end-val-adr  (T ctx (@0 (@0 arg))))
                 (step-val-adr (T ctx (@1 (@0 arg))))
                 (iter-adr     (T ctx (@2 (@0 arg))))
-                (ret-adr      (.new-tmp-pos (F: ctx)))
+                (ret-adr      (tmp-pos-or-parent-adr ctx))
                 (body-pad     (make-code-pad-object (F: ctx)))
                 (body-ret-adr (T (assign ctx [P: body-pad]) (@1 arg))))
             (if (eqv? (@2 body-ret-adr) tmp:)
@@ -338,7 +359,7 @@
         (lambda (ctx arg T gtx)
           (let ((cond-pad       (make-code-pad-object (F: ctx)))
                 (cond-adr       (T (assign ctx [P: cond-pad]) (@0 arg)))
-                (ret-adr        (.new-tmp-pos (F: ctx)))
+                (ret-adr        (tmp-pos-or-parent-adr ctx))
                 (body-pad       (make-code-pad-object (F: ctx)))
                 (body-ret-adr   (T (assign ctx [P: body-pad]) (@1 arg))))
             (if (eqv? (@2 body-ret-adr) tmp:)
@@ -357,6 +378,30 @@
                       cond-adr)
             (.recycle-pos (F: ctx) cond-adr)
             ret-adr))]
+       ['#1#do
+        (lambda (ctx arg T gtx)
+          (let ((test-pad       (make-code-pad-object (F: ctx)))
+                (test-adr       (T (assign ctx [P: test-pad]) (@0 arg)))
+                (result-pad     (make-code-pad-object (F: ctx)))
+                (result-adr     (T (assign ctx [P: result-pad]) (@1 arg)))
+                (inc-pad        (make-code-pad-object (F: ctx)))
+                (body-pad       (make-code-pad-object (F: ctx)))
+                (recycle-adrs   []))
+            (push! recycle-adrs (T (assign ctx [P: inc-pad]) (@2 arg)))
+            (push! recycle-adrs (T (assign ctx [P: body-pad]) (@3 arg)))
+            (push! recycle-adrs test-adr)
+            (.append-code-pad body-pad inc-pad)
+            (.op-brif test-pad (+ 1 (.count-ops body-pad)) test-adr)
+            (.op-br body-pad (- 0
+                                (+ 1
+                                   (.count-ops test-pad)
+                                   (.count-ops body-pad))))
+            (.append-code-pad (P: ctx) test-pad)
+            (.append-code-pad (P: ctx) body-pad)
+            (.append-code-pad (P: ctx) result-pad)
+            (do-each (adr recycle-adrs)
+              (.recycle-pos (F: ctx) adr))
+            result-adr))]
        ['#1#do-each
 
 ;         (define ret-adr (.new-tmp-pos self))
@@ -505,6 +550,28 @@
             (do-each (body (reverse out-bodies))
               (.append-code-pad (P: ctx) body))
             out-adr))]
+       ['#1#handle-exceptions
+        (lambda (ctx arg T gtx)
+          (let ((var-adr        (T ctx (@0 arg)))
+                (exh-body       (make-code-pad-object (F: ctx)))
+                (expr-body      (make-code-pad-object (F: ctx)))
+                (ret-adr        (tmp-pos-or-parent-adr ctx))
+                (exh-ret-adr    (T (assign ctx [P: exh-body]) (@1 arg)))
+                (body-ret-adr   (T (assign ctx [P: expr-body]) (@2 arg))))
+            (.op-mov          exh-body  ret-adr exh-ret-adr nil)
+            (.op-mov          expr-body ret-adr body-ret-adr nil)
+            (.op-pop-jmp      expr-body)
+            (.op-br           expr-body
+                              (+ 1 (.count-ops exh-body)))
+            (.op-push-jmp     (P: ctx)
+                              var-adr
+                              (.count-ops expr-body))
+            (.append-code-pad (P: ctx) expr-body)
+            (.op-pop-jmp      (P: ctx))
+            (.append-code-pad (P: ctx) exh-body)
+            (.recycle-pos (F: ctx) exh-ret-adr)
+            (.recycle-pos (F: ctx) body-ret-adr)
+            ret-adr))]
        ['#1#lambda
         (lambda (ctx arg T gtx)
           (let ((lambda-spec        (@0 arg))

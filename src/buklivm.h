@@ -20,6 +20,26 @@ namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
+class VMRaise : public std::exception
+{
+    private:
+        GC_ROOT_MEMBER(m_raised_obj);
+        std::string         m_err;
+    public:
+        VMRaise(GC &gc, const Atom &a)
+          : GC_ROOT_MEMBER_INITALIZE(gc, m_raised_obj)
+        {
+            m_raised_obj = a;
+            m_err = "Raised error obj: " + m_raised_obj.to_write_str();
+        }
+
+        Atom &get_error_obj() { return m_raised_obj; }
+
+        virtual const char *what() const noexcept { return m_err.c_str(); }
+        virtual ~VMRaise() { }
+};
+//---------------------------------------------------------------------------
+
 class VMException : public std::exception
 {
     private:
@@ -62,6 +82,9 @@ class VMException : public std::exception
     X(IKEY,          25) /*                                        */ \
     X(YIELD,         26) /* (O: cont-val A: ret-val)               */ \
     X(NEW_ARG_VEC,   27) /*                                        */ \
+    X(PUSH_JMP,      28) /*                                        */ \
+    X(POP_JMP,       29) /*                                        */ \
+    X(CTRL_JMP,      30) /*                                        */ \
     X(ADD,          100) /*                                        */ \
     X(SUB,          101) /*                                        */ \
     X(MUL,          102) /*                                        */ \

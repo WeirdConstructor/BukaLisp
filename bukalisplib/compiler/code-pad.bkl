@@ -161,6 +161,15 @@
       ($define! self (op-iter iter-idx vec-idx)
         (push-op ITER: iter-idx vec-idx 0 0))
 
+      ($define! self (op-push-jmp var-adr br-offs)
+        (push-op PUSH_JMP: var-adr br-offs 0 0))
+
+      ($define! self (op-pop-jmp)
+        (push-op POP_JMP: 0 0 0 0))
+
+      ($define! self (op-ctrl-jmp obj-adr)
+        (push-op CTRL_JMP: obj-adr 0 0 0))
+
       ($define! self (op-next ok-idx val-idx iter-idx)
         (push-op NEXT: ok-idx val-idx iter-idx 0))
 

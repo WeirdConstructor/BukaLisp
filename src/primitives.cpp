@@ -303,6 +303,26 @@ START_PRIM()
 END_PRIM(pop!)
 
 START_PRIM()
+    REQ_EQ_ARGC(unshift!, 2)
+
+    if (A0.m_type != T_VEC)
+        error("Can't unshift onto something that is not a list", A0);
+
+    A0.m_d.vec->unshift(A1);
+    out = A1;
+END_PRIM(unshift!)
+
+START_PRIM()
+    REQ_EQ_ARGC(shift!, 1)
+
+    if (A0.m_type != T_VEC)
+        error("Can't shift from something that is not a list", A0);
+
+    out = *(A0.m_d.vec->first());
+    A0.m_d.vec->shift();
+END_PRIM(shift!)
+
+START_PRIM()
     REQ_EQ_ARGC(set-length!, 2);
 
     if (A0.m_type != T_VEC)
@@ -738,7 +758,7 @@ END_PRIM_DOC(bkl-set-doc!,
 "This function is mainly useful if you want to annotate your\n"
 "own code with documenation. BukaLISP usually registers everything itself.\n"
 "\n"
-"See also: `doc?`\n"
+"See also: `?doc`\n"
 )
 
 START_PRIM()
@@ -868,9 +888,16 @@ START_PRIM()
 
         if (search[0] == '*')
         {
-            if (   docstr.find(search.substr(1))   != std::string::npos
-                || funcname.find(search.substr(1)) != std::string::npos)
+            if (search.size() == 1)
+            {
                 found->push(MAP_ITER_VAL(a));
+            }
+            else
+            {
+                if (   docstr.find(search.substr(1))   != std::string::npos
+                    || funcname.find(search.substr(1)) != std::string::npos)
+                    found->push(MAP_ITER_VAL(a));
+            }
         }
         else if (search[0] == '?')
         {
@@ -906,6 +933,8 @@ END_PRIM_DOC(?doc,
 "If _search-str_ starts with a '*' the key (function name) and\n"
 "the documentation string for that key will be checked if they contain\n"
 "_search-str_.\n"
+"If _search-str_ consists only of '*' all documentation entries will be returned,\n"
+"which is usually only useful if you want to write your own documentation formatter.\n"
 "If _search-str_ starts with a '?' only the first line in the documentation\n"
 "will be checked if it contains _search-str_.\n"
 "Otherwise only the keys in the database will be checked whether they\n"

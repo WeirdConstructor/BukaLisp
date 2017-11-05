@@ -24,6 +24,11 @@
 
 //---------------------------------------------------------------------------
 
+// If you enable this flag, the GC will do some more checking and try
+// to find bugs in missed rooting of values.
+#define GC_DEBUG_MODE 0
+//---------------------------------------------------------------------------
+
 /******************************************************************************
 * Copyright (C) 2017 Weird Constructor
 *

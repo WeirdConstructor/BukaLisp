@@ -16,6 +16,7 @@
                           (let ((r (find-transform-match
                                     match-struct data leaf-ctx global-ctx)))
                             (when (nil? r)
+                              (displayln Transform: (pp-str data))
                               (error "No transformation found" data))
                             r))))
     (when (nil? (meta-stack: global-ctx))
@@ -67,6 +68,7 @@
                    (set! ret (match-lambda leaf-ctx (drop data 1) T global-ctx))
                    (set! found? #t))))))
           (unless found?
+            (displayln Transform: (pp-str data))
             (error "Couldn't find transformation for " data))
           ret))))))
 ;

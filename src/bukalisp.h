@@ -13,62 +13,81 @@ class Value
 
         Value(const Value &)        = delete;
         Value()                     = delete;
-        operator=(const Value &)    = delete;
+        Value &operator=(const Value &)    = delete;
     public:
         Value(GC &gc, const Atom &value)
             : GC_ROOT_MEMBER_INITALIZE(gc, m_value)
         {
             m_value = value;
         }
+
+        std::string to_write_str() const { return m_value.to_write_str(); }
 };
+//---------------------------------------------------------------------------
+
+typedef std::shared_ptr<Value>          ValuePtr;
+class ValueFactory;
+typedef std::shared_ptr<ValueFactory>   ValueFactoryPtr;
+
 //---------------------------------------------------------------------------
 
 class ValueFactory
 {
     private:
-        GC          &m_gc;
-        GC_ROOT_MEMBER_VEC(m_stack)
-        GC_ROOT_MEMBER(m_current)
-        bool         m_got_value;
+        GC           &m_gc;
+        AtomGenerator m_ag;
 
     public:
         ValueFactory(GC &gc)
-            : GC_ROOT_MEMBER_INITALIZE_VEC(gc, m_stack),
-              GC_ROOT_MEMBER_INITALIZE(gc, m_current),
-              m_got_value(false)
+            : m_gc(gc), m_ag(&gc)
         {
-            m_stack = m_gc.allocate_vector(0);
+            m_ag.start();
         }
 
         ValueFactory &open_list()
         {
-            if (m_got_value)
-                m_stack->push(m_current);
+            m_ag.start_list();
             return *this;
         }
 
-        ValueFactory &close()
+        ValueFactory &close_list()
         {
-            if (m_got_value)
-                return *this;
-
-            Atom new_cur = m_stack->last();
-            m_stack->pop();
-
-            if (m_current.m_type == T_VEC)
-            {
-                m_current.m_d.vec->push(new_cur);
-            }
-            else
-            {
-                m_current = new_cur;
-            }
+            m_ag.end_list();
+            return *this;
         }
 
+        ValueFactory &operator()(int i)
+        {
+            m_ag.atom_int(i);
+            return *this;
+        }
         ValueFactory &operator()(int64_t i)
-        { m_current.set_int(i); return *this; }
+        {
+            m_ag.atom_int(i);
+            return *this;
+        }
         ValueFactory &operator()(double i)
-        { m_current.set_dbl(i); return *this; }
+        {
+            m_ag.atom_dbl(i);
+            return *this;
+        }
+        ValueFactory &operator()()
+        {
+            m_ag.atom_nil();
+            return *this;
+        }
+        ValueFactory &operator()(bool b)
+        {
+            m_ag.atom_bool(b);
+            return *this;
+        }
+
+        ValuePtr value()
+        {
+            auto val = std::make_shared<Value>(m_gc, m_ag.root());
+            m_ag.start();
+            return val;
+        }
 };
 /*
 
@@ -94,9 +113,6 @@ class ValueFactory
 */
 //---------------------------------------------------------------------------
 
-typedef std::shared_ptr<Value>          ValuePtr;
-
-//---------------------------------------------------------------------------
 
 class Instance
 {
@@ -107,7 +123,7 @@ class Instance
 
     public:
         Instance()
-            : m_vb(&m_rt), m_i(&m_rt, &m_vm)
+            : m_vm(&m_rt), m_i(&m_rt, &m_vm)
         {
         }
 

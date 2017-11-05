@@ -325,6 +325,24 @@ void AtomVec::push(const Atom &a)
 }
 //---------------------------------------------------------------------------
 
+void AtomVec::unshift(const Atom &a)
+{
+    size_t new_idx = m_len;
+    check_size(new_idx);
+    for (size_t i = new_idx; i > 0; i--)
+        m_data[i] = m_data[i - 1];
+    m_data[0] = a;
+}
+//---------------------------------------------------------------------------
+
+void AtomVec::shift()
+{
+    for (size_t i = 1; i < m_len; i++)
+        m_data[i - 1] = m_data[i];
+    m_len--;
+}
+//---------------------------------------------------------------------------
+
 void AtomVec::check_size(size_t idx)
 {
     if (idx < m_len)

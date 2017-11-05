@@ -220,6 +220,11 @@ void VM::report_arity_error(Atom &arity, size_t argc)
 }
 //---------------------------------------------------------------------------
 
+#define VM_JUMP_FRAME_SIZE 3
+#define VM_JMP_PC    0
+#define VM_JMP_OUT_I 1
+#define VM_JMP_OUT_E 2
+
 #define VM_CALL_FRAME_SIZE 7
 #define VM_CF_CLOS  0
 #define VM_CF_PROG  1
@@ -464,6 +469,16 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                  << ") => "                           \
                  << (ret_val).to_write_str() << endl; \
     } while(0);
+
+#define SEARCH_AND_POP_TO_LAST_CALL_FRAME(c)                     \
+    c = cont_stack->last();                           \
+    while (   c                                       \
+           && c->m_type == T_VEC                      \
+           && c->m_d.vec->m_len < VM_CALL_FRAME_SIZE) \
+    {                                                 \
+        cont_stack->pop();                            \
+        c = cont_stack->last();                       \
+    }
 
 #define RECORD_CALL_FRAME(func, call_frame)             \
     Atom call_frame(T_VEC,                              \
@@ -968,8 +983,10 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     E_GET(tmp, O);
                     ret_val = *tmp;
 
-                    // retrieve the continuation:
-                    Atom *c = cont_stack->last();
+                    // retrieve the continuation and skip non-call-frames:
+                    Atom *c = nullptr;
+                    SEARCH_AND_POP_TO_LAST_CALL_FRAME(c);
+
                     if (!c || c->m_type == T_NIL)
                     {
                         ret = ret_val;
@@ -979,10 +996,9 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     Atom call_frame = *c;
                     cont_stack->pop();
-                    if (call_frame.m_type != T_VEC || call_frame.m_d.vec->m_len < 4)
+                    if (call_frame.m_type != T_VEC || call_frame.m_d.vec->m_len < VM_CALL_FRAME_SIZE)
                         error("Empty or bad call frame stack item!", call_frame);
 
-                    Atom *cv = call_frame.m_d.vec->m_data;
                     RESTORE_FROM_CALL_FRAME(call_frame, ret_val);
                     break;
                 }
@@ -992,7 +1008,22 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     E_GET(tmp, A);
                     Atom ret_val = *tmp;
 
-                    Atom cur_func = cont_stack->last()->at(0);
+                    Atom *c = nullptr;
+                    for (size_t i = cont_stack->m_len; i > 0; i--)
+                    {
+                        c = &(cont_stack->m_data[i - 1]);
+                        if (   c->m_type == T_VEC
+                            && c->m_d.vec->m_len == VM_CALL_FRAME_SIZE)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (!c || c->m_type == T_NIL)
+                        error("Can't yield from direct top level. "
+                              "VM/Compiler ERROR!?!?!", *tmp);
+
+                    Atom cur_func = c->at(0);
                     RECORD_CALL_FRAME(cur_func, coro_cont_frame);
 
                     AtomVec *cont_copy =
@@ -1042,10 +1073,95 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                         func.m_d.vec->set(2, Atom(T_VEC, cont_copy));
                     }
                     else
-                        error("Can't 'yield' from a non-coroutine call!", ret_val);
+                        error("Can't 'yield' from a non-coroutine call!",
+                              ret_val);
 
                     cont_stack->m_len = ret_cont_stack_idx;
                     RESTORE_FROM_CALL_FRAME(ret_call_frame, ret_val);
+                    break;
+                }
+
+                case OP_PUSH_JMP:
+                {
+                    AtomVec *jmp_frame =
+                        m_rt->m_gc.allocate_vector(
+                            VM_JUMP_FRAME_SIZE);
+                    jmp_frame->m_len = VM_JUMP_FRAME_SIZE;
+                    jmp_frame->m_data[VM_JMP_PC].set_ptr(m_pc + P_A);
+                    jmp_frame->m_data[VM_JMP_OUT_I].set_int(P_O);
+                    jmp_frame->m_data[VM_JMP_OUT_E].set_int(PE_O);
+                    cont_stack->push(Atom(T_VEC, jmp_frame));
+                    break;
+                }
+
+                case OP_POP_JMP:
+                {
+                    Atom *c = cont_stack->last();
+                    if (   !c
+                        || c->m_type != T_VEC
+                        || c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE)
+                        error("Bad exception handler frame on stack",
+                              c ? *c : Atom());
+
+                    cont_stack->pop();
+                    break;
+                }
+
+                case OP_CTRL_JMP:
+                {
+                    Atom raised_val;
+                    E_GET(tmp, O);
+                    raised_val = *tmp;
+
+                    Atom *c = cont_stack->last();
+                    while (c && (   c->m_type != T_VEC
+                                 || c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE))
+                    {
+                        if (c->m_d.vec->m_len == VM_CALL_FRAME_SIZE)
+                        {
+                            Atom call_frame = *c;
+                            Atom nil_val;
+                            RESTORE_FROM_CALL_FRAME(call_frame, nil_val);
+                        }
+                        cont_stack->pop();
+                        c = cont_stack->last();
+                    }
+
+                    // XXX: Idea for (with-cleanup ...), in the CTRL-JMP
+                    //      we push a re-raise frame onto the control stack,
+                    //      and create a new op, called OP_CHK_CTRL_JMP,
+                    //      which looks for a marked re-raise frame and pops it,
+                    //      and returns a flag and a value (.op-chk-ctrl-jmp cond-adr val-adr)
+                    //      which can then be used by brnif and op-ctrl-jmp to reinitiate
+                    //      a new throw. (We handle this case in the compiler!)
+                    //
+                    //      The with-cleanup is a new kind of control frame,
+                    //      which is checked by RETURN and does the same as above.
+                    //      But this leads to new problems: How to continue a return!?!?!?
+
+                    if (   !c
+                        || c->m_type == T_NIL
+                        || (   c->m_type != T_VEC
+                            && c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE))
+                        throw VMRaise(m_rt->m_gc, *tmp);
+
+                    AtomVec *exh_frame = c->m_d.vec;
+                    if (   exh_frame->at(VM_JMP_PC).m_type    != T_C_PTR
+                        || exh_frame->at(VM_JMP_OUT_I).m_type != T_INT
+                        || exh_frame->at(VM_JMP_OUT_E).m_type != T_INT)
+                        error("Bad exception handler frame on call stack", *c);
+
+                    E_SET_CHECK_REALLOC_D(
+                        exh_frame->at(VM_JMP_OUT_E).m_d.i,
+                        exh_frame->at(VM_JMP_OUT_I).m_d.i);
+                    E_SET_D(
+                        exh_frame->at(VM_JMP_OUT_E).m_d.i,
+                        exh_frame->at(VM_JMP_OUT_I).m_d.i,
+                        raised_val);
+
+                    m_pc = (INST *) exh_frame->at(VM_JMP_PC).m_d.ptr;
+                    if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
+                        error("CTRL_JMP out of PROG", Atom());
                     break;
                 }
 

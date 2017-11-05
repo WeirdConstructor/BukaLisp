@@ -145,6 +145,8 @@ struct AtomVec
     Atom *last();
     void pop();
     void push(const Atom &a);
+    void unshift(const Atom &a);
+    void shift();
     void check_size(size_t idx);
 
     Atom at(size_t idx);
@@ -686,16 +688,21 @@ class GC
             if (map->m_gc_color == m_current_color)
                 return;
 
-            map->m_gc_color = m_current_color;
+#           if GC_DEBUG_MODE
+                if (map->m_gc_color == GC_COLOR_FREE)
+                    throw BukaLISPException("Major GC rooting bug: GC marking free or deleted vector");
+#           endif
 
-            if (map && map->m_meta)
-                m_gc_vec_stack.push_back(map->m_meta);
+            map->m_gc_color = m_current_color;
 
             ATOM_MAP_FOR(i, map)
             {
                 mark_atom(MAP_ITER_KEY(i));
                 mark_atom(MAP_ITER_VAL(i));
             }
+
+            if (map->m_meta)
+                m_gc_vec_stack.push_back(map->m_meta);
         }
 
         void mark()
@@ -720,14 +727,15 @@ class GC
             while (!(   m_gc_vec_stack.empty()
                      && m_gc_map_stack.empty()))
             {
-                if (!m_gc_vec_stack.empty())
+                while (!m_gc_vec_stack.empty())
                 {
                     AtomVec *vec = m_gc_vec_stack.back();
                     m_gc_vec_stack.pop_back();
 
                     mark_vector(vec);
                 }
-                else // m_gc_map_stack
+
+                while (!m_gc_map_stack.empty())
                 {
                     AtomMap *map = m_gc_map_stack.back();
                     m_gc_map_stack.pop_back();
@@ -746,6 +754,7 @@ class GC
                     m_current_color,
                     [this](Sym *cur)
                     {
+                        cur->m_gc_color = GC_COLOR_FREE;
 //                        std::cout << "SWPSYM[" << cur->m_str << "]" << std::endl;
                         auto it = m_symtbl.find(cur->m_str);
                         if (it != m_symtbl.end())
@@ -760,6 +769,7 @@ class GC
                     m_current_color,
                     [this](AtomMap *cur)
                     {
+                        cur->m_gc_color = GC_COLOR_FREE;
 //                        std::cout << "SWPMAP[" << Atom(T_MAP, cur).to_write_str() << "]" << std::endl;
                         delete cur;
                     });
@@ -771,6 +781,8 @@ class GC
                     m_current_color,
                     [this](UserData *cur)
                     {
+                        cur->m_gc_color = GC_COLOR_FREE;
+//                        std::cout << "SWPMAP[" << Atom(T_MAP, cur).to_write_str() << "]" << std::endl;
 //                        std::cout << "SWEEP USERDATA: " << cur << std::endl;
                         delete cur;
                     });
@@ -780,7 +792,11 @@ class GC
                     m_vectors,
                     m_num_alive_vectors,
                     m_current_color,
-                    [this](AtomVec *cur) { give_back_vector(cur); });
+                    [this](AtomVec *cur)
+                    {
+                        cur->m_gc_color = GC_COLOR_FREE;
+                        give_back_vector(cur);
+                    });
         }
 
         Sym *allocate_sym()
@@ -792,6 +808,30 @@ class GC
             m_num_new_syms++;
             return new_sym;
         }
+
+        void mark_vector(AtomVec *&vec)
+        {
+            if (!vec) return;
+
+            if (vec->m_gc_color == m_current_color)
+                return;
+
+#           if GC_DEBUG_MODE
+                if (vec->m_gc_color == GC_COLOR_FREE)
+                    throw BukaLISPException("Major GC rooting bug: GC marking free or deleted vector");
+#           endif
+
+            vec->m_gc_color = m_current_color;
+
+            for (size_t i = 0; i < vec->m_len; i++)
+            {
+                mark_atom(vec->m_data[i]);
+            }
+
+            if (vec->m_meta)
+                m_gc_vec_stack.push_back(vec->m_meta);
+        }
+
 
     public:
         GC()
@@ -894,7 +934,14 @@ class GC
 
                 case T_UD:
                     if (at.m_d.ud)
+                    {
+#                       if GC_DEBUG_MODE
+                            if (at.m_d.ud->m_gc_color == GC_COLOR_FREE)
+                                throw BukaLISPException("Major GC rooting bug: GC marking free or deleted vector");
+#                       endif
+
                         at.m_d.ud->mark(this, m_current_color);
+                    }
                     break;
 
                 case T_SYNTAX:
@@ -907,42 +954,37 @@ class GC
             }
         }
 
-        void mark_vector(AtomVec *&vec)
-        {
-            if (!vec) return;
-
-            // Vector was put back on free list:
-            if (vec->m_gc_color == GC_COLOR_FREE)
-                return;
-
-            if (vec->m_gc_color == m_current_color)
-                return;
-
-            vec->m_gc_color = m_current_color;
-
-            if (vec->m_meta && vec->m_meta)
-                m_gc_vec_stack.push_back(vec->m_meta);
-
-            for (size_t i = 0; i < vec->m_len; i++)
-            {
-                mark_atom(vec->m_data[i]);
-            }
-        }
-
         void collect_maybe()
         {
-            if (   (m_num_new_maps    > m_num_alive_maps   )
-                || (m_num_new_vectors > m_num_alive_vectors)
-                || (m_num_new_syms    > m_num_alive_syms   ))
-            {
-//                std::cout << "GC collect at " << m_num_new_vectors
-//                          << " <=> " << m_num_alive_vectors << std::endl;
-//                std::cout << "GC collect at " << m_num_new_maps
-//                          << " <=> " << m_num_alive_maps << std::endl;
-//                std::cout << "GC collect at " << m_num_new_syms
-//                          << " <=> " << m_num_alive_syms << std::endl;
-                collect();
-            }
+#           if GC_DEBUG_MODE
+                if (   (m_num_new_maps     > (m_num_alive_maps     / 16))
+                    || (m_num_new_vectors  > (m_num_alive_vectors  / 16))
+                    || (m_num_new_syms     > (m_num_alive_syms     / 16))
+                    || (m_num_new_userdata > (m_num_alive_userdata / 16)))
+                {
+    //                std::cout << "GC collect at " << m_num_new_vectors
+    //                          << " <=> " << m_num_alive_vectors << std::endl;
+    //                std::cout << "GC collect at " << m_num_new_maps
+    //                          << " <=> " << m_num_alive_maps << std::endl;
+    //                std::cout << "GC collect at " << m_num_new_syms
+    //                          << " <=> " << m_num_alive_syms << std::endl;
+                    collect();
+                }
+#           else
+                if (   (m_num_new_maps     > m_num_alive_maps    )
+                    || (m_num_new_vectors  > m_num_alive_vectors )
+                    || (m_num_new_syms     > m_num_alive_syms    )
+                    || (m_num_new_userdata > m_num_alive_userdata))
+                {
+    //                std::cout << "GC collect at " << m_num_new_vectors
+    //                          << " <=> " << m_num_alive_vectors << std::endl;
+    //                std::cout << "GC collect at " << m_num_new_maps
+    //                          << " <=> " << m_num_alive_maps << std::endl;
+    //                std::cout << "GC collect at " << m_num_new_syms
+    //                          << " <=> " << m_num_alive_syms << std::endl;
+                    collect();
+                }
+#           endif
         }
 
         void collect()
@@ -1034,7 +1076,7 @@ class GC
                         m_tiny_vectors, m_num_tiny_vectors, GC_TINY_VEC_LEN);
                 }
 
-                new_vec         = m_tiny_vectors;
+                new_vec        = m_tiny_vectors;
                 m_tiny_vectors = m_tiny_vectors->m_gc_next;
             }
 

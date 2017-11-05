@@ -72,9 +72,37 @@
   'yield
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'yield needs exactly 1 arguments" args))
+      (error "'yield' needs exactly 1 arguments" args))
     (append '#1#yield [(T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
+
+(add-syntax
+  'raise
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 2)
+      (error "'raise' needs exactly 1 arguments" args))
+    (append '#1#raise [(T ctx (@1 args))])))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'handle-exceptions
+  (lambda (ctx args T gtx)
+    (unless (> (length args) 3)
+      (error "'handle-exceptions' needs at least 3 arguments" args))
+    (unless (symbol? (@1 args))
+      (error "'handle-exceptions' first argument needs to be a symbol"))
+    (define var-ref [])
+    (compile-let-block
+      ctx T gtx
+      (.AM gtx [[(@1 args) nil]])
+      (lambda (ctx T gtx)
+        (.AM gtx
+             ['#1#handle-exceptions
+              (T ctx (@1 args))
+              (T ctx (@2 args))
+              (s1-begin T ctx (drop args 3))])))))
+;----------------------------------------------------------------------------
+
 
 (add-syntax
   'continue
@@ -308,8 +336,8 @@
                params)))
     (define macro-name (first params))
     (define macro-func
-      (eval (displayln (.AM gtx (append ['lambda (drop params 1)]
-                             (drop args 2))))))
+      (eval (.AM gtx (append ['lambda (drop params 1)]
+                             (drop args 2)))))
     (@!macro-name (env: ctx)
                   [macro: macro-func macro-name])
     (.AM gtx ['#1#nil])))
@@ -363,6 +391,34 @@
             (drop args 3))))]))
 ;----------------------------------------------------------------------------
 
+(bkl-set-doc! 'do-each
+#q|
+@iterative syntax (do-each (_val-sym_ _list-expr_) _sequence_)
+@iterative syntax (do-each (_key-sym_ _value-sym_ _map-expr_) _sequence_)
+
+The first version with just the _val-sym_ iterates over the value of
+_list-expr_, which must either be a list or a map,
+binding the variable _val-sym_ to the current item (list element or map value)
+and executing _sequence_ for each item.
+
+    (let ((non-zero-vals []))
+        (do-each (v [ 0 322 0 493 0 12 212 3 40 ])
+            (when (not (zero? v))
+                (push! non-zero-vals v)))
+        non-zero-vals)
+    ;=> (322 493 12 212 3 40)
+
+The second form with _key-sym_ iterates over like the first, except that
+_key-sym_ is bound to the list index or the map key for the corresponding
+value.
+
+    (let ((keys []) (vals []))
+        (do-each (k v { :a 10 :b 20 :c 30 })
+            (push! keys k)
+            (push! vals v))
+        keys)
+    ;=> (:a :b :c)
+|)
 (add-syntax
   'do-each
   (lambda (ctx args T gtx)
@@ -414,7 +470,6 @@
              [(T ctx (@0 iter-desc))]
              obj
              (s1-begin T ctx (drop args 2))]))))))
-
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -454,8 +509,8 @@
 (add-syntax
   'do
   (lambda (ctx args T gtx)
-    (unless (> (length args) 3)
-      (error "'do' needs at least 3 arguments (iterator binds, test and body)"
+    (unless (> (length args) 2)
+      (error "'do' needs at least 2 arguments (iterator binds, test and body)"
              args))
     (unless (list? (@1 args))
       (error "'do' first argument is not a list (iterator binds)"))
@@ -493,6 +548,9 @@
               (push! step-exprs
                      (DI! iter ['#1#set! (@0 bind) step]))
               (set! i (+ i 1))))
+          (if (> (length step-exprs) 1)
+            (unshift! step-exprs '#1#begin)
+            (set! step-exprs (first step-exprs)))
           ['#1#do
            (T ctx test-expr)
            (s1-begin T ctx test-end-block)

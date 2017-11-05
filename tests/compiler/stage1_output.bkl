@@ -30,6 +30,16 @@
 
 ;----------------------------------------------------------------------------
 
+(T '(handle-exceptions
+      x
+      (displayln x)
+      (begin 1 2 (raise 3)))
+   '(#1#let (x_0)
+     (#1#begin (#1#set! (#1#var x_0 x) (#1#nil))
+      (#1#handle-exceptions
+       (#1#var x_0 x)
+       (#1#apply (#1#prim displayln) ((#1#var x_0 x)))
+       (#1#begin (#1#data 1) (#1#data 2) (#1#raise (#1#data 3)))))))
 ;----------------------------------------------------------------------------
 
 (T '1     '(#1#data 1))
@@ -558,7 +568,7 @@
      (#1#do
       (#1#eq (#1#data 0) (#1#data 1))
       (#1#begin (#1#data 1) (#1#data 2) (#1#data 3))
-      ()
+      nil
       (#1#begin (#1#data 4) (#1#data 5) (#1#data 6)))))
 
 (T '(do ((i 10)
@@ -576,7 +586,7 @@
        (#1#add
         (#1#add (#1#var i_0 i) (#1#var y_1 y))
         (#1#data 11))
-       ((#1#set! (#1#var i_0 i) (#1#var i_0 i))
+       (#1#begin (#1#set! (#1#var i_0 i) (#1#var i_0 i))
         (#1#set! (#1#var y_1 y) (#1#add (#1#var y_1 y) (#1#data -1))))
        (#1#begin (#1#data x:) (#1#data y:) (#1#data z:))))))
 ;(displayln (bkl-gc-statistics))

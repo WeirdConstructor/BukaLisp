@@ -187,36 +187,44 @@ class Parser
                 case TOK_DBL:      m_tok.next(); M_BUILDER(atom_dbl(t.m_num.d)); break;
                 case TOK_INT:      m_tok.next(); M_BUILDER(atom_int(t.m_num.i)); break;
                 case TOK_CHR:
-                    {
-                        m_tok.next();
+                {
+                    m_tok.next();
 
-                        if (t.m_text[t.m_text.size() - 1] == ':')
+                    if (t.m_text[t.m_text.size() - 1] == ':')
+                    {
+                        if (t.m_text[0] == ':')
+                            m_builder->atom_keyword(
+                                t.m_text.substr(1, t.m_text.size() - 2));
+                        else
                             m_builder->atom_keyword(
                                 t.m_text.substr(0, t.m_text.size() - 1));
-                        else if (t.m_text == "#t" || t.m_text == "#true")
-                            M_BUILDER(atom_bool(true));
-                        else if (t.m_text == "#f" || t.m_text == "#false")
-                            M_BUILDER(atom_bool(false));
-                        else if (t.m_text == "nil")
-                            M_BUILDER(atom_nil());
-                        else
-                            M_BUILDER(atom_symbol(t.m_text));
-                        break;
                     }
+                    else if (t.m_text[0] == ':')
+                        m_builder->atom_keyword(t.m_text.substr(1));
+                    else if (t.m_text == "#t" || t.m_text == "#true")
+                        M_BUILDER(atom_bool(true));
+                    else if (t.m_text == "#f" || t.m_text == "#false")
+                        M_BUILDER(atom_bool(false));
+                    else if (t.m_text == "nil")
+                        M_BUILDER(atom_nil());
+                    else
+                        M_BUILDER(atom_symbol(t.m_text));
+                    break;
+                }
                 case TOK_STR_DELIM:
+                {
+                    m_tok.next();
+                    t = m_tok.peek();
+                    if (t.m_token_id != TOK_STR)
                     {
-                        m_tok.next();
-                        t = m_tok.peek();
-                        if (t.m_token_id != TOK_STR)
-                        {
-                            log_error("Expected string body", t);
-                            return false;
-                        }
-                        M_BUILDER(atom_string(t.m_text));
-                        m_tok.next();
-                        m_tok.next(); // skip end TOK_STR_DELIM
-                        break;
+                        log_error("Expected string body", t);
+                        return false;
                     }
+                    M_BUILDER(atom_string(t.m_text));
+                    m_tok.next();
+                    m_tok.next(); // skip end TOK_STR_DELIM
+                    break;
+                }
                 case TOK_BAD_NUM:
                     log_error("Expected atom", t);
                     return false;

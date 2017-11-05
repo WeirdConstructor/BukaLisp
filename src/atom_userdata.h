@@ -29,7 +29,10 @@ class UserData
         {
             return std::string("#<userdata:unknown>");
         }
-        virtual void mark(GC *gc, uint8_t clr) { m_gc_color = clr; }
+        virtual void mark(GC *gc, uint8_t clr)
+        {
+            m_gc_color = clr;
+        }
 
         virtual ~UserData()
         {
