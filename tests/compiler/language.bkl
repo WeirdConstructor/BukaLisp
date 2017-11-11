@@ -16,18 +16,10 @@
     (T-env code expected {})))
 ;----------------------------------------------------------------------------
 
-(PUSH-DEBUG)
+;(PUSH-DEBUG)
 
-(T '(begin
-      (define-library
-        (x)
-        (export yyy)
-        (import (bukalisp base))
-        (begin
-          (define yyy 10))))
-   0)
 
-(error X:)
+;(error X:)
 ;----------------------------------------------------------------------------
 
 ;(PUSH-DEBUG)
@@ -1951,3 +1943,64 @@
       ((>= x 10) l)
       (push! l m))
    [1 1 1 1 1 1 1 1 1 1])
+
+; Test define-library and import
+(T '(begin
+      (define-library
+        (x)
+        (export yyy)
+        (import (bukalisp base))
+        (begin
+          (define yyy 10))))
+   {'yyy [glob-var: 'yyy 10]})
+
+(T '(begin
+      (define-library
+        (x)
+        (export yyy)
+        (import (bukalisp base))
+        (begin
+          (define yyy 10)))
+      (import (x))
+      yyy)
+   10)
+
+(T '(begin
+      (define-library
+        (x)
+        (export yyy)
+        (import (bukalisp base))
+        (begin
+          (define-macro (yyy)
+                        11)))
+      (import (x))
+      (yyy))
+   11)
+
+(T '(begin
+      (define-library
+        (x)
+        (export yyy)
+        (import (bukalisp base))
+        (begin
+          (define-macro (yyy a)
+                        ['+ a 11])))
+      (import (x))
+      (yyy 10))
+   21)
+
+(T '(begin
+      (define-library
+        (x)
+        (export plus)
+        (import (bukalisp base))
+        (begin
+          (define plus +)))
+      (import (x))
+      (plus 12 10))
+   22)
+
+(T '(begin
+      (import (tests-support import-test))
+      impt)
+   135)

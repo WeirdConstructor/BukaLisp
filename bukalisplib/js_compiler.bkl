@@ -132,7 +132,7 @@
                     {env:         root-env
                     include-dir: "bukalisplib"}
                     {root-env:    root-env
-                    var-counter: 0})))
+                    gensym-counter: 0})))
       (displayln (pp-str s1prog))
       (.print (s2js-transform s1prog root-env)))))
 ;----------------------------------------------------------------------------

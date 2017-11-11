@@ -39,9 +39,8 @@
     (let ((s1-ctx   {env:         root-env
                      include-dir: "bukalisplib"})
           (s1-gtx   {root-env:    root-env
-                     lib-compiler: bukalisp-compile
-                     libraries:   {}
-                     var-counter: 0})
+                     'lib-compiler bukalisp-compile
+                     gensym-counter: 0})
           (s1prog (stage1-transformator
                     (if (eqv? name "<vm-op-eval>")
                       expr

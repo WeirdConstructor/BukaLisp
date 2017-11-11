@@ -409,14 +409,11 @@
     (.AM gtx ['#1#nil])))
 ;----------------------------------------------------------------------------
 
-(add-syntax
-  'include
-  (lambda (ctx args T gtx)
-    (unless (= (length args) 2)
-      (error "'include' needs exactly 1 argument" args))
+(define compile-include
+  (lambda (ctx filename T gtx)
     (let ((include-file-path (str (include-dir: ctx)
                                   (sys-path-separator)
-                                  (@1 args)))
+                                  filename))
           (include-content (sys-slurp-file
                              include-file-path))
           (read-data       (read-str include-content
@@ -429,6 +426,14 @@
         (push! (meta-stack: gtx) [include-file-path 1])
         (pop! (meta-stack: gtx))
         (s1-begin T new-ctx read-data)))))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'include
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 2)
+      (error "'include' needs exactly 1 argument" args))
+    (compile-include ctx (@1 args) T gtx)))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -825,9 +830,12 @@ value.
 (add-syntax
   'define-library
   (lambda (ctx arg T gtx)
+    (unless (@" LIBRARIES " (root-env: gtx))
+      (@!" LIBRARIES " (root-env: gtx) {}))
+    (define LIBRARIES (@" LIBRARIES " (root-env: gtx)))
     (unless (list? (@1 arg))
       (error "'define-library' library name needs to be a list" (@1 arg)))
-    (define lib-name (apply str-join "" (@1 arg)))
+    (define lib-name (apply str-join "-" (@1 arg)))
     (define lib-root-env {" IS-ROOT-ENV " #t " REGS " []})
     (define export-list [])
     (do-each (decl (drop arg 2))
@@ -835,7 +843,7 @@ value.
         (error "'define-library' invalid library declaration" decl))
       (case (@0 decl)
         ((export)
-         (do-each (ex (drop 1 decl))
+         (do-each (ex (drop decl 1))
            (push! export-list ex)))
         ((import)
          (let ((import-lib-name (apply str-join "-" (@1 decl))))
@@ -843,15 +851,47 @@ value.
              (begin
                (init-root-env lib-root-env)))))
         ((begin)
-         (.lib-compiler gtx lib-name lib-root-env #f))))
+         (.lib-compiler gtx lib-name (drop decl 1) lib-root-env #f))))
     (define exported-values {})
     (do-each (ex export-list)
       (let ((exp-var (@ex lib-root-env)))
+        (unless exp-var
+          (error "'define-library' can't export undefined binding" ex))
         (if (eqv? (@0 exp-var) glob-var:)
           (let ((value (get-root-env-var lib-root-env ex)))
-            (@!ex exported-values [glob-var: ex exp-var]))
+            (@!ex exported-values [glob-var: ex value]))
           (@!ex exported-values exp-var))))
-    (@!lib-name (libraries: gtx) [lib-root-env exported-values])))
+    (@!lib-name LIBRARIES [lib-root-env exported-values])
+    ['#1#data exported-values]))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'import
+  (lambda (ctx arg T gtx)
+    (unless (@" LIBRARIES " (root-env: gtx))
+      (@!" LIBRARIES " (root-env: gtx) {}))
+    (define LIBRARIES (@" LIBRARIES " (root-env: gtx)))
+    (do-each (import-set (drop arg 1))
+      (let ((library-name (apply str-join "-" import-set))
+            (lib          (@library-name LIBRARIES)))
+        (unless lib
+          (let ((library-file
+                  (str (apply str-join
+                              (sys-path-separator)
+                              import-set)
+                       ".bkl")))
+            (compile-include ctx library-file T gtx)
+            (set! lib (@library-name LIBRARIES))
+            (unless lib
+              (error "'import' library not found, also not defined in library file"
+                     [library-name library-file]))))
+        (do-each (sym var (@1 lib))
+          (if (eqv? (@0 var) glob-var:)
+            (set-root-env-var (root-env: gtx)
+                              sym
+                              (@2 var))
+            (@!sym (root-env: gtx) var)))))
+    ['#1#data nil]))
 ;----------------------------------------------------------------------------
 
 (define eval-syntax
