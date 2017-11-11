@@ -10,11 +10,10 @@
 
 (define bukalisp-compile
   (lambda (name expr root-env only-compile?)
-    (when (nil? (@'begin root-env))
+    (unless (@" IS-ROOT-ENV " root-env)
       (init-root-env root-env))
-    ; Create a VM usable closure here for (eval ...) to properly
-    ; wrap OP_EVAL when used as procedure. For primitives we don't
-    ; do this, as primitive calling is usually a bit faster.
+    ; Wrap up eval-syntax into a closure, to hide it's syntactic nature
+    ; from callers more throughout.
     (when (eqv? (@0 (@'eval root-env)) prim:)
 ;      (displayln START-COMPILE-EVAL:)
       (let ((local-root (spawn-root-env))
@@ -33,7 +32,7 @@
               (run-vm-prog eval-prog local-root))
             (set! eval-closure global-saved-eval-vm-closure)))
 ;        (displayln ENDED-COMPILE-EVAL:)
-        (@!'eval root-env [syntax: eval-syntax global-saved-eval-vm-closure])))
+        (set-root-env-var root-env 'eval eval-closure)))
     ; Attach the root env map as meta to the root env registers, so we
     ; have a chance to recover it in the VM later.
     (bkl-set-meta (@" REGS " root-env) 1 root-env)

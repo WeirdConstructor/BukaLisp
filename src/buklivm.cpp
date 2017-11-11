@@ -220,10 +220,22 @@ void VM::report_arity_error(Atom &arity, size_t argc)
 }
 //---------------------------------------------------------------------------
 
-#define VM_JUMP_FRAME_SIZE 3
+#define VM_CLNUP_FRAME_SIZE 5
+#define VM_CLNUP_PC     0
+#define VM_CLNUP_COND_I 1
+#define VM_CLNUP_COND_E 2
+#define VM_CLNUP_VAL_I  3
+#define VM_CLNUP_VAL_E  4
+
+#define VM_CLNUP_COND_UNDEF    0
+#define VM_CLNUP_COND_CTRL_JMP 1
+#define VM_CLNUP_COND_RETURN   2
+
+#define VM_JUMP_FRAME_SIZE 4
 #define VM_JMP_PC    0
-#define VM_JMP_OUT_I 1
-#define VM_JMP_OUT_E 2
+#define VM_JMP_TAG   1
+#define VM_JMP_OUT_I 2
+#define VM_JMP_OUT_E 3
 
 #define VM_CALL_FRAME_SIZE 7
 #define VM_CF_CLOS  0
@@ -239,6 +251,9 @@ void VM::report_arity_error(Atom &arity, size_t argc)
 Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 {
     using namespace std::chrono;
+
+    INST instant_ctrl_jmp;
+    Atom instant_ctrl_jmp_obj;
 
     GC_ROOT_MAP(m_rt->m_gc, root_env_map_gcroot) = root_env_map;
 
@@ -377,66 +392,68 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
 #define E_SET_CHECK_REALLOC_D(env_idx, idx) do { \
     switch ((env_idx)) { \
-    case REG_ROW_UPV: \
-    case REG_ROW_FRAME: if (rr_frame->m_len <= (size_t) (idx)) { rr_frame->check_size((idx)); rr_v_frame = rr_frame->m_data; } break; \
-    case REG_ROW_ROOT: if (root_env->m_len <= (size_t) (idx)) { root_env->check_size((idx)); rr_v_root = root_env->m_data; } break; \
-    case REG_ROW_DATA: if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((idx)); rr_v_data = rr_data->m_data; } break; \
-    default: \
-        error("bad reg_row reference (" #env_idx ")", Atom(T_INT, (env_idx))); \
+        case REG_ROW_UPV: \
+        case REG_ROW_FRAME: if (rr_frame->m_len <= (size_t) (idx)) { rr_frame->check_size((idx)); rr_v_frame = rr_frame->m_data; } break; \
+        case REG_ROW_ROOT:  if (root_env->m_len <= (size_t) (idx)) { root_env->check_size((idx)); rr_v_root = root_env->m_data; } break; \
+        case REG_ROW_DATA:  if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((idx)); rr_v_data = rr_data->m_data; } break; \
+        case REG_ROW_RREF: \
+        { \
+            if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((idx)); rr_v_data = rr_data->m_data; } break; \
+            size_t ridx   = (size_t) rr_v_root[(idx)].m_d.vec->m_data[0].m_d.i; \
+            AtomVec *dest = rr_v_root[(idx)].m_d.vec->m_data[1].m_d.vec; \
+            if (dest->m_len <= ridx) { dest->check_size(ridx); } \
+            break; \
+        } \
+        default: \
+            error("bad reg_row reference (" #env_idx ")", Atom(T_INT, (env_idx))); \
     }\
 } while (0)
+
 #define E_SET_CHECK_REALLOC(env_idx_reg, idx_reg) \
     E_SET_CHECK_REALLOC_D(PE_##env_idx_reg, P_##idx_reg)
 
 #define E_SET_D_PTR(env_idx, idx, val_ptr) do { \
     switch ((env_idx)) { \
-    case REG_ROW_FRAME: val_ptr = &(rr_v_frame[(idx)]); break; \
-    case REG_ROW_DATA:  val_ptr = &(rr_v_data[(idx)]); break; \
-    case REG_ROW_ROOT:  val_ptr = &(rr_v_root[(idx)]); break; \
-    case REG_ROW_UPV: \
-    { \
-        val_ptr = &(rr_v_frame[(idx)]); \
-        if (env_idx == REG_ROW_UPV) val_ptr = &(val_ptr->m_d.vec->m_data[0]); \
-        break; \
-    } \
-    case REG_ROW_PRIM: \
-    { \
-        val_ptr = &(m_prim_table->m_data[(idx)]); \
-        break; \
-    } \
+        case REG_ROW_FRAME: val_ptr = &(rr_v_frame[(idx)]); break; \
+        case REG_ROW_DATA:  val_ptr = &(rr_v_data[(idx)]); break; \
+        case REG_ROW_ROOT:  val_ptr = &(rr_v_root[(idx)]); break; \
+        case REG_ROW_UPV: \
+        { \
+            val_ptr = &(rr_v_frame[(idx)]); \
+            val_ptr = &(val_ptr->m_d.vec->m_data[0]); \
+            break; \
+        } \
+        case REG_ROW_PRIM: \
+        { \
+            val_ptr = &(m_prim_table->m_data[(idx)]); \
+            break; \
+        } \
+        case REG_ROW_RREF: \
+        { \
+            size_t ridx = (size_t) rr_v_root[(idx)].m_d.vec->m_data[0].m_d.i; \
+            val_ptr     = &(rr_v_root[(idx)].m_d.vec->m_data[1].m_d.vec->m_data[ridx]); break; \
+            break; \
+        } \
     } \
 } while (0)
 
 #define E_SET_D(env_idx, idx, val) do { \
     switch ((env_idx)) { \
-    case REG_ROW_FRAME: rr_v_frame[(idx)] = (val); break; \
-    case REG_ROW_DATA: rr_v_data[(idx)] = (val); break; \
-    case REG_ROW_ROOT: rr_v_root[(idx)] = (val); break; \
-    case REG_ROW_UPV: rr_v_frame[(idx)].m_d.vec->m_data[0] = (val); break; \
+        case REG_ROW_FRAME: rr_v_frame[(idx)] = (val); break; \
+        case REG_ROW_DATA:  rr_v_data[(idx)]  = (val); break; \
+        case REG_ROW_ROOT:  rr_v_root[(idx)]  = (val); break; \
+        case REG_ROW_UPV:   rr_v_frame[(idx)].m_d.vec->m_data[0] = (val); break; \
+        case REG_ROW_RREF: \
+        { \
+            size_t ridx = (size_t) rr_v_root[(idx)].m_d.vec->m_data[0].m_d.i; \
+            rr_v_root[(idx)].m_d.vec->m_data[1].m_d.vec->m_data[ridx] = (val); break; \
+            break; \
+        } \
     } \
 } while (0)
 
-#define E_SET(reg, val) E_SET_D(PE_##reg, P_##reg, (val))
-
-#define E_GET_D(out_ptr, eidx, idx) do { \
-    switch ((eidx)) { \
-    case REG_ROW_FRAME: (out_ptr) = &(rr_v_frame[(idx)]); break; \
-    case REG_ROW_DATA: (out_ptr) = &(rr_v_data[(idx)]); break; \
-    case REG_ROW_ROOT: (out_ptr) = &(rr_v_root[(idx)]); break; \
-    case REG_ROW_UPV: \
-    { \
-        (out_ptr) = &(rr_v_frame[(idx)]); \
-        if (out_ptr->m_type != T_VEC || out_ptr->m_d.vec->m_len <= 0) \
-            error("Bad upvalue access", Atom(T_INT, (idx))); \
-        (out_ptr) = &(out_ptr->m_d.vec->m_data[0]); \
-        break; \
-    } \
-    case REG_ROW_PRIM: \
-        (out_ptr) = &(m_prim_table->m_data[(idx)]); \
-    } \
-} while (0)
-
-#define E_GET(out_ptr, reg) E_GET_D(out_ptr, PE_##reg, P_##reg)
+#define E_SET(reg, val)     E_SET_D(PE_##reg, P_##reg, (val))
+#define E_GET(out_ptr, reg) E_SET_D_PTR(PE_##reg, P_##reg, out_ptr)
 
 #define RESTORE_FROM_CALL_FRAME(call_frame, ret_val)  \
     do {                                              \
@@ -470,16 +487,6 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                  << (ret_val).to_write_str() << endl; \
     } while(0);
 
-#define SEARCH_AND_POP_TO_LAST_CALL_FRAME(c)                     \
-    c = cont_stack->last();                           \
-    while (   c                                       \
-           && c->m_type == T_VEC                      \
-           && c->m_d.vec->m_len < VM_CALL_FRAME_SIZE) \
-    {                                                 \
-        cont_stack->pop();                            \
-        c = cont_stack->last();                       \
-    }
-
 #define RECORD_CALL_FRAME(func, call_frame)             \
     Atom call_frame(T_VEC,                              \
         m_rt->m_gc.allocate_vector(VM_CALL_FRAME_SIZE));\
@@ -497,12 +504,39 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
         data[VM_CF_OUT_E].set_int(PE_O);                \
     } while(0)
 
+#define JUMP_TO_CLEANUP(exec_cleanup, cleanup_frame, cond_val, tag, ret_val) \
+    do {                                                                \
+        AtomVec *clnup_frm = (cleanup_frame);                           \
+        E_SET_CHECK_REALLOC_D(                                          \
+            (clnup_frm)->m_data[VM_CLNUP_COND_E].m_d.i,                 \
+            (clnup_frm)->m_data[VM_CLNUP_COND_I].m_d.i + 1);            \
+        E_SET_D(                                                        \
+            (clnup_frm)->m_data[VM_CLNUP_COND_E].m_d.i,                 \
+            (clnup_frm)->m_data[VM_CLNUP_COND_I].m_d.i,                 \
+            (cond_val));                                                \
+        E_SET_D(                                                        \
+            (clnup_frm)->m_data[VM_CLNUP_COND_E].m_d.i,                 \
+            (clnup_frm)->m_data[VM_CLNUP_COND_I].m_d.i + 1,             \
+            (tag));                                                     \
+        E_SET_CHECK_REALLOC_D(                                          \
+            (clnup_frm)->m_data[VM_CLNUP_VAL_E].m_d.i,                  \
+            (clnup_frm)->m_data[VM_CLNUP_VAL_I].m_d.i);                 \
+        E_SET_D(                                                        \
+            (clnup_frm)->m_data[VM_CLNUP_VAL_E].m_d.i,                  \
+            (clnup_frm)->m_data[VM_CLNUP_VAL_I].m_d.i,                  \
+            (ret_val));                                                 \
+        m_pc = (INST *) (clnup_frm)->m_data[VM_CLNUP_PC].m_d.ptr;       \
+        exec_cleanup = true;                                            \
+        cont_stack->pop();                                              \
+    } while(0)
+
     Atom ret;
     Atom *tmp = nullptr;
 
     bool alloc = false;
     try
     {
+        VM_START:
         while (m_pc->op != OP_END)
         {
 //            INST &PC = *m_pc;
@@ -560,20 +594,12 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     AtomVec *out_av = m_rt->m_gc.allocate_vector(P_A);
                     E_SET(O, Atom(T_VEC, out_av));
 
-                    E_GET(tmp, B);
-                    if (tmp->m_type != T_VEC)
-                        error("Bad argument index vector!", *tmp);
-                    AtomVec *av = tmp->m_d.vec;
-
                     if (P_A > 0)
-                        out_av->check_size(P_A - 1);
-                    for (size_t i = 0, j = 0; i < av->m_len; i += 2, j++)
                     {
-                        E_GET_D(
-                            tmp,
-                            av->m_data[i + 1].m_d.i,
-                            av->m_data[i].m_d.i);
-                        out_av->m_data[j] = *tmp;
+                        Atom *first;
+                        E_GET(first, B);
+                        out_av->check_size(P_A - 1);
+                        out_av->m_data[0] = *first;
                     }
 
                     break;
@@ -607,8 +633,8 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                         Atom *val_idx  = &(av->m_data[i + 2]);
                         Atom *val_eidx = &(av->m_data[i + 3]);
                         Atom *key, *val;
-                        E_GET_D(key, key_eidx->m_d.i, key_idx->m_d.i);
-                        E_GET_D(val, val_eidx->m_d.i, val_idx->m_d.i);
+                        E_SET_D_PTR(key_eidx->m_d.i, key_idx->m_d.i, key);
+                        E_SET_D_PTR(val_eidx->m_d.i, val_idx->m_d.i, val);
                         out_am->set(*key, *val);
                     }
 
@@ -792,10 +818,10 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                         frame->m_len = len >> 1;
                         for (size_t i = 0, j = 0; i < av->m_len; i += 2, j++)
                         {
-                            E_GET_D(
-                                tmp,
+                            E_SET_D_PTR(
                                 av->m_data[i + 1].m_d.i,
-                                av->m_data[i].m_d.i);
+                                av->m_data[i].m_d.i,
+                                tmp);
                             frame->m_data[j] = *tmp;
                         }
                     }
@@ -984,8 +1010,29 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     ret_val = *tmp;
 
                     // retrieve the continuation and skip non-call-frames:
-                    Atom *c = nullptr;
-                    SEARCH_AND_POP_TO_LAST_CALL_FRAME(c);
+                    bool exec_cleanup = false;
+                    Atom *c = cont_stack->last();
+                    while (   c
+                           && c->m_type == T_VEC
+                           && c->m_d.vec->m_len != VM_CALL_FRAME_SIZE)
+                    {
+                        if (c->m_d.vec->m_len == VM_CLNUP_FRAME_SIZE)
+                        {
+                            JUMP_TO_CLEANUP(
+                                exec_cleanup,
+                                c->m_d.vec,
+                                Atom(T_INT, VM_CLNUP_COND_RETURN),
+                                Atom(),
+                                ret_val);
+                            break;
+                        }
+
+                        cont_stack->pop();
+                        c = cont_stack->last();
+                    }
+
+                    if (exec_cleanup)
+                        break;
 
                     if (!c || c->m_type == T_NIL)
                     {
@@ -1088,6 +1135,13 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                             VM_JUMP_FRAME_SIZE);
                     jmp_frame->m_len = VM_JUMP_FRAME_SIZE;
                     jmp_frame->m_data[VM_JMP_PC].set_ptr(m_pc + P_A);
+                    if (P_B < 0)
+                        jmp_frame->m_data[VM_JMP_TAG].clear();
+                    else
+                    {
+                        E_GET(tmp, B);
+                        jmp_frame->m_data[VM_JMP_TAG] = *tmp;
+                    }
                     jmp_frame->m_data[VM_JMP_OUT_I].set_int(P_O);
                     jmp_frame->m_data[VM_JMP_OUT_E].set_int(PE_O);
                     cont_stack->push(Atom(T_VEC, jmp_frame));
@@ -1100,7 +1154,35 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     if (   !c
                         || c->m_type != T_VEC
                         || c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE)
-                        error("Bad exception handler frame on stack",
+                        error("Bad ctrl jmp frame on stack",
+                              c ? *c : Atom());
+
+                    cont_stack->pop();
+                    break;
+                }
+
+                case OP_PUSH_CLNUP:
+                {
+                    AtomVec *clnup_frame =
+                        m_rt->m_gc.allocate_vector(
+                            VM_CLNUP_FRAME_SIZE);
+                    clnup_frame->m_len = VM_CLNUP_FRAME_SIZE;
+                    clnup_frame->m_data[VM_CLNUP_PC].set_ptr(m_pc + P_A);
+                    clnup_frame->m_data[VM_CLNUP_COND_I].set_int(P_O);
+                    clnup_frame->m_data[VM_CLNUP_COND_E].set_int(PE_O);
+                    clnup_frame->m_data[VM_CLNUP_VAL_I].set_int(P_B);
+                    clnup_frame->m_data[VM_CLNUP_VAL_E].set_int(PE_B);
+                    cont_stack->push(Atom(T_VEC, clnup_frame));
+                    break;
+                }
+
+                case OP_POP_CLNUP:
+                {
+                    Atom *c = cont_stack->last();
+                    if (   !c
+                        || c->m_type != T_VEC
+                        || c->m_d.vec->m_len != VM_CLNUP_FRAME_SIZE)
+                        error("Bad cleanup frame on stack",
                               c ? *c : Atom());
 
                     cont_stack->pop();
@@ -1110,56 +1192,85 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                 case OP_CTRL_JMP:
                 {
                     Atom raised_val;
-                    E_GET(tmp, O);
-                    raised_val = *tmp;
+                    if (PE_O == REG_ROW_SPECIAL)
+                    {
+                        raised_val = instant_ctrl_jmp_obj;
+                    }
+                    else
+                    {
+                        E_GET(tmp, O);
+                        raised_val = *tmp;
+                    }
 
+                    Atom jmp_tag;
+                    if (P_A >= 0)
+                    {
+                        E_GET(tmp, A);
+                        jmp_tag = *tmp;
+                    }
+
+                    //d// std::cout << "****** CTRL JMP TAG@ " << jmp_tag.to_write_str() << std::endl;
+
+                    bool exec_cleanup = false;
                     Atom *c = cont_stack->last();
                     while (c && (   c->m_type != T_VEC
-                                 || c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE))
+                                 || c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE
+                                 || (   c->m_d.vec->m_len == VM_JUMP_FRAME_SIZE
+                                     && !(c->m_d.vec->m_data[VM_JMP_TAG] == jmp_tag))))
                     {
                         if (c->m_d.vec->m_len == VM_CALL_FRAME_SIZE)
                         {
+                            // Restore earlier call frames (return from routines)
                             Atom call_frame = *c;
                             Atom nil_val;
                             RESTORE_FROM_CALL_FRAME(call_frame, nil_val);
                         }
+                        else if (c->m_d.vec->m_len == VM_CLNUP_FRAME_SIZE)
+                        {
+                            JUMP_TO_CLEANUP(
+                                exec_cleanup,
+                                c->m_d.vec,
+                                Atom(T_INT, VM_CLNUP_COND_CTRL_JMP),
+                                jmp_tag,
+                                raised_val);
+                            break;
+                        }
+
                         cont_stack->pop();
                         c = cont_stack->last();
                     }
 
-                    // XXX: Idea for (with-cleanup ...), in the CTRL-JMP
-                    //      we push a re-raise frame onto the control stack,
-                    //      and create a new op, called OP_CHK_CTRL_JMP,
-                    //      which looks for a marked re-raise frame and pops it,
-                    //      and returns a flag and a value (.op-chk-ctrl-jmp cond-adr val-adr)
-                    //      which can then be used by brnif and op-ctrl-jmp to reinitiate
-                    //      a new throw. (We handle this case in the compiler!)
-                    //
-                    //      The with-cleanup is a new kind of control frame,
-                    //      which is checked by RETURN and does the same as above.
-                    //      But this leads to new problems: How to continue a return!?!?!?
+                    if (exec_cleanup)
+                        break;
 
+                    // Next frame is something else? No idea, this shouldn't
+                    // happen actually. Either we end up in a cleanup
+                    // frame or the exception is caught here in a proper
+                    // jmp_frame!
                     if (   !c
                         || c->m_type == T_NIL
                         || (   c->m_type != T_VEC
                             && c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE))
                         throw VMRaise(m_rt->m_gc, *tmp);
 
-                    AtomVec *exh_frame = c->m_d.vec;
-                    if (   exh_frame->at(VM_JMP_PC).m_type    != T_C_PTR
-                        || exh_frame->at(VM_JMP_OUT_I).m_type != T_INT
-                        || exh_frame->at(VM_JMP_OUT_E).m_type != T_INT)
-                        error("Bad exception handler frame on call stack", *c);
+                    AtomVec *jmp_frame = c->m_d.vec;
+                    if (   jmp_frame->at(VM_JMP_PC).m_type    != T_C_PTR
+                        || !(jmp_frame->at(VM_JMP_TAG)        == jmp_tag)
+                        || jmp_frame->at(VM_JMP_OUT_I).m_type != T_INT
+                        || jmp_frame->at(VM_JMP_OUT_E).m_type != T_INT)
+                        error("Bad exception handler/jump block frame on call stack", *c);
+
+                    cont_stack->pop();
 
                     E_SET_CHECK_REALLOC_D(
-                        exh_frame->at(VM_JMP_OUT_E).m_d.i,
-                        exh_frame->at(VM_JMP_OUT_I).m_d.i);
+                        jmp_frame->at(VM_JMP_OUT_E).m_d.i,
+                        jmp_frame->at(VM_JMP_OUT_I).m_d.i);
                     E_SET_D(
-                        exh_frame->at(VM_JMP_OUT_E).m_d.i,
-                        exh_frame->at(VM_JMP_OUT_I).m_d.i,
+                        jmp_frame->at(VM_JMP_OUT_E).m_d.i,
+                        jmp_frame->at(VM_JMP_OUT_I).m_d.i,
                         raised_val);
 
-                    m_pc = (INST *) exh_frame->at(VM_JMP_PC).m_d.ptr;
+                    m_pc = (INST *) jmp_frame->at(VM_JMP_PC).m_d.ptr;
                     if (m_pc >= (m_prog->m_instructions + m_prog->m_instructions_len))
                         error("CTRL_JMP out of PROG", Atom());
                     break;
@@ -1265,6 +1376,17 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     E_GET(tmp, A);
                     Atom o(T_BOOL);
                     o.m_d.b = tmp->is_false();
+                    E_SET(O, o);
+                    break;
+                }
+
+                case OP_ISNIL:
+                {
+                    E_SET_CHECK_REALLOC(O, O);
+
+                    E_GET(tmp, A);
+                    Atom o(T_BOOL);
+                    o.m_d.b = tmp->m_type == T_NIL;
                     E_SET(O, o);
                     break;
                 }
@@ -1526,8 +1648,20 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
             }
         }
     }
-    catch (BukaLISPException &)
+    catch (BukaLISPException &e)
     {
+        if (e.do_ctrl_jump())
+        {
+            instant_ctrl_jmp.op = OP_CTRL_JMP;
+            instant_ctrl_jmp.o  = 0;
+            instant_ctrl_jmp.oe = REG_ROW_SPECIAL;
+            instant_ctrl_jmp_obj.set_int(42);
+            m_pc = &instant_ctrl_jmp;
+            // TODO: Create error object and inject it somehow into the
+            //       program!?
+            // Question: Where to get the storage location from?
+            goto VM_START;
+        }
         throw;
     }
     catch (std::exception &e)

@@ -22,6 +22,14 @@
       (error "'not' requires exactly 1 argument" args))
     ['#1#not (T ctx (@1 args))]))
 
+(add-optimized-prim
+  S1-ROOT-ENV
+  'nil?
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 2)
+      (error "'nil?' requires exactly 1 argument" args))
+    ['#1#nil? (T ctx (@1 args))]))
+
 (define make-assoc-tree
   (lambda (operation ctx args T gtx)
     (let ((out-pair [operation]))

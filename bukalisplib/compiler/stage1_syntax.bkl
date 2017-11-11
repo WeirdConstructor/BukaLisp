@@ -81,7 +81,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'raise' needs exactly 1 arguments" args))
-    (append '#1#raise [(T ctx (@1 args))])))
+    (append '#1#return-from [['#1#data nil] (T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -103,21 +103,75 @@
               (s1-begin T ctx (drop args 3))])))))
 ;----------------------------------------------------------------------------
 
-
 (add-syntax
-  'continue
+  'with-cleanup
   (lambda (ctx args T gtx)
-    (unless (= (length args) 1)
-      (error "'continue' does not take any arguments" args))
-    (append '#1#continue)))
+    (unless (or (= (length args) 3)
+                (= (length args) 4))
+      (error "'with-cleanup' needs 2 or 3 arguments" args))
+    (let ((clnup-cond-var-sym '*BKL-CLEANUP-COND*)
+          (clnup-tag-var-sym  '*BKL-CLEANUP-TAG*)
+          (clnup-val-var-sym  '*BKL-CLEANUP-VAL*))
+      (compile-let-block
+        ctx T gtx
+        (.AM gtx [[clnup-cond-var-sym nil]
+                  [clnup-tag-var-sym  nil]
+                  [clnup-val-var-sym  nil]])
+        (lambda (ctx T gtx)
+          (define continuation-check
+            (T ctx ['cond
+                    [['nil? clnup-cond-var-sym] nil]
+                    [['= clnup-cond-var-sym 1] ['return-from*
+                                                clnup-tag-var-sym
+                                                clnup-val-var-sym]]
+                    [['= clnup-cond-var-sym 2] ['return
+                                                clnup-val-var-sym]]]))
+          (if (= (length args) 3)
+            ['#1#with-cleanup
+             [(T ctx clnup-cond-var-sym)
+              (T ctx clnup-tag-var-sym)
+              (T ctx clnup-val-var-sym)
+              continuation-check]
+             [(T ctx (@1 args))]
+             (T ctx (@2 args))]
+            ['#1#with-cleanup
+             [(T ctx clnup-cond-var-sym)
+              (T ctx clnup-tag-var-sym)
+              (T ctx clnup-val-var-sym)
+              continuation-check]
+             [(T ctx (@2 args)) (T ctx (@1 args))]
+             (T ctx (@3 args))]))))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
-  'break
+  'block
   (lambda (ctx args T gtx)
-    (unless (= (length args) 2)
-      (error "'break' needs exactly 1 arguments" args))
-    (append '#1#break [(T ctx (@1 args))])))
+    (unless (> (length args) 2)
+      (error "'block' needs at least 2 arguments (the tag and an expression)" args))
+    (unless (or (symbol? (@1 args))
+                (keyword? (@1 args)))
+      (error "'block' tag needs to be either a symbol or a keyword" args))
+    ['#1#block (@1 args)
+     (s1-begin T ctx (drop args 2))]))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'return-from*
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 3)
+      (error "'return-from' needs exactly 2 arguments the tag and the value" args))
+    (append '#1#return-from [(T ctx (@1 args)) (T ctx (@2 args))])))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'return-from
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 3)
+      (error "'return-from' needs exactly 2 arguments the tag and the value" args))
+    (unless (or (symbol? (@1 args))
+                (keyword? (@1 args)))
+      (error "'return-from' tag needs to be either a symbol or a keyword" args))
+    (append '#1#return-from [(.S1-T-Q gtx ctx (@1 args)) (T ctx (@2 args))])))
 ;----------------------------------------------------------------------------
 
 (define only-in-first

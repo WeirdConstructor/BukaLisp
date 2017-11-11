@@ -52,7 +52,7 @@ START_PRIM()
     BIN_OP_LOOPS(-)
 END_PRIM(-);
 
-#define REQ_GT_ARGC(prim, cnt)    if (args.m_len < cnt) error("Not enough arguments to " #prim ", expected " #cnt);
+#define REQ_GT_ARGC(prim, cnt)    if (args.m_len < cnt)  error("Not enough arguments to " #prim ", expected " #cnt);
 #define REQ_EQ_ARGC(prim, cnt)    if (args.m_len != cnt) error("Wrong number of arguments to " #prim ", expected " #cnt);
 #define BIN_CMP_OP_NUM(op) \
     out = Atom(T_BOOL); \

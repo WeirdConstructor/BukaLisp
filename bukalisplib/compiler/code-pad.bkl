@@ -142,6 +142,9 @@
       ($define! self (op-not out-idx in-idx)
         (push-op NOT: out-idx in-idx 0 0))
 
+      ($define! self (op-isnil out-idx in-idx)
+        (push-op ISNIL: out-idx in-idx 0 0))
+
       ($define! self (op-forinc cond-idx iter-idx step-idx end-idx)
         ; XXX: iter-idx=cond-idx+1
         (push-op FORINC: cond-idx step-idx end-idx iter-idx))
@@ -161,14 +164,20 @@
       ($define! self (op-iter iter-idx vec-idx)
         (push-op ITER: iter-idx vec-idx 0 0))
 
-      ($define! self (op-push-jmp var-adr br-offs)
-        (push-op PUSH_JMP: var-adr br-offs 0 0))
+      ($define! self (op-push-jmp var-adr br-offs tag-adr)
+        (push-op PUSH_JMP: var-adr br-offs tag-adr 0))
 
       ($define! self (op-pop-jmp)
         (push-op POP_JMP: 0 0 0 0))
 
-      ($define! self (op-ctrl-jmp obj-adr)
-        (push-op CTRL_JMP: obj-adr 0 0 0))
+      ($define! self (op-ctrl-jmp obj-adr tag-adr)
+        (push-op CTRL_JMP: obj-adr tag-adr 0 0))
+
+      ($define! self (op-push-clnup cond-adr br-offs val-adr)
+        (push-op PUSH_CLNUP: cond-adr br-offs val-adr 0))
+
+      ($define! self (op-pop-clnup)
+        (push-op POP_CLNUP: 0 0 0 0))
 
       ($define! self (op-next ok-idx val-idx iter-idx)
         (push-op NEXT: ok-idx val-idx iter-idx 0))

@@ -85,6 +85,8 @@ class VMException : public std::exception
     X(PUSH_JMP,      28) /*                                        */ \
     X(POP_JMP,       29) /*                                        */ \
     X(CTRL_JMP,      30) /*                                        */ \
+    X(PUSH_CLNUP,    31) /*                                        */ \
+    X(POP_CLNUP,     32) /*                                        */ \
     X(ADD,          100) /*                                        */ \
     X(SUB,          101) /*                                        */ \
     X(MUL,          102) /*                                        */ \
@@ -98,6 +100,7 @@ class VMException : public std::exception
     X(NEQ,          110) /*                                        */ \
     X(NOT,          111) /*                                        */ \
     X(EQV,          112) /*                                        */ \
+    X(ISNIL,        113) /*                                        */ \
     X(RETURN,       250) /*                                        */ \
     X(END,          254) /*                                        */
 

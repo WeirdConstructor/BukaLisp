@@ -30,16 +30,6 @@
 
 ;----------------------------------------------------------------------------
 
-(T '(handle-exceptions
-      x
-      (displayln x)
-      (begin 1 2 (raise 3)))
-   '(#1#let (x_0)
-     (#1#begin (#1#set! (#1#var x_0 x) (#1#nil))
-      (#1#handle-exceptions
-       (#1#var x_0 x)
-       (#1#apply (#1#prim displayln) ((#1#var x_0 x)))
-       (#1#begin (#1#data 1) (#1#data 2) (#1#raise (#1#data 3)))))))
 ;----------------------------------------------------------------------------
 
 (T '1     '(#1#data 1))
@@ -528,24 +518,6 @@
    '(#1#while (#1#data #true)
      (#1#begin (#1#data 1) (#1#data 2) (#1#data 3))))
 
-(T '(while #t 1 (break 10) (continue) 3)
-   '(#1#while (#1#data #true)
-     (#1#begin
-      (#1#data 1)
-      (#1#break (#1#data 10))
-      (#1#continue)
-      (#1#data 3))))
-
-(T '(while #t 1 (break 10) (continue) (return 10) (yield 20) 3)
-   '(#1#while (#1#data #true)
-     (#1#begin
-      (#1#data 1)
-      (#1#break (#1#data 10))
-      (#1#continue)
-      (#1#return (#1#data 10))
-      (#1#yield (#1#data 20))
-      (#1#data 3))))
-
 ; Test 'for'
 (T '(for (i 1 10) 1 2 i)
    '(#1#let (i_0)
@@ -589,6 +561,74 @@
        (#1#begin (#1#set! (#1#var i_0 i) (#1#var i_0 i))
         (#1#set! (#1#var y_1 y) (#1#add (#1#var y_1 y) (#1#data -1))))
        (#1#begin (#1#data x:) (#1#data y:) (#1#data z:))))))
+
+; Test 'with-cleanup'
+(T '(with-cleanup
+      (+ 1 2 3)
+      (begin
+        1
+        2
+        3))
+  '(#1#let (*BKL-CLEANUP-COND*_0 *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-VAL*_2)
+    (#1#begin (#1#set! (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*) (#1#nil))
+    (#1#set! (#1#var *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-TAG*) (#1#nil))
+     (#1#set! (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*) (#1#nil))
+     (#1#with-cleanup
+      ((#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*)
+       (#1#var *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-TAG*)
+       (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*)
+       (#1#cond
+        (clause: (#1#nil? (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*)) (#1#nil))
+        (clause: (#1#eq (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*) (#1#data 1))
+                         (#1#return-from
+                          (#1#var *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-TAG*)
+                          (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*)))
+        (clause: (#1#eq (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*) (#1#data 2))
+                 (#1#return (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*)))
+        (else: (#1#nil))))
+      ((#1#add (#1#add (#1#data 1) (#1#data 2)) (#1#data 3)))
+      (#1#begin (#1#data 1) (#1#data 2) (#1#data 3))))))
+
+(T '(with-cleanup
+      (+ 4 5 6)
+      (+ 1 2 3)
+      (begin
+        1
+        2
+        3))
+   '(#1#let (*BKL-CLEANUP-COND*_0 *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-VAL*_2)
+     (#1#begin (#1#set! (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*) (#1#nil))
+      (#1#set! (#1#var *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-TAG*) (#1#nil))
+      (#1#set! (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*) (#1#nil))
+      (#1#with-cleanup
+       ((#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*)
+        (#1#var *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-TAG*)
+        (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*)
+        (#1#cond
+         (clause: (#1#nil? (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*)) (#1#nil))
+         (clause: (#1#eq (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*) (#1#data 1))
+                          (#1#return-from
+                           (#1#var *BKL-CLEANUP-TAG*_1 *BKL-CLEANUP-TAG*)
+                           (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*)))
+         (clause: (#1#eq (#1#var *BKL-CLEANUP-COND*_0 *BKL-CLEANUP-COND*) (#1#data 2))
+                  (#1#return (#1#var *BKL-CLEANUP-VAL*_2 *BKL-CLEANUP-VAL*)))
+         (else: (#1#nil))))
+       ((#1#add (#1#add (#1#data 1) (#1#data 2)) (#1#data 3))
+        (#1#add (#1#add (#1#data 4) (#1#data 5)) (#1#data 6)))
+       (#1#begin (#1#data 1) (#1#data 2) (#1#data 3))))))
+
+; Test 'handle-exceptions'
+(T '(handle-exceptions
+      x
+      (displayln x)
+      (begin 1 2 (raise 3)))
+   '(#1#let (x_0)
+     (#1#begin (#1#set! (#1#var x_0 x) (#1#nil))
+      (#1#handle-exceptions
+       (#1#var x_0 x)
+       (#1#apply (#1#prim displayln) ((#1#var x_0 x)))
+       (#1#begin (#1#data 1) (#1#data 2) (#1#return-from (#1#data nil) (#1#data 3)))))))
+
 ;(displayln (bkl-gc-statistics))
 (displayln "ALL OK")
 ::

@@ -111,9 +111,7 @@
                 (P: ctx)
                 vec-adr
                 (length exprs)
-                (.store-static-data
-                  (F: ctx)
-                  [(@0 val-adr) (@1 val-adr)]))
+                val-adr)
               (unless with-parent-adr?
                 (push! recycle-adrs vec-adr))
               (push! recycle-adrs val-adr))
@@ -130,9 +128,7 @@
           (P: ctx)
           vec-adr
           0
-          (.store-static-data
-            (F: ctx)
-            []))
+          0)
         (unless with-parent-adr?
           (push! recycle-adrs vec-adr)))
       [recycle-adrs vec-adr])))
@@ -216,6 +212,13 @@
             (.op-not (P: ctx) adr in-adr)
             (.recycle-pos (F: ctx) in-adr)
             adr))]
+       ['#1#nil?
+        (lambda (ctx arg T gtx)
+          (let ((adr (tmp-pos-or-parent-adr ctx))
+                (in-adr (T ctx (first arg))))
+            (.op-isnil (P: ctx) adr in-adr)
+            (.recycle-pos (F: ctx) in-adr)
+            adr))]
        ['#1#nil
         (lambda (ctx arg T gtx)
           (let ((adr (tmp-pos-or-parent-adr ctx)))
@@ -291,9 +294,11 @@
           (let ((ret-adr (.new-tmp-pos (F: ctx))))
             (.op-yield (P: ctx) ret-adr (T ctx (@0 arg)))
             ret-adr))]
-       ['#1#raise
+       ['#1#return-from
         (lambda (ctx arg T gtx)
-          (.op-ctrl-jmp (P: ctx) (T ctx (@0 arg)))
+          (.op-ctrl-jmp (P: ctx)
+                        (T ctx (@1 arg))
+                        (T ctx (@0 arg)))
           (.new-tmp-pos (F: ctx)))]
        ['#1#eval
         (lambda (ctx arg T gtx)
@@ -534,6 +539,8 @@
                   (.op-mov cl-body out-adr val-adr nil)
                   (.op-br cl-body to-end-branch-offs)
                   (.op-brnif test-body (.count-ops cl-body) test-adr)
+                  (.recycle-pos (F: ctx) test-adr)
+                  (.recycle-pos (F: ctx) val-adr)
                   (.append-code-pad test-body cl-body)
                   (push! out-bodies test-body)
                   (set! to-end-branch-offs
@@ -543,6 +550,7 @@
                       (else-adr   (T (assign ctx [P: else-body])
                                      (@1 clause))))
                   (.op-mov else-body out-adr else-adr nil)
+                  (.recycle-pos (F: ctx) else-adr)
                   (push! out-bodies else-body)
                   (set! to-end-branch-offs
                     (+ to-end-branch-offs
@@ -550,6 +558,20 @@
             (do-each (body (reverse out-bodies))
               (.append-code-pad (P: ctx) body))
             out-adr))]
+       ['#1#block
+        (lambda (ctx arg T gtx)
+          (let ((ret-adr    (tmp-pos-or-parent-adr ctx))
+                (expr-body  (make-code-pad-object (F: ctx)))
+                (expr-adr   (T (assign ctx [P: expr-body]) (@1 arg))))
+            (.op-mov expr-body ret-adr expr-adr nil)
+            (.op-pop-jmp expr-body)
+            (.recycle-pos (F: ctx) expr-adr)
+            (.op-push-jmp (P: ctx)
+                          ret-adr
+                          (.count-ops expr-body)
+                          (.store-static-data (F: ctx) (@0 arg)))
+            (.append-code-pad (P: ctx) expr-body)
+            ret-adr))]
        ['#1#handle-exceptions
         (lambda (ctx arg T gtx)
           (let ((var-adr        (T ctx (@0 arg)))
@@ -562,16 +584,66 @@
             (.op-mov          expr-body ret-adr body-ret-adr nil)
             (.op-pop-jmp      expr-body)
             (.op-br           expr-body
-                              (+ 1 (.count-ops exh-body)))
+                              (.count-ops exh-body))
             (.op-push-jmp     (P: ctx)
                               var-adr
-                              (.count-ops expr-body))
+                              (.count-ops expr-body)
+                              -1)
             (.append-code-pad (P: ctx) expr-body)
-            (.op-pop-jmp      (P: ctx))
             (.append-code-pad (P: ctx) exh-body)
             (.recycle-pos (F: ctx) exh-ret-adr)
             (.recycle-pos (F: ctx) body-ret-adr)
             ret-adr))]
+       ['#1#with-cleanup
+        (lambda (ctx arg T gtx)
+          (let ((cleanup-pad         (make-code-pad-object (F: ctx)))
+                (expr-pad            (make-code-pad-object (F: ctx))))
+            (unless (nil? (@1 (@1 arg)))
+              (.recycle-pos (F: ctx)
+                            (T (assign ctx [P: expr-pad])
+                               (@1 (@1 arg)))))
+            (let ((expr-adr            (T (assign ctx [P: expr-pad]) (@2 arg)))
+                  (cleanup-adr         (T (assign ctx [P: cleanup-pad]) (@0 (@1 arg))))
+                  (raise-cond-adr      (T ctx (@0 (@0 arg))))
+                  ; XXX: raise-tag-adr needs to follow to raise-cond-adr!
+                  (raise-tag-adr       (T ctx (@1 (@0 arg))))
+                  (raise-val-adr       (T ctx (@2 (@0 arg)))))
+              (.recycle-pos (F: ctx)
+                            (T (assign ctx [P: cleanup-pad])
+                               (@3 (@0 arg))))
+              (.op-push-clnup (P: ctx)
+                              raise-cond-adr
+                              (+ (.count-ops expr-pad) 1)
+                              raise-val-adr)
+              (.append-code-pad (P: ctx) expr-pad)
+              (.op-pop-clnup    (P: ctx))
+              (.append-code-pad (P: ctx) cleanup-pad)
+              (.recycle-pos (F: ctx) raise-cond-adr)
+              (.recycle-pos (F: ctx) raise-tag-adr)
+              (.recycle-pos (F: ctx) raise-val-adr)
+              expr-adr)
+
+;              (let ((make-))
+;                (.op-push-clnup (P: ctx) (.count-ops expr-pad))
+;                (.append-code-pad (P: ctx) expr-pad)
+;                (.append-code-pad (P: ctx) cleanup-pad)
+;                (T ctx 
+;              (let ((make-)))))
+          ; we create a temporary var, that will contain the condition
+          ; under which the current cleanup is invoked. There are 3 cases:
+          ;     - Return from current routine
+          ;     - A control-jump out of the current routine or out of
+          ;       a called subroutine.
+          ;     - No special control flow change, just execute cleanup
+          ;
+          ; This way OP_RETURN and OP_CTRL_JMP just need to check if there is
+          ; a cleanup frame. Set the temporary state var (return or ctrl jump),
+          ; store the return value or ctrl jmp value in another temporary value.
+          ; And then, once cleanup has finished, either do anothe .op-ctrl-jmp
+          ; or .op-return on that value!
+          ;
+          ; .op-pop-clnup is done at the start of the cleanup.
+          ))]
        ['#1#lambda
         (lambda (ctx arg T gtx)
           (let ((lambda-spec        (@0 arg))

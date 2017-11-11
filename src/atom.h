@@ -60,6 +60,9 @@ class BukaLISPException : public std::exception
             push(place, file_name, line, func_name);
         }
 
+        // TODO!
+        bool do_ctrl_jump() { return false; }
+
         BukaLISPException &push(Atom &err_stack);
 
         BukaLISPException &push(const std::string place,
@@ -1310,7 +1313,9 @@ class GC
 #define REG_ROW_PRIM    2
 #define REG_ROW_UPV     3
 #define REG_ROW_ROOT    4
-#define REG_ROWS        5
+#define REG_ROW_RREF    5
+
+#define REG_ROW_SPECIAL 16
 
 class RegRowsReference : public UserData
 {

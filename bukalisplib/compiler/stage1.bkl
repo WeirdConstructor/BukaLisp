@@ -132,9 +132,7 @@
                ((glob-var:) ['#1#glob-var (@1 value) (@2 value)])
                ((prim:)     ['#1#prim (@1 value)])
                ((syntax:)
-                (if (procedure? (@2 value))
-                  ['#1#data (@2 value)]
-                  (error "Variable contains syntax directive, can't use it here" value)))
+                (error "Variable contains syntax directive, can't use it here" value))
                ((macro:)
                 (error "Variable contains macro, can't use it here" value))
                (else
@@ -164,8 +162,6 @@
                   ((macro:)
                    (let ((transformed
                            (apply (@1 value) (drop arg 1))))
-
-
                      (T ctx transformed)))
                   ((prim:)
                    (if (nil? (@2 value))
@@ -268,7 +264,8 @@
   (lambda (root-env)
     (do-each (k v S1-ROOT-ENV)
       (@!k root-env v))
-    (@!" REGS " root-env [])
+    (when (nil? (@" REGS " root-env))
+      (@!" REGS " root-env []))
     root-env))
 
 (define spawn-root-env
@@ -288,6 +285,8 @@
             (@!sym root-env var)))
         (set! var [glob-var: sym]))
       (unless reg-idx
+        (when (nil? (@" REGS " root-env))
+          (@!" REGS " root-env []))
         (set! reg-idx (length (@" REGS " root-env))))
       (@!sym root-env var)
       (@!reg-idx (@" REGS " root-env) content)

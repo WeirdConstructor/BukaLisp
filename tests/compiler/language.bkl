@@ -13,7 +13,7 @@
 
 (define T
   (lambda (code expected)
-    (T-env code expected (spawn-root-env))))
+    (T-env code expected {})))
 ;----------------------------------------------------------------------------
 
 ;(PUSH-DEBUG)
@@ -899,17 +899,17 @@
    [1 [2 3]])
 
 ; Test using a known environemt which is mutatable:
-(let ((my-env (spawn-root-env)))
+(let ((my-env {}))
   (T-env '(begin (define x 13.3)) 13.3 my-env)
   (T-env '(begin x)               13.3 my-env)
   (T-env '(define y x)            13.3 my-env)
   (T-env '(+ x y)                 26.6 my-env))
 
 ; test externally given environment executed inside VM:
-(let ((my-env (spawn-root-env)))
+(let ((my-env {}))
   (set-root-env-var my-env 'foo 123)
-;  (displayln (pp-str my-env))
   (T-env '(begin foo) 123 my-env)
+  #;(displayln (pp-str my-env))
   (T-env '(begin
             (define k 10)
             ((lambda () foo)))
@@ -917,7 +917,7 @@
          my-env))
 
 ; test recursive calling into VM:
-(let ((my-env (spawn-root-env))
+(let ((my-env {})
       (func (bukalisp-compile
               "tests_x1"
               ['(displayln foo-out: (+ 10 20))]
@@ -1406,6 +1406,11 @@
                           (eval M)))) x))
    12)
 
+; Test eval as procedure:
+(T '(let ((e eval))
+      (e '(+ 1 2 3)))
+   6)
+
 ; Testing coroutines:
 (T '(let ((x 10)
           (c (lambda :coroutine ()
@@ -1492,6 +1497,12 @@
 (T '(handle-exceptions x x (raise 10))
    10)
 
+(T '(handle-exceptions x x 10) 10)
+
+(T '(let ((f (lambda (fn)
+               (handle-exceptions _ _ (fn)))))
+      (f (lambda () 10)))
+   10)
 
 (T '(handle-exceptions
       x
@@ -1554,6 +1565,228 @@
         (push! l (fn))
         (push! l (fn))))
    [[10] 21 30])
+
+; Test cleanup with exceptions and return and without anything
+(T '(let ((x 10))
+      (with-cleanup
+        (set! x 11)
+        (set! x 20))
+      x)
+   11)
+
+; with setup expression:
+(T '(let ((x 10))
+      [(with-cleanup
+        (set! x 20)
+        (set! x (* x 2))
+        [(set! x (+ x 1))])
+       x])
+   [[21] 42])
+
+(T '(let ((x 10)
+          (raised-obj nil))
+      (handle-exceptions
+        EX (set! raised-obj EX)
+        (with-cleanup
+          (set! x 11)
+          (begin
+            (set! x 20)
+            (raise X:))))
+      [x raised-obj])
+   [11 X:])
+
+(T '(let ((x 10)
+          (ret-val ((lambda ()
+                      (with-cleanup
+                        (set! x 13)
+                        (begin
+                          (set! x 21)
+                          (return [x X:])))))))
+      [x ret-val])
+   [13 [21 X:]])
+
+
+(T '(let ((x 10))
+      (with-cleanup
+        (set! x (* 2 x))
+        (with-cleanup
+          (set! x 11)
+          (set! x 20)))
+      x)
+   22)
+
+(T '(let ((x 10))
+      (with-cleanup
+        (with-cleanup (set! x (* 2 x)) (set! x (+ 1 x)))
+        (set! x 20))
+      x)
+   42)
+
+(T '(let ((x 10))
+      ((lambda ()
+         (with-cleanup
+           (with-cleanup
+             (set! x (* 2 x))
+             (begin (return F:)
+                    (set! x (+ 1 x))))
+           (set! x 20))))
+      x)
+   40)
+
+(T '(let ((x 10)
+          (raised-obj nil))
+      (handle-exceptions
+        EX (set! raised-obj EX)
+        ((lambda ()
+          (with-cleanup
+            (set! x 17)
+            (begin
+              (set! x 20)
+              (raise X:))))))
+      [x raised-obj])
+   [17 X:])
+
+(T '(let ((x 10)
+          (raised-obj nil))
+      (handle-exceptions
+        EX (set! raised-obj EX)
+        ((lambda ()
+          (handle-exceptions
+            UX
+            (raise [UX Y:])
+            (with-cleanup
+              (set! x 17)
+              (begin
+                (set! x 20)
+                (raise X:)))))))
+      [x raised-obj])
+   [17 [X: Y:]])
+
+(T '((lambda ()
+       (with-cleanup
+         (return 20)
+         (return 10))))
+   20)
+(T '(handle-exceptions
+      X
+      X
+      ((lambda ()
+         (with-cleanup
+           (raise 20)
+           (return 10)))))
+   20)
+
+(T '(handle-exceptions
+      X
+      X
+      ((lambda ()
+         (with-cleanup
+           (with-cleanup 22
+                         (raise 20))
+           (raise 10)))))
+   20)
+
+(T '(handle-exceptions
+      X
+      X
+      ((lambda ()
+         (with-cleanup
+           (handle-exceptions _ _ (with-cleanup 22 (raise 20)))
+           (raise 10)))))
+   10)
+
+(T '(let ((x 10))
+      [((lambda ()
+          (with-cleanup
+            (set! x (+ x 13))
+            ((lambda ()
+               (with-cleanup
+                 (set! x (+ x 2))
+                 ((lambda ()
+                    (set! x 20)))))))))
+       x])
+   [20 35])
+
+
+(T '(let ((x 10))
+      [(handle-exceptions
+         _ [_ x]
+         ((lambda ()
+            (with-cleanup
+              (set! x (+ x 13))
+              ((lambda ()
+                 (with-cleanup
+                   (set! x (+ x 2))
+                   ((lambda ()
+                      (raise L:)
+                      (set! x 20))))))))))
+       x])
+   [[L: 25] 25])
+
+; Test return-from
+(T '(block x (return-from x 10)) 10)
+(T '(block x (return-from* 'x 10)) 10)
+(T '(block x 10) 10)
+
+(T '(let ((x 10))
+      [(block foo
+              (set! x 20)
+              (return-from foo 10)
+              (set! x 22))
+       x])
+   [10 20])
+
+(T '(let ((x 10))
+      [(block foo
+              (with-cleanup
+                (set! x (* 3 x))
+                (begin
+                  (set! x 20)
+                  (return-from foo 10)
+                  (set! x 22))))
+       x])
+   [10 60])
+
+(T '(let ((x 10))
+      [(block foo
+              (with-cleanup
+                (set! x (* 3 x))
+                (begin
+                  (set! x 20)
+                  (return-from foo 10)
+                  (set! x 22))))
+       x])
+   [10 60])
+
+(T '(block x
+      (handle-exceptions
+        _ _
+        (return-from x 10)))
+   10)
+
+(T '(let ((f (lambda (fn) (block boo (fn)))))
+      [(f (lambda () 10))
+       (f (lambda () (return-from boo 20) 10))])
+   [10 20])
+
+(T '(let ((f (lambda (fn) (block boo (handle-exceptions _ _ (fn))))))
+      [(f (lambda () 10))
+       (f (lambda () (return-from boo 20) 10))])
+   [10 20])
+
+
+(T '(let ((x nil)
+          (f (lambda (fn)
+               (block boo
+                 (with-cleanup
+                   (set! x (+ 1 x))
+                   (handle-exceptions _ _ (with-cleanup (set! x 33) (fn))))))))
+      [x
+       (f (lambda () 10))
+       (f (lambda () (return-from boo 20) 10))
+       x])
+   [nil 10 20 34])
+
 
 ; Test 'and' and 'or'
 (T '(or #f 10) 10)
