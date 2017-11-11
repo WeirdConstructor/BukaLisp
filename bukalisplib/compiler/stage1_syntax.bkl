@@ -455,6 +455,7 @@
             'lambda
             (.AM gtx [(drop (@2 args) 1)])
             (drop args 3))))]))
+
 ;----------------------------------------------------------------------------
 
 (bkl-set-doc! 'do-each
@@ -485,6 +486,7 @@ value.
         keys)
     ;=> (:a :b :c)
 |)
+
 (add-syntax
   'do-each
   (lambda (ctx args T gtx)
@@ -818,6 +820,38 @@ value.
                                          else-clause
                                          (drop else-clause 1)))])))
           out-cond))))))
+;----------------------------------------------------------------------------
+
+(add-syntax
+  'define-library
+  (lambda (ctx arg T gtx)
+    (unless (list? (@1 arg))
+      (error "'define-library' library name needs to be a list" (@1 arg)))
+    (define lib-name (apply str-join "" (@1 arg)))
+    (define lib-root-env {" IS-ROOT-ENV " #t " REGS " []})
+    (define export-list [])
+    (do-each (decl (drop arg 2))
+      (unless (list? decl)
+        (error "'define-library' invalid library declaration" decl))
+      (case (@0 decl)
+        ((export)
+         (do-each (ex (drop 1 decl))
+           (push! export-list ex)))
+        ((import)
+         (let ((import-lib-name (apply str-join "-" (@1 decl))))
+           (if (eqv? import-lib-name "bukalisp-base")
+             (begin
+               (init-root-env lib-root-env)))))
+        ((begin)
+         (.lib-compiler gtx lib-name lib-root-env #f))))
+    (define exported-values {})
+    (do-each (ex export-list)
+      (let ((exp-var (@ex lib-root-env)))
+        (if (eqv? (@0 exp-var) glob-var:)
+          (let ((value (get-root-env-var lib-root-env ex)))
+            (@!ex exported-values [glob-var: ex exp-var]))
+          (@!ex exported-values exp-var))))
+    (@!lib-name (libraries: gtx) [lib-root-env exported-values])))
 ;----------------------------------------------------------------------------
 
 (define eval-syntax

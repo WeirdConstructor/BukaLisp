@@ -193,9 +193,12 @@ class Tokenizer
                         while (m_u8buf.length() > 0)
                         {
                             c = m_u8buf.first_byte(true);
+                            if (c == '\n') m_cur_line++;
+
                             if (c == '\\')
                             {
                                 char peek_c = m_u8buf.first_byte();
+                                if (peek_c == '\n') m_cur_line++;
 
                                 if (checkEOF()) return;
                                 if (peek_c == delim_char)
@@ -204,9 +207,6 @@ class Tokenizer
                                     m_u8tmp.append_byte(m_u8buf.first_byte(true));
                                 else
                                 {
-                                    if (c      == '\n') m_cur_line++;
-                                    if (peek_c == '\n') m_cur_line++;
-
                                     m_u8tmp.append_byte(c);
                                     m_u8tmp.append_byte(m_u8buf.first_byte(true));
                                 }
