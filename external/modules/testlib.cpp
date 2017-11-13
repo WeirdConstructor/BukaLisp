@@ -85,10 +85,10 @@ BukaLISPModule init_testlib()
     SET_FUNC(__INIT__,    test_init);
     SET_FUNC(__DESTROY__, test_destroy);
 
-    SET_FUNC(isInited,    test_is_inited);
+    SET_FUNC(is-inited?,  test_is_inited);
     SET_FUNC(identity,    test_id);
-    SET_FUNC(getCPtr,     test_get_c_ptr);
-    SET_FUNC(getVVPtr,    test_get_vv_ptr);
+    SET_FUNC(get-c-ptr,   test_get_c_ptr);
+    SET_FUNC(get-vv-ptr,  test_get_vv_ptr);
     SET_FUNC(call,        test_call);
 
     return BukaLISPModule(reg);

@@ -394,7 +394,7 @@ VV_CLOSURE_DOC(util_re,
 "       $&      - entire match\n"
 "       $`      - prefix\n"
 "       $´      - suffix\n"
-"_return-format-mode-str_ may contain:\n"
+"_return-format-mode-str_ may be empty or contain:\n"
 "       \"n\"   - string index-numbers\n"
 "\n"
 "Examples:\n"
@@ -456,14 +456,12 @@ VV_CLOSURE_DOC(util_re,
 
 VV_CLOSURE(util_init)
 {
-    cout << "INIT UTIL LIB" << endl;
     return vv_undef();
 }
 //---------------------------------------------------------------------------
 
 VV_CLOSURE(util_destroy)
 {
-    cout << "DESTROYED UTIL LIB" << endl;
     return vv_undef();
 }
 //---------------------------------------------------------------------------
@@ -481,13 +479,13 @@ BukaLISPModule init_utillib()
     SET_FUNC(__INIT__,    util_init);
     SET_FUNC(__DESTROY__, util_destroy);
 
-    SET_FUNC(fromCsv,     util_from_csv);
-    SET_FUNC(toCsv,       util_to_csv);
-    SET_FUNC(toUtf8,      util_to_utf8);
-    SET_FUNC(fromUtf8,    util_from_utf8);
-    SET_FUNC(toJson,      util_to_json);
-    SET_FUNC(fromJson,    util_from_json);
-    SET_FUNC(re      ,    util_re);
+    SET_FUNC(from-csv,    util_from_csv);
+    SET_FUNC(to-csv,      util_to_csv);
+    SET_FUNC(to-utf8,     util_to_utf8);
+    SET_FUNC(from-utf8,   util_from_utf8);
+    SET_FUNC(to-json,     util_to_json);
+    SET_FUNC(from-json,   util_from_json);
+    SET_FUNC(re,          util_re);
 
     return BukaLISPModule(reg);
 }

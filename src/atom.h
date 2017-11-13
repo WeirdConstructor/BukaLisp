@@ -310,39 +310,96 @@ struct Atom
 
     Atom meta();
 
+    void add_equal_compare(
+        std::vector<std::pair<Atom, Atom>> &to_compare,
+        const Atom &a,
+        const Atom &b) const
+    {
+        to_compare.push_back(std::pair<Atom, Atom>(a, b));
+    }
+
+    bool equal(const Atom &o) const
+    {
+        if (o.m_type != m_type) return false;
+
+        std::vector<std::pair<Atom, Atom>> to_compare;
+        add_equal_compare(to_compare, *this, o);
+
+        while (!to_compare.empty())
+        {
+            std::pair<Atom, Atom> ab_pair = to_compare.back();
+            to_compare.pop_back();
+            Atom &a = ab_pair.first;
+            Atom &b = ab_pair.second;
+            // XXX: Invariant a.m_type == b.m_type, this has to be
+            //      handled before add_equal_compare().
+
+            switch (a.m_type)
+            {
+                case T_VEC:
+                {
+                    AtomVec *av = a.m_d.vec;
+                    AtomVec *bv = b.m_d.vec;
+                    if (av->m_len != bv->m_len) return false;
+
+                    for (size_t i = 0; i < av->m_len; i++)
+                    {
+                        if (av->m_data[i].m_type != bv->m_data[i].m_type)
+                            return false;
+
+                        add_equal_compare(
+                            to_compare,
+                            av->m_data[i],
+                            bv->m_data[i]);
+                    }
+                    break;
+                }
+                case T_MAP:
+                {
+                    AtomMap *am = a.m_d.map;
+                    AtomMap *bm = b.m_d.map;
+                    if (am->size() != bm->size()) return false;
+
+                    ATOM_MAP_FOR(i, am)
+                    {
+                        bool defined = false;
+                        Atom bmv = bm->at(MAP_ITER_KEY(i), defined);
+                        if (!defined) return false;
+                        Atom amv = MAP_ITER_VAL(i);
+                        if (amv.m_type != bmv.m_type) return false;
+                        add_equal_compare(to_compare, amv, bmv);
+                    }
+                    break;
+                }
+                default:
+                    if (!a.eqv(b)) return false;
+            }
+        }
+
+        return true;
+    }
+
     bool eqv(const Atom &o)
     {
+        if (o.m_type != m_type) return false;
+
         switch (m_type)
         {
-            case T_BOOL: return o.m_type == T_BOOL
-                                && m_d.b == o.m_d.b;
-            case T_KW:   return o.m_type == T_KW
-                                && m_d.sym == o.m_d.sym;
-            case T_SYM:  return o.m_type == T_SYM
-                                && m_d.sym == o.m_d.sym;
-            case T_STR:  return o.m_type == T_STR
-                                && m_d.sym == o.m_d.sym;
-            case T_SYNTAX:
-                         return o.m_type == T_SYNTAX
-                                && m_d.sym == o.m_d.sym;
-            case T_INT:  return o.m_type == T_INT
-                                && m_d.i == o.m_d.i;
-            case T_DBL:  return o.m_type == T_DBL
-                                && m_d.d == o.m_d.d;
-            case T_VEC:  return o.m_type == T_VEC
-                                && m_d.vec == o.m_d.vec;
-            case T_CLOS:  return o.m_type == T_CLOS
-                                && m_d.vec == o.m_d.vec;
-            case T_MAP:  return o.m_type == T_MAP
-                                && m_d.map == o.m_d.map;
-            case T_UD:   return o.m_type == T_UD
-                                && m_d.ud == o.m_d.ud;
-            case T_C_PTR:return o.m_type == T_UD
-                                && m_d.ptr == o.m_d.ptr;
-            case T_PRIM: return o.m_type == T_PRIM
-                                && m_d.func == o.m_d.func;
-            case T_NIL:  return o.m_type == T_NIL;
-            default: return false;
+            case T_KW:
+            case T_SYM:
+            case T_STR:
+            case T_SYNTAX: return m_d.sym  == o.m_d.sym;
+            case T_CLOS:
+            case T_VEC:    return m_d.vec  == o.m_d.vec;
+            case T_MAP:    return m_d.map  == o.m_d.map;
+            case T_BOOL:   return m_d.b    == o.m_d.b;
+            case T_INT:    return m_d.i    == o.m_d.i;
+            case T_DBL:    return m_d.d    == o.m_d.d;
+            case T_UD:     return m_d.ud   == o.m_d.ud;
+            case T_C_PTR:  return m_d.ptr  == o.m_d.ptr;
+            case T_PRIM:   return m_d.func == o.m_d.func;
+            case T_NIL:    return true; // Type was already compared above
+            default:       return false;
         }
         return false;
     }

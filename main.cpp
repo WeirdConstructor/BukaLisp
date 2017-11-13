@@ -18,8 +18,8 @@
 #include "bukalisp.h"
 #include "util.h"
 
-//#include <modules/util/utillib.h>
-//#include <modules/sys/syslib.h>
+#include <modules/util/utillib.h>
+#include <modules/sys/syslib.h>
 #include <modules/testlib.h>
 
 //---------------------------------------------------------------------------
@@ -1152,9 +1152,9 @@ int main(int argc, char *argv[])
         }
 
         std::vector<BukaLISPModule *> bukalisp_modules;
-//        bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
+        bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
         bukalisp_modules.push_back(new BukaLISPModule(init_testlib()));
-//        bukalisp_modules.push_back(new BukaLISPModule(init_syslib()));
+        bukalisp_modules.push_back(new BukaLISPModule(init_syslib()));
 
         auto load_vm_modules = [&](VM &vm)
         {
@@ -1167,28 +1167,28 @@ int main(int argc, char *argv[])
             try
             {
 #               define RUN_TEST(name)   test_##name(); std::cout << "OK - " << #name << std::endl;
-////                RUN_TEST(gc1);
-////                RUN_TEST(gc2);
-//                RUN_TEST(atom_gen1);
-//                RUN_TEST(atom_gen2);
-//                RUN_TEST(symbols_and_keywords);
-//                RUN_TEST(maps);
-//                RUN_TEST(atom_printer);
-//                RUN_TEST(maps2);
-//                RUN_TEST(atom_hash_table);
-//                RUN_TEST(atom_debug_info);
-//                RUN_TEST(ieval_atoms);
-//                RUN_TEST(ieval_vars);
-//                RUN_TEST(ieval_basic_stuff);
-//                RUN_TEST(ieval_proc);
-//                RUN_TEST(ieval_let);
-//                RUN_TEST(ieval_cond);
-//                RUN_TEST(ieval_lambda);
-//                RUN_TEST(ieval_index_procs);
-//                RUN_TEST(ieval_loops);
-//                RUN_TEST(ieval_objs);
-//                RUN_TEST(ieval_comments);
-//                RUN_TEST(ieval_eval);
+//                RUN_TEST(gc1);
+//                RUN_TEST(gc2);
+                RUN_TEST(atom_gen1);
+                RUN_TEST(atom_gen2);
+                RUN_TEST(symbols_and_keywords);
+                RUN_TEST(maps);
+                RUN_TEST(atom_printer);
+                RUN_TEST(maps2);
+                RUN_TEST(atom_hash_table);
+                RUN_TEST(atom_debug_info);
+                RUN_TEST(ieval_atoms);
+                RUN_TEST(ieval_vars);
+                RUN_TEST(ieval_basic_stuff);
+                RUN_TEST(ieval_proc);
+                RUN_TEST(ieval_let);
+                RUN_TEST(ieval_cond);
+                RUN_TEST(ieval_lambda);
+                RUN_TEST(ieval_index_procs);
+                RUN_TEST(ieval_loops);
+                RUN_TEST(ieval_objs);
+                RUN_TEST(ieval_comments);
+                RUN_TEST(ieval_eval);
                 RUN_TEST(bukalisp_instance);
 
                 cout << "TESTS OK" << endl;

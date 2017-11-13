@@ -1,0 +1,7 @@
+(displayln FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF:)
+(define-library
+  (tests-support import-test)
+  (export impt)
+  (import (bukalisp base))
+  (begin
+    (define impt (+ 130 5))))

@@ -451,6 +451,14 @@ class Tokenizer
                 return;
             }
 
+            if (u8P.length() > 1
+                && charClass(u8P.first_byte(), "+-")
+                && !charClass(u8P.at(1), "0123456789"))
+            {
+                push(Token(u8));
+                return;
+            }
+
             bool    bIsDouble   = false;
             bool    bBadNumber  = false;
             double  dVal        = 0;

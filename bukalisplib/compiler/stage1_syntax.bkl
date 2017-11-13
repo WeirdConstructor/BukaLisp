@@ -873,24 +873,30 @@ value.
     (define LIBRARIES (@" LIBRARIES " (root-env: gtx)))
     (do-each (import-set (drop arg 1))
       (let ((library-name (apply str-join "-" import-set))
+            (module-lib   (when (eqv? (@0 import-set) 'module)
+                            (@(@1 import-set) (bkl-get-vm-modules))))
             (lib          (@library-name LIBRARIES)))
-        (unless lib
-          (let ((library-file
-                  (str (apply str-join
-                              (sys-path-separator)
-                              import-set)
-                       ".bkl")))
-            (compile-include ctx library-file T gtx)
-            (set! lib (@library-name LIBRARIES))
+        (if module-lib
+          (do-each (sym val module-lib)
+            (set-root-env-var (root-env: gtx) sym (@2 val)))
+          (begin
             (unless lib
-              (error "'import' library not found, also not defined in library file"
-                     [library-name library-file]))))
-        (do-each (sym var (@1 lib))
-          (if (eqv? (@0 var) glob-var:)
-            (set-root-env-var (root-env: gtx)
-                              sym
-                              (@2 var))
-            (@!sym (root-env: gtx) var)))))
+              (let ((library-file
+                      (str (apply str-join
+                                  (sys-path-separator)
+                                  import-set)
+                           ".bkl")))
+                (compile-include ctx library-file T gtx)
+                (set! lib (@library-name LIBRARIES))
+                (unless lib
+                  (error "'import' library not found, also not defined in library file"
+                         [library-name library-file]))))
+            (do-each (sym var (@1 lib))
+              (if (eqv? (@0 var) glob-var:)
+                (set-root-env-var (root-env: gtx)
+                                  sym
+                                  (@2 var))
+                (@!sym (root-env: gtx) var)))))))
     ['#1#data nil]))
 ;----------------------------------------------------------------------------
 

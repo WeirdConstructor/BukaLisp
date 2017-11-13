@@ -248,6 +248,66 @@
 (T '(<= 2.1 2) #false)
 (T '(>= 2.1 2) #true)
 
+(T '(abs 10)        10)
+(T '(abs -10)       10)
+(T '(abs 10.123)    10.123)
+(T '(abs -10.123)   10.123)
+
+; Test string to number conversion:
+(T '(string->number "10")     10)
+(T '(string->number "-10")    -10)
+(T '(string->number "-10.0")  -10.0)
+(T '(string->number "2r11")   3)
+(T '(string->number "-2r11")  -3)
+(T '(string->number "3r11")   4)
+(T '(string->number "4r11")   5)
+(T '(string->number "5r11")   6)
+(T '(string->number "6r11")   7)
+(T '(string->number "7r11")   8)
+(T '(string->number "8r11")   9)
+(T '(string->number "9r11")   10)
+(T '(string->number "10r11")  11)
+(T '(string->number "11r11")  12)
+(T '(string->number "12r11")  13)
+(T '(string->number "13r11")  14)
+(T '(string->number "14r11")  15)
+(T '(string->number "15r11")  16)
+(T '(string->number "16r11")  17)
+(T '(string->number "17r11")  18)
+(T '(string->number "18r11")  19)
+(T '(string->number "19r11")  20)
+(T '(string->number "20r11")  21)
+(T '(string->number "21r11")  22)
+(T '(string->number "22r11")  23)
+(T '(string->number "23r11")  24)
+(T '(string->number "24r11")  25)
+(T '(string->number "25r11")  26)
+(T '(string->number "26r11")  27)
+(T '(string->number "27r11")  28)
+(T '(string->number "28r11")  29)
+(T '(string->number "29r11")  30)
+(T '(string->number "30r11")  31)
+(T '(string->number "31r11")  32)
+(T '(string->number "32r11")  33)
+(T '(string->number "33r11")  34)
+(T '(string->number "34r11")  35)
+(T '(string->number "35r11")  36)
+(T '(string->number "36r11")  37)
+(T '(string->number "36rA")   10)
+(T '(string->number "36rZ")   35)
+(T '(string->number "36rBUKALISP")
+   928536398953)
+
+; Test number->string
+(T '(number->string (string->number "36rBUKALISP" 36) 36) "36RBUKALISP")
+(T '(number->string (string->number "36rBUKALISP" 31) 36) "Q043R35317")
+(T '(number->string (string->number "36rZZZZZZZZ") 36) "ZZZZZZZZ")
+(T '(number->string (string->number "-36rZZZZZZZZ") 36) "-ZZZZZZZZ")
+(T '(number->string 15 16)  "F")
+(T '(number->string 16 16)  "10")
+(T '(number->string 1024 2) "10000000000")
+(T '(number->string 32 2)   "100000")
+
 ; Test procedures:
 (T '(eqv? #t #t) #true)
 (T '(eqv? #f #f) #true)
@@ -280,10 +340,27 @@
 (T '(let ((e eqv?)) (e { x: 11 } { x: 10 })) #false)
 (T '(let ((e eqv?)) (e 2 (/ 5 2))) #true)
 
+; Test not
 (T '(not #t) #false)
 (T '(not 1) #false)
 (T '(not '()) #false)
 (T '(not #f) #true)
+
+; Test equal?
+(T '(equal? 'a 'a)                #t)
+(T '(equal? '(a) '(a))            #t)
+(T '(equal? '(a (b) c)
+            '(a (b) c))           #t)
+(T '(equal? '(a (c) c)
+            '(a (b) c))           #f)
+(T '(equal? '(a c c)
+            '(a (b) c))           #f)
+(T '(equal? "abc" "abc")      #t)
+(T '(equal? 2 2)                  #t)
+(T '(equal? {a: [1 2 3] b: 3}
+            {b: 3 a: [1 2 3]})    #t)
+(T '(equal? {b: [1 2 3]}
+            {b: 3 a: [1 2 3]})    #f)
 
 ; Testing predicates
 (T '(symbol? 'a) #true)
@@ -469,6 +546,12 @@
 (T '(begin (let ((c length)) (c [1 2 3 (define x 20)]))) 4)
 (T '(begin (length [1 2 3 (define x 20)]) x) 20)
 (T '(begin [1 2 3 (define x 20)] x) 20)
+
+(T '(length "abcdef")       6)
+(T '(length abcd:)          4)
+(T '(length 'abc)           3)
+(T '(length [1 2 3])        3)
+(T '(length {a: 10 b: 20})  2)
 
 ; Test other primitives:
 (T '(first '(a b c)) 'a)
@@ -928,7 +1011,7 @@
   (T-env '(begin
             (define k 10)
             ((lambda ()
-               (run-vm-prog xxx {})))
+               (bkl-run-vm-prog xxx {})))
             (+ 12.345 k))
          22.345
          my-env))

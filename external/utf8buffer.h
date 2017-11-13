@@ -501,10 +501,17 @@ class UTF8Buffer
         {
             if (this->length () <= 0)
                 return '\0';
-            char a = this->buffer ()[0];
+            char a = this->buffer()[0];
             if (skip)
-                this->skip_bytes (1);
+                this->skip_bytes(1);
             return a;
+        }
+
+        char at(size_t idx)
+        {
+            if (idx >= this->length())
+                return '\0';
+            return this->buffer()[idx];
         }
 
         char first_ascii (bool skip = false)

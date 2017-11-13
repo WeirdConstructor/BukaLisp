@@ -53,7 +53,7 @@ inline bool u8BufParseNumber(UTF8Buffer &u8P, double &dVal, int64_t &iVal, bool 
             while (u8P.length() > 0
                    && charClass(u8P.first_byte(),
                                 "0123456789abcdefghijklmnopqrstuvwxyz"
-                                "ABCDEFGHIJKLMNOPQRSTUVW"))
+                                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
                 u8Num.append_byte(u8P.first_byte(true));
         }
 

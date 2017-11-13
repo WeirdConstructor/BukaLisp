@@ -312,9 +312,9 @@ BukaLISPModule init_syslib()
         old_locale, new boost::filesystem::detail::utf8_codecvt_facet);
     boost::filesystem::path::imbue(new_locale);
 
-    SET_FUNC(fileExists?, file_exists_Q);
-    SET_FUNC(exec!,       exec_M);
-    SET_FUNC(find,        find);
+    SET_FUNC(file-exists?, file_exists_Q);
+    SET_FUNC(exec!,        exec_M);
+    SET_FUNC(find,         find);
 
     return BukaLISPModule(reg);
 }

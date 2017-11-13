@@ -29,7 +29,7 @@
                                      ['eval [syntax: eval-syntax]])
                              #t)))
             (set! global-saved-eval-vm-closure
-              (run-vm-prog eval-prog local-root))
+              (bkl-run-vm-prog eval-prog local-root))
             (set! eval-closure global-saved-eval-vm-closure)))
 ;        (displayln ENDED-COMPILE-EVAL:)
         (set-root-env-var root-env 'eval eval-closure)))
@@ -62,7 +62,7 @@
           (when *DEBUG* (displayln PROG: prog))
           (if only-compile?
             prog
-            (run-vm-prog prog root-env)))))))
+            (bkl-run-vm-prog prog root-env)))))))
 ;----------------------------------------------------------------------------
 
 bukalisp-compile

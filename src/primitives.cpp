@@ -1,13 +1,20 @@
 // Copyright (C) 2017 Weird Constructor
 // For more license info refer to the the bottom of this file.
 
+#include "parse_util.h"
+
 #define BIN_OP_LOOPS(op) \
         if (args.m_len > 1) { \
             if (out.m_type == T_DBL) { \
                 double &o = out.m_d.d; \
                 for (size_t i = 1; i < args.m_len; i++) \
                     o = o op args.m_data[i].to_dbl(); \
+            } else if (out.m_type == T_INT) { \
+                int64_t &o = out.m_d.i; \
+                for (size_t i = 1; i < args.m_len; i++) \
+                    o = o op args.m_data[i].to_int(); \
             } else { \
+                out.set_int(out.to_int()); \
                 int64_t &o = out.m_d.i; \
                 for (size_t i = 1; i < args.m_len; i++) \
                     o = o op args.m_data[i].to_int(); \
@@ -33,8 +40,9 @@ START_PRIM()
     out = args.m_data[0];
     if (args.m_len == 1)
     {
-        if (out.m_type == T_DBL) out.m_d.d = 1.0 / out.m_d.d;
-        else                     out.m_d.i = 1 / out.m_d.i;
+        if      (out.m_type == T_DBL) out.set_dbl(1.0 / out.m_d.d);
+        else if (out.m_type == T_INT) out.set_dbl(1.0 / out.m_d.i);
+        else                          out.set_dbl(1.0 / out.to_int());
         return;
     }
     BIN_OP_LOOPS(/)
@@ -45,8 +53,9 @@ START_PRIM()
     out = args.m_data[0];
     if (args.m_len == 1)
     {
-        if (out.m_type == T_DBL) out.m_d.d *= -1.0;
-        else                     out.m_d.i *= -1;
+        if      (out.m_type == T_DBL) out.m_d.d *= -1.0;
+        else if (out.m_type == T_INT) out.m_d.i *= -1;
+        else                          out.set_int(- out.to_int());
         return;
     }
     BIN_OP_LOOPS(-)
@@ -94,6 +103,129 @@ END_PRIM(>=);
 #define A3  (args.m_data[3])
 
 START_PRIM()
+    REQ_EQ_ARGC(abs, 1);
+    if (A0.m_type == T_DBL)
+        out.set_dbl(A0.m_d.d < 0 ? -A0.m_d.d : A0.m_d.d);
+    else
+        out.set_int(A0.to_int() < 0 ? -A0.to_int() : A0.to_int());
+END_PRIM(abs);
+
+START_PRIM()
+    REQ_GT_ARGC(number->string, 0);
+    if (args.m_len > 2)
+        error("'number->string' too many arguments");
+    if (args.m_len == 1)
+    {
+        if (A0.m_type == T_DBL)
+            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.m_d.d)));
+        else if (A0.m_type == T_INT)
+            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.m_d.i)));
+        else
+            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.to_int())));
+    }
+    else
+    {
+        if (A0.m_type == T_DBL)
+            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.m_d.d)));
+        else
+        {
+            int base  = (int) A1.to_int();
+            int64_t i = A0.to_int();
+
+            if (base < 2 || base > 36)
+                error("'number->string' supports only base >= 2 and base <= 36",
+                      A1);
+
+            // from http://en.cppreference.com/w/cpp/numeric/math/div
+            std::string buf;
+            std::lldiv_t dv{};
+            dv.quot = i;
+            do {
+                dv = std::lldiv(dv.quot, base);
+                buf += "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[std::abs(dv.rem)];
+            } while(dv.quot);
+            if (i < 0) buf += "-";
+            std::string out_buf(buf.rbegin(), buf.rend());
+            out = Atom(T_STR, m_rt->m_gc.new_symbol(out_buf));
+        }
+    }
+END_PRIM(number->string)
+
+START_PRIM()
+    REQ_GT_ARGC(string->number, 0);
+    if (args.m_len > 2)
+        error("'string->number' too many arguments");
+    switch (A0.m_type)
+    {
+        case T_NIL:
+            out.set_int(0);
+            return;
+        case T_INT:
+        case T_DBL:
+            out = A0;
+            return;
+        case T_SYM:
+        case T_KW:
+        case T_STR:
+        {
+            std::string str = A0.m_d.sym->m_str;
+			if (args.m_len == 2)
+			{
+				int base = (int) A1.to_int();
+				if (base < 2 || base > 36)
+					error("'string->number' support only base >= 2"
+						  "and base <= 36",
+						  A1);
+				str = std::to_string(base) + "r" + str;
+			}
+            UTF8Buffer u8P(str.data(), str.size());
+            double d_val;
+            int64_t i_val;
+            bool is_double = false;
+            bool is_bad = false;
+            u8BufParseNumber(u8P, d_val, i_val, is_double, is_bad);
+            if (is_bad)
+            {
+                out = Atom();
+                return;
+            }
+
+            if (is_double) out.set_dbl(d_val);
+            else           out.set_int(i_val);
+            return;
+        }
+        default:
+            out.set_int(A0.to_int());
+            return;
+    }
+END_PRIM(string->number);
+
+START_PRIM()
+	REQ_GT_ARGC(substring, 2);
+	std::string s = A0.to_display_str();
+	size_t start = (size_t) A1.to_int();
+	size_t len =
+		args.m_len > 2
+		? (((size_t) A2.to_int())
+		   - start)
+		: std::string::npos;
+	if (start < s.size())
+		s = s.substr(start, len);
+	out = Atom(T_STR, m_rt->m_gc.new_symbol(s));
+END_PRIM_DOC(substring,
+"@strings procedure (substring _string_ _start_)\n"
+"@strings procedure (substring _string_ _start_ _end_)\n"
+"\n"
+"Returns the substring of _string_ between _start_ and _end_.\n"
+"The indexes _start_ and _end_ are 0 based, and _end_ is exclusive.\n"
+"If _end_ is omitted, the rest of the string starting at _start_\n"
+"is returned.\n"
+"\n"
+"    (substring \"abcdef\" 0 1) ;=> \"a\"\n"
+"    (substring \"abcdef\" 1)   ;=> \"bcdef\"\n"
+"    (substring \"abcdef\" 2 4) ;=> \"cd\"\n")
+
+START_PRIM()
     out = Atom(T_VEC);
     AtomVec *l = m_rt->m_gc.allocate_vector(args.m_len);
     out.m_d.vec = l;
@@ -104,9 +236,64 @@ END_PRIM(list);
 
 START_PRIM()
     REQ_EQ_ARGC(eq?, 2);
-    out = Atom(T_BOOL);
-    out.m_d.b = A0.eqv(A1);
-END_PRIM(eqv?);
+    out.set_bool(A0.eqv(A1));
+END_PRIM_DOC(eqv?,
+"@predicates procedure (eqv? _a-value_ _b-value_)\n"
+"\n"
+"Returns #true if the type of _a-value_ and _b-value_ are equal\n"
+"and their values are equal. This procedure does only check for\n"
+"referencial equality for complicated types like lists or maps.\n"
+"\n"
+"    (eqv? 'a 'a)                 ;=> #t\n"
+"    (eqv? 'a 'b)                 ;=> #f\n"
+"    (eqv? 2 2)                   ;=> #t\n"
+"    (eqv? 2 2.0)                 ;=> #f\n"
+"    (eqv? nil nil)               ;=> #t\n"
+"    (eqv? 100000000 100000000)   ;=> #t\n"
+"    (eqv? (cons 1 2) (cons 1 2)) ;=> #f\n"
+"    (eqv? (lambda () 1)\n"
+"          (lambda () 2))         ;=> #f\n"
+"    (let ((p (lambda (x) x)))\n"
+"      (eqv? p p))                ;=> #t\n"
+"    (eqv? #f 'nil)               ;=> #f\n"
+"    (eqv? a: a:)                 ;=> #t\n"
+"    (eqv? a: 'a)                 ;=> #f\n"
+"    (eqv? [1 2 3] [1 2 3])       ;=> #f\n"
+"    (let ((a [1 2 3]))\n"
+"      (eqv? a a))                ;=> #t\n"
+"    (eqv? {a: 1 b: 2}\n"
+"          {a: 1 b: 2})           ;=> #f\n"
+"    (let ((a {a: 1 b: 2}))\n"
+"      (eqv? a a))                ;=> #t\n"
+);
+
+START_PRIM()
+    REQ_EQ_ARGC(equal?, 2);
+    out.set_bool(A0.equal(A1));
+END_PRIM_DOC(equal?,
+"@predicates procedure (equal? _a-value_ _b-value_)\n"
+"\n"
+"Returns #true if _a-value_ is (structurally) equal to _b-value_.\n"
+"`equal?` compares _a-value_ and _b-value_ recursively on equality,\n"
+"for values other than lists and maps it is equal to the result of `eqv?`.\n"
+"\n"
+"In case of cyclic data structures this routine will not work properly.\n"
+"\n"
+"    (equal? 'a 'a)               ;=> #t\n"
+"    (equal? '(a) '(a))           ;=> #t\n"
+"    (equal? '(a (b) c)\n"
+"            '(a (b) c))          ;=> #t\n"
+"    (equal? '(a (c) c)\n"
+"            '(a (b) c))          ;=> #f\n"
+"    (equal? '(a c c)\n"
+"            '(a (b) c))          ;=> #f\n"
+"    (equal? \"abc\" \"abc\")     ;=> #t\n"
+"    (equal? 2 2)                 ;=> #t\n"
+"    (equal? {a: [1 2 3] b: 3}\n"
+"            {b: 3 a: [1 2 3]})   ;=> #t\n"
+"    (equal? {b: [1 2 3]}\n"
+"            {b: 3 a: [1 2 3]})   ;=> #f\n"
+);
 
 START_PRIM()
     REQ_EQ_ARGC(not, 1);
@@ -269,6 +456,7 @@ START_PRIM()
         case T_SYNTAX: out.m_d.sym = m_rt->m_gc.new_symbol("syntax");    break;
         case T_CLOS:   out.m_d.sym = m_rt->m_gc.new_symbol("procedure"); break;
         case T_UD:     out.m_d.sym = m_rt->m_gc.new_symbol("userdata");  break;
+        case T_C_PTR:  out.m_d.sym = m_rt->m_gc.new_symbol("c-pointer"); break;
         default:       out.m_d.sym = m_rt->m_gc.new_symbol("<unknown>"); break;
     }
 END_PRIM(type)
@@ -278,8 +466,30 @@ START_PRIM()
     out = Atom(T_INT);
     if (A0.m_type == T_VEC)         out.m_d.i = A0.m_d.vec->m_len;
     else if (A0.m_type == T_MAP)    out.m_d.i = A0.m_d.map->size();
-    else                            out.m_d.i = 0;
-END_PRIM(length)
+	else if (   A0.m_type == T_STR
+	         || A0.m_type == T_SYM
+	         || A0.m_type == T_KW)
+		out.m_d.i = A0.m_d.sym->m_str.size();
+    else
+		error("'length' can only be used on a map, list, string, symbol and keyword");
+END_PRIM_DOC(length,
+"@basics procedure (length _string/symbol/keyword_)\n"
+"@basics procedure (length _list_)\n"
+"@basics procedure (length _map_)\n"
+"\n"
+"This procedure returns the length of the passed value.\n"
+"It must not be confused with the `size` procedure.\n"
+"If used on a string value (or symbol, or keyword) it returns\n"
+"the numbers of bytes used to represent it.\n"
+"If used on a list, it returns the number of elements of that list.\n"
+"If used on a map, it returns the number of stored values\n"
+"(or key/value pairs) in that map.\n"
+"\n"
+"    (length \"abcdef\")    ;=> 6\n"
+"    (length abc:)          ;=> 3\n"
+"    (length 'abc)          ;=> 3\n"
+"    (length [1 2 3])       ;=> 3\n"
+"    (length {a: 10 b: 20}) ;=> 2\n")
 
 START_PRIM()
     REQ_EQ_ARGC(push!, 2);
@@ -338,11 +548,11 @@ START_PRIM()
 END_PRIM(set-length!)
 
 START_PRIM()
-    REQ_EQ_ARGC(make-vm-prog, 1);
+    REQ_EQ_ARGC(bkl-make-vm-prog, 1);
     out = bukalisp::make_prog(m_rt->m_gc, A0);
     if (out.m_type == T_UD)
         m_rt->m_gc.reg_userdata(out.m_d.ud);
-END_PRIM(make-vm-prog)
+END_PRIM(bkl-make-vm-prog)
 
 START_PRIM()
     REQ_EQ_ARGC(bkl-prog-serialize, 2);
@@ -350,7 +560,7 @@ START_PRIM()
 END_PRIM(bkl-prog-serialize)
 
 START_PRIM()
-    REQ_GT_ARGC(run-vm-prog, 1);
+    REQ_GT_ARGC(bkl-run-vm-prog, 1);
 
     if (A0.m_type != T_UD || A0.m_d.ud->type() != "VM-PROG")
         error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
@@ -370,10 +580,10 @@ START_PRIM()
         error("Can't execute VM progs, no VM instance loaded into interpreter", A0);
 
     out = m_vm->eval(A0, A1.m_d.map, prog_args);
-END_PRIM(run-vm-prog)
+END_PRIM(bkl-run-vm-prog)
 
 START_PRIM()
-    REQ_EQ_ARGC(get-vm-modules, 0);
+    REQ_EQ_ARGC(bkl-get-vm-modules, 0);
 
     if (!m_vm)
         error("Can't get VM modules, no VM instance loaded into interpreter", A0);
@@ -382,7 +592,7 @@ START_PRIM()
         error("Can't get VM modules, no modules defined", A0);
 
     out = Atom(T_MAP, m_modules);
-END_PRIM(get-vm-modules);
+END_PRIM(bkl-get-vm-modules);
 
 START_PRIM()
     REQ_GT_ARGC(error, 1);
@@ -612,7 +822,17 @@ END_PRIM(read-str)
 START_PRIM()
     REQ_EQ_ARGC(size, 1);
     out = Atom(T_INT, (int64_t) A0.size());
-END_PRIM(size)
+END_PRIM_DOC(size,
+"@basics procedure (size _value_)\n"
+"\n"
+"This procdure returns the size of the data structure passed as _value_.\n"
+"If _value_ is a list or map it counts the elements that make them up.\n"
+"It recursively walks lists and maps to sum up all elements, any non list or\n"
+"non map is counted as one element (a key/value pair in a map counts as 2).\n"
+"If _value_ is a string, symbol or keyword it returns the number of bytes\n"
+"that are used to represent it.\n"
+"For any other type of _value_ some internal platform dependent size\n"
+"that has something to do with the internal storage space, is returned.\n")
 
 START_PRIM()
     REQ_EQ_ARGC(sys-slurp-file, 1);
@@ -628,7 +848,7 @@ END_PRIM(sys-slurp-file)
 
 START_PRIM()
     REQ_EQ_ARGC(sys-path-separator, 0);
-#if defined(WIN32) || defined(_WIN32) 
+#if defined(WIN32) || defined(_WIN32)
     out = Atom(T_STR, m_rt->m_gc.new_symbol("\\"));
 #else
     out = Atom(T_STR, m_rt->m_gc.new_symbol("/"));
