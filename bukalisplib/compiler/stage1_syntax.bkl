@@ -77,6 +77,14 @@
 ;----------------------------------------------------------------------------
 
 (add-syntax
+  'current-coroutine
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 1)
+      (error "'current-coroutine' takes no arguments" args))
+    ['#1#current-coroutine]))
+;----------------------------------------------------------------------------
+
+(add-syntax
   'raise
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
@@ -878,7 +886,13 @@ value.
             (lib          (@library-name LIBRARIES)))
         (if module-lib
           (do-each (sym val module-lib)
-            (set-root-env-var (root-env: gtx) sym (@2 val)))
+            (set-root-env-var
+              (root-env: gtx)
+              (string->symbol
+                (str (@1 import-set)
+                     "-"
+                     (symbol->string sym)))
+              (@2 val)))
           (begin
             (unless lib
               (let ((library-file

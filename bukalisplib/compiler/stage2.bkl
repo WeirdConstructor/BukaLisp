@@ -35,10 +35,13 @@
       ($define! self (store-static-data data)
         (push! (pad: self) data)
         [(- (length (pad: self)) 1) REG-ROW-DATA])
-      ($define! self (to-vm-prog code-pad)
-        (bkl-make-vm-prog [(pad:  self)
-                           (.to-vm-prog-code       code-pad)
-                           (.to-vm-prog-debug-info code-pad)]))
+      ($define! self (to-vm-prog code-pad func-info)
+        (let ((debug-info (.to-vm-prog-debug-info code-pad)))
+          (when func-info
+            (@!" FUNCTION-INFO " debug-info func-info))
+          (bkl-make-vm-prog [(pad:  self)
+                             (.to-vm-prog-code       code-pad)
+                             debug-info])))
       ($define! self (new-tmp-pos)
         (let ((env-pos           (pos: self))
               (free-tmp-pos-list (@1 env-pos)))
@@ -293,6 +296,11 @@
         (lambda (ctx arg T gtx)
           (let ((ret-adr (.new-tmp-pos (F: ctx))))
             (.op-yield (P: ctx) ret-adr (T ctx (@0 arg)))
+            ret-adr))]
+       ['#1#current-coroutine
+        (lambda (ctx args T gtx)
+          (let ((ret-adr (tmp-pos-or-parent-adr ctx)))
+            (.op-get-coro (P: ctx) ret-adr)
             ret-adr))]
        ['#1#return-from
         (lambda (ctx arg T gtx)
@@ -691,7 +699,7 @@
                 ret-adr
                 (.store-static-data
                   (F: ctx)
-                  (.to-vm-prog lambda-frame lambda-pad))
+                  (.to-vm-prog lambda-frame lambda-pad (@0 lambda-spec)))
                 (.store-static-data
                   (F: ctx)
                   [is-coroutine arity creator-upv-adrs]))

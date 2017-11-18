@@ -27,7 +27,7 @@
 #include <thread>
 #include <future>
 #include <Poco/Net/HTTPServer.h>
-#include "vval.h"
+#include <modules/vval.h>
 
 namespace http_srv
 {
@@ -50,11 +50,11 @@ class Server
         std::unordered_map<int64_t, std::promise<VVal::VV> *>   m_outstanding_requests;
         std::mutex                                              m_mutex;
         Poco::Net::HTTPServer                                  *m_http_srv;
+        int64_t                                                 m_next_token;
 
     public:
-        Server() : m_http_srv(0) { }
-    ~Server();
-
+        Server() : m_http_srv(0), m_next_token(0) { }
+        ~Server();
 
         void setup(const std::function<int64_t(const VVal::VV &)> &emit)
         {
@@ -73,6 +73,8 @@ class Server
 VVal::VV get(const std::string &url, const VVal::VV &opts = VVal::vv_undef());
 void init_ssl();
 void shutdown_ssl();
+
+void init_error_handlers();
 
 //---------------------------------------------------------------------------
 

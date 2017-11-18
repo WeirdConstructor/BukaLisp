@@ -58,7 +58,7 @@
         (.op-return P adr)
 ;        (displayln DEBUG-INFO: adr (pp-str (.to-vm-prog-debug-info P)))
 ;        (displayln ROOT-ENV: (pp-str (root-env: gtx)))
-        (let ((prog (.to-vm-prog (F: ctx) P)))
+        (let ((prog (.to-vm-prog (F: ctx) P name)))
           (when *DEBUG* (displayln PROG: prog))
           (if only-compile?
             prog

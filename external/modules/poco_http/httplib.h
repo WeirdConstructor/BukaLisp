@@ -23,19 +23,6 @@
 
 #pragma once
 
-namespace Lua
-{
-class Instance;
-};
+#include <modules/bklisp_module_wrapper.h>
 
-namespace lal_rt
-{
-//---------------------------------------------------------------------------
-
-class LuaThread;
-
-void init_httplib(LuaThread *t, Lua::Instance &lua);
-
-//---------------------------------------------------------------------------
-
-} // namespace lal_rt
+BukaLISPModule init_httplib();

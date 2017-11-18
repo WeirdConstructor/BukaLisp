@@ -12,7 +12,12 @@
 
 class BukaLISPModule;
 
-#define VM_CLOS_SIZE 4
+#define VM_CLOS_SIZE 5
+#define VM_CLOS_PROG     0
+#define VM_CLOS_UPV      1
+#define VM_CLOS_IS_CORO  2
+#define VM_CLOS_ARITY    3
+#define VM_CLOS_ROOT_ENV 4
 
 //---------------------------------------------------------------------------
 
@@ -87,6 +92,7 @@ class VMException : public std::exception
     X(CTRL_JMP,      30) /*                                        */ \
     X(PUSH_CLNUP,    31) /*                                        */ \
     X(POP_CLNUP,     32) /*                                        */ \
+    X(GET_CORO,      33) /*                                        */ \
     X(ADD,          100) /*                                        */ \
     X(SUB,          101) /*                                        */ \
     X(MUL,          102) /*                                        */ \
@@ -170,6 +176,7 @@ class PROG : public UserData
         Atom     m_atom_data;
         INST    *m_instructions;
         size_t   m_instructions_len;
+        std::string m_function_info;
 
     public:
         PROG()

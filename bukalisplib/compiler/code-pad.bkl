@@ -61,6 +61,9 @@
       ($define! self (op-yield out-idx idx)
         (push-op YIELD: out-idx idx 0 0))
 
+      ($define! self (op-get-coro out-idx)
+        (push-op GET_CORO: out-idx 0 0 0))
+
       ($define! self (op-mov out-idx in-idx o)
         (push-op MOV: out-idx in-idx (if (nil? o) 0 o) 0))
 

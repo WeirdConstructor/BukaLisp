@@ -120,8 +120,9 @@ void Atom::set(size_t i, const Atom &v)
 
 Atom Atom::meta()
 {
-    if      (m_type == T_VEC && m_d.vec->m_meta) return Atom(T_VEC, m_d.vec->m_meta);
-    else if (m_type == T_MAP && m_d.map->m_meta) return Atom(T_VEC, m_d.map->m_meta);
+    if      (m_type == T_VEC && m_d.vec->m_meta)  return Atom(T_VEC, m_d.vec->m_meta);
+    else if (m_type == T_CLOS && m_d.vec->m_meta) return Atom(T_VEC, m_d.vec->m_meta);
+    else if (m_type == T_MAP && m_d.map->m_meta)  return Atom(T_VEC, m_d.map->m_meta);
     else return Atom();
 }
 //---------------------------------------------------------------------------

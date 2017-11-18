@@ -404,6 +404,21 @@ START_PRIM()
 END_PRIM(procedure?);
 
 START_PRIM()
+    REQ_EQ_ARGC(coroutine?, 1);
+    out.set_bool(
+        A0.m_type == T_CLOS
+        && !A0.m_d.vec->at(VM_CLOS_IS_CORO).is_false());
+END_PRIM(coroutine?);
+
+START_PRIM()
+    REQ_EQ_ARGC(coroutine?, 1);
+    out.set_bool(
+        A0.m_type == T_CLOS
+        && !A0.m_d.vec->at(VM_CLOS_IS_CORO).is_false()
+        && A0.m_d.vec->at(VM_CLOS_IS_CORO).m_type == T_VEC);
+END_PRIM(coroutine-yielded?);
+
+START_PRIM()
     REQ_EQ_ARGC(@, 2);
     if (A1.m_type == T_VEC)
     {
@@ -581,6 +596,31 @@ START_PRIM()
 
     out = m_vm->eval(A0, A1.m_d.map, prog_args);
 END_PRIM(bkl-run-vm-prog)
+
+START_PRIM()
+    REQ_GT_ARGC(bkl-run-vm, 1);
+
+    AtomMap *root_env = nullptr;
+    if (args.m_len > 1 && A1.m_type != T_NIL)
+    {
+        if (A1.m_type != T_MAP)
+            error("Can execute VM only with a map as root environment", A1);
+        root_env = A1.m_d.map;
+    }
+
+    AtomVec *prog_args = nullptr;
+    if (args.m_len > 2 && A2.m_type != T_NIL)
+    {
+        if (A2.m_type != T_VEC)
+            error("Can execute VM only with a list as argument list", A2);
+        prog_args = A2.m_d.vec;
+    }
+
+    if (!m_vm)
+        error("Can't execute VM, no VM instance loaded into interpreter", A0);
+
+    out = m_vm->eval(A0, root_env, prog_args);
+END_PRIM(bkl-run-vm)
 
 START_PRIM()
     REQ_EQ_ARGC(bkl-get-vm-modules, 0);

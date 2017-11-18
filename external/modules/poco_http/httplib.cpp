@@ -21,48 +21,76 @@
 * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ******************************************************************************/
 
-#include "base/http.h"
-#include "rt/httplib.h"
-#include "rt/lua_thread.h"
-#include "rt/lua_thread_helper.h"
+#include "httplib.h"
+#include <modules/vval_util.h>
+#include <modules/ev_loop/ev_loop_lib.h>
+#include "http.h"
 
 using namespace VVal;
 using namespace std;
 
-namespace lal_rt
-{
 //---------------------------------------------------------------------------
 
+/* event loop module:
+
+(define evl-handle (ev-loop-new))
+
+(ev-loop-run evl-handle)
+(ev-loop-poll evl-handle)
+(ev-loop-wait evl-handle 100)
+(ev-loop-quit evl-handle)
+
+(ev-loop-on-next-idle evl-handle (lambda () nil))
+(ev-loop-on-timeout evl-handle 1000 (lambda () nil))
+(ev-loop-on-interval evl-handle 1000 (lambda () nil))
+
+(ev-loop-free evl-handle)
+
+*/
+
 VV_CLOSURE_DOC(http_bind,
-"@http procedure (http-bind _port-number_)\n\n"
+"@http procedure (http-bind _ev-loop-handle_ _port-number_ _request-cb_)\n\n"
 "Binds a HTTP server to the TCP _port-number_.\n"
-"Returns a token, that can be used for waiting on new requests.\n"
+"The _request-cb_ is called once a request is received.\n"
 "If there is an error, an exception will be thrown.\n"
+"This procedure returns a handle for the newly created HTTP server.\n"
+"This handle must be destroyed using `http-free`.\n"
 "\n"
-"    (let ((f (http-bind 18099)))\n"
-"      (do ((req (mp-wait f) (mp-wait f)))\n"
-"          (#t #t)\n"
-"        (let ((handle (@1 f)))\n"
-"          (http-response\n"
-"           handle   ; srv-handle\n"
-"           (@1 req) ; req-token\n"
-"           { :action :json :data { :x 1 :y 2 } }))))\n"
+"_request-cb_ gets passed a request map, replying is handled by `http-response`:\n"
+"\n"
+"    (import (module ev-loop))\n"
+"    (import (module http))\n"
+"    (define event-loop (ev-loop-new))\n"
+"    (define http-server nil)\n"
+"    (with-cleanup\n"
+"      (set! http-server\n"
+"        (http-bind event-loop 18088\n"
+"          (lambda (request)\n"
+"            (http-response http-server (token: request)}\n"
+"              {action: \"error\"\n"
+"               status: 501\n"
+"               reason: all-putt!:\n"
+"               contenttype: \"text/plain\"\n"
+"               data: \"Kaput!\"}))))\n"
+"      (http-free http-server)\n"
+"      (event-loop-run event-loop))\n"
 )
 {
-    auto t = LT;
-    int64_t srv_token = t->m_port.new_token();
+    VVal::VV callback = vv_args->_(2);
     http_srv::Server *s = new http_srv::Server;
+    EventLoop *evl =
+        vv_args->_P<EventLoop>(0, "ev-loop:instance");
     s->setup(
-        [srv_token, t](const VVal::VV &req)
+        [=](const VVal::VV &req)
         {
-            return
-                t->m_port.emit_message(
-                    vv_list() << vv(srv_token) << req, t->m_port.pid());
+            evl->post([=]()
+            {
+                callback->call(vv_list() << req);
+            });
+            return (int64_t) 1;
         });
-    s->start((unsigned int) vv_args->_i(0));
-    LT->register_resource(s);
-
-    return vv_list() << srv_token << vv_ptr((void *) s, "http_srv::Server");
+    s->start((unsigned int) vv_args->_i(1));
+    return vv_ptr((void *) s, "poco_http:server");
 }
 //---------------------------------------------------------------------------
 
@@ -82,7 +110,8 @@ VV_CLOSURE_DOC(http_response,
 "\n\nFor an example see `http-bind`\n"
 )
 {
-    LTRES(s, 0, http_srv::Server);
+    http_srv::Server *s =
+        vv_args->_P<http_srv::Server>(0, "poco_http:server");
     s->reply(vv_args->_i(1), vv_args->_(2));
     return vv_undef();
 }
@@ -93,8 +122,8 @@ VV_CLOSURE_DOC(http_free,
 "Frees the HTTP-Server handle.\n"
 )
 {
-    LTRES(s, 0, http_srv::Server);
-    LT->delete_resource(s);
+    http_srv::Server *s =
+        vv_args->_P<http_srv::Server>(0, "poco_http:server");
     delete s;
     return vv_undef();
 }
@@ -106,6 +135,8 @@ VV_CLOSURE_DOC(http_get,
 "containing the response. And conveniently decodes JSON based on the\n"
 "Content-Type of the response.\n"
 "Throws an exception if an error occured.\n"
+"Please note, that this HTTP call is blocking and will\n"
+"block the whole process.\n"
 "_options_ is a map that can contain following items:\n"
 "\n"
 "    {cookies:  _map-of-cookie-names-and-values_}\n"
@@ -124,15 +155,23 @@ VV_CLOSURE_DOC(http_get,
 }
 //---------------------------------------------------------------------------
 
-void init_httplib(LuaThread *t, Lua::Instance &lua)
+BukaLISPModule init_httplib()
 {
-    VV obj(vv_list() << vv_ptr(t, "LuaThread"));
+    VV reg(vv_list() << vv("http"));
+    VV obj(vv_map());
+    VV mod(vv_list());
+    reg << mod;
 
-    LUA_REG(lua, "http", "bind",     obj, http_bind);
-    LUA_REG(lua, "http", "free",     obj, http_free);
-    LUA_REG(lua, "http", "response", obj, http_response);
-    LUA_REG(lua, "http", "get",      obj, http_get);
+#define SET_FUNC(functionName, closureName) \
+    mod << (vv_list() << vv(#functionName) << VVC_NEW_##closureName(obj))
+
+    http_srv::init_error_handlers();
+
+    SET_FUNC(bind,     http_bind);
+    SET_FUNC(free,     http_free);
+    SET_FUNC(response, http_response);
+    SET_FUNC(get,      http_get);
+
+    return reg;
 }
 //---------------------------------------------------------------------------
-
-} // namespace lal_rt

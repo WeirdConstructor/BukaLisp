@@ -1,0 +1,24 @@
+(import (module sql))
+(let ((s (sql-session {:driver "sqlite3"
+                       :file   ":memory:"})))
+  (with-cleanup
+    (sql-destroy s)
+    (begin
+      (sql-execute! s "CREATE TABLE test1 (id INTEGER, name TEXT)")
+      (sql-execute! s ["INSERT INTO test1 (id) VALUES(" [123] ")"])
+      (sql-execute! s "SELECT id FROM test1")
+      (unless (equal? (sql-row s) {:id 123})
+        (error FAIL:))
+      (unless (eqv? (sql-next s) #f)
+        (error FAIL:))
+      (sql-execute! s ["INSERT INTO test1 (id, name) VALUES(" [1] "," ["Xßä"] ")"])
+      (sql-execute! s "SELECT * FROM test1 ORDER BY id")
+      (unless (equal? (sql-row s) {:id 1 :name "Xßä"})
+        (error FAIL:))
+      (unless (sql-next s)
+        (error FAIL:))
+      (unless (equal? (sql-row s) {:id 123 :name nil})
+        (error FAIL:))
+      (unless (not (sql-next s))
+        (error FAIL:)))))
+:OK

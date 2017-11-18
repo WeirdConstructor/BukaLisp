@@ -1,0 +1,24 @@
+(import (module http))
+(import (module ev-loop))
+
+(let ((evl (ev-loop-new))
+      (srv (http-bind
+              evl
+              18090
+              (lambda (req)
+                (displayln REQ: req)
+                (http-response
+                  srv
+                  (token: req)
+                  {action: text:
+                   data: "Test"
+                   contenttype: "text/plain"})))))
+  (define (tout-handler . x)
+    (displayln TICK:)
+    (ev-loop-timeout evl 1000 tout-handler))
+  (tout-handler)
+  (ev-loop-timeout
+    evl
+    1000
+    (lambda x (displayln (http-get "http://www.google.de/"))))
+  (ev-loop-run evl))

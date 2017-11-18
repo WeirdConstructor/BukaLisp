@@ -12,7 +12,7 @@ class VVPointer : public bukalisp::UserData
         VVal::VV        m_vv;
     public:
         VVPointer(const VVal::VV &vv) : m_vv(vv) { }
-        virtual ~VVPointer() { }
+        virtual ~VVPointer() { std::cout << "DEL VVPointer " << this << std::endl; }
 
         virtual std::string type() { return m_vv->type(); }
 
@@ -93,6 +93,7 @@ Atom vv2atom(bukalisp::VM *vm, const VV &vv)
         {
             Atom ud(T_UD);
             ud.m_d.ud = new VVPointer(vv);
+            //d// std::cout << "VV2ATOM PTR: " << vv->p(vv->type()) << "::" << vv->type() << "::" << ud.m_d.ud << std::endl;
             return ud;
         }
     }
@@ -202,6 +203,7 @@ VV atom2vv(VM *vm, Atom &a)
         case T_UD:
         {
             VVPointer *vvp = dynamic_cast<VVPointer *>(a.m_d.ud);
+            //d// std::cout << "ATOM2VV PTR: " << vvp << "," << vvp->ptr() << std::endl;
             if (!vvp)
             {
                 throw VMException("Can't convert non VVPointer-UserData "

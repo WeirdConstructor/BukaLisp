@@ -289,6 +289,13 @@ struct Atom
         m_d.b = b;
     }
 
+    void set_hpair(size_t key, size_t idx)
+    {
+        m_type = T_HPAIR;
+        m_d.hpair.key = key;
+        m_d.hpair.idx = idx;
+    }
+
     bool inline is_false()
     {
         return     m_type == T_NIL
@@ -1151,7 +1158,8 @@ class GC
 
         void set_meta_register(Atom &a, size_t i, Atom &meta)
         {
-            if (a.m_type == T_VEC)
+            if (   a.m_type == T_VEC
+                || a.m_type == T_CLOS)
             {
                 if (!a.m_d.vec->m_meta)
                     a.m_d.vec->m_meta = this->allocate_vector(i + 1);

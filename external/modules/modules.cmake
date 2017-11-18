@@ -1,25 +1,33 @@
-include(external/modules/external_libs.cmake)
+set(BKL_MOD_DIR ${PROJECT_SOURCE_DIR}/external/modules/)
+include(${BKL_MOD_DIR}/external_libs.cmake)
 
 add_library(bklisp_module_support STATIC
-    external/modules/vval.cpp
-    external/modules/vval_util.cpp
-    external/modules/bklisp_module_wrapper.cpp
+    ${BKL_MOD_DIR}/vval.cpp
+    ${BKL_MOD_DIR}/vval_util.cpp
+    ${BKL_MOD_DIR}/bklisp_module_wrapper.cpp
 )
-#add_library(bklisp_mod_sqlite STATIC
-#    external/modules/sqlite.cpp
-#)
+
 add_library(bklisp_mod_util STATIC
-    external/modules/util/crc.cpp
-    external/modules/util/csv.cpp
-    external/modules/util/utillib.cpp
+    ${BKL_MOD_DIR}/util/crc.cpp
+    ${BKL_MOD_DIR}/util/csv.cpp
+    ${BKL_MOD_DIR}/util/utillib.cpp
 )
+
 add_library(bklisp_mod_sys  STATIC
-    external/modules/sys/syslib.cpp
+    ${BKL_MOD_DIR}/sys/syslib.cpp
 )
 
 add_library(bklisp_mod_test STATIC
-    external/modules/testlib.cpp
+    ${BKL_MOD_DIR}/testlib.cpp
 )
+
+add_library(bklisp_mod_ev_loop STATIC
+    ${BKL_MOD_DIR}/ev_loop/ev_loop_lib.cpp
+)
+
+include(${BKL_MOD_DIR}/discount/discount_module.cmake)
+include(${BKL_MOD_DIR}/sqldb/sqldb_module.cmake)
+include(${BKL_MOD_DIR}/poco_http/http_module.cmake)
 
 if (WIN32)
     if (MSVC)
@@ -37,6 +45,10 @@ target_link_libraries(bukalisp_lib
     bklisp_mod_test
     bklisp_mod_util
     bklisp_mod_sys
+    bklisp_mod_ev_loop
+    bklisp_mod_discount
+    bklisp_mod_sqldb
+    bklisp_mod_http
 
     ${Boost_LIBRARIES}
     ${BOOST_SUPPORT_LIBS}

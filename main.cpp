@@ -20,6 +20,9 @@
 
 #include <modules/util/utillib.h>
 #include <modules/sys/syslib.h>
+#include <modules/ev_loop/ev_loop_lib.h>
+#include <modules/sqldb/sqldblib.h>
+#include <modules/poco_http/httplib.h>
 #include <modules/testlib.h>
 
 //---------------------------------------------------------------------------
@@ -1155,6 +1158,9 @@ int main(int argc, char *argv[])
         bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
         bukalisp_modules.push_back(new BukaLISPModule(init_testlib()));
         bukalisp_modules.push_back(new BukaLISPModule(init_syslib()));
+        bukalisp_modules.push_back(new BukaLISPModule(init_sqldblib()));
+        bukalisp_modules.push_back(new BukaLISPModule(init_httplib()));
+        bukalisp_modules.push_back(new BukaLISPModule(init_ev_loop_lib()));
 
         auto load_vm_modules = [&](VM &vm)
         {

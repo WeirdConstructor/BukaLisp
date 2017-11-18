@@ -22,7 +22,6 @@
 ******************************************************************************/
 
 #include "http.h"
-#include "rt/log.h"
 #include <Poco/Net/HTTPServer.h>
 #include <Poco/Net/HTTPClientSession.h>
 #include <Poco/Net/HTTPRequestHandlerFactory.h>
@@ -34,14 +33,45 @@
 #include <Poco/Net/SSLManager.h>
 #include <Poco/Net/Context.h>
 #include <Poco/URI.h>
+#include <Poco/ErrorHandler.h>
 #include <Poco/Net/HTTPServerResponse.h>
-#include "base/vval_util.h"
+#include <modules/vval_util.h>
 
 using namespace std;
 using namespace VVal;
 
 namespace http_srv
 {
+//---------------------------------------------------------------------------
+
+class BklErrHandler : public Poco::ErrorHandler
+{
+    public:
+        virtual ~BklErrHandler() { }
+        virtual void exception(const Poco::Exception &exc)
+        {
+            std::cout << "POCO Exception: "
+                        << exc.what() << " / " << exc.displayText()
+                        << std::endl;
+        }
+
+        virtual void exception(const std::exception &exc)
+        {
+            std::cout << "POCO Exception: " << exc.what() << std::endl;
+        }
+
+        virtual void exception()
+        {
+            std::cout << "POCO Unknown Exception in Poco!";
+        }
+};
+//---------------------------------------------------------------------------
+
+BklErrHandler g_ErrHandler;
+void init_error_handlers()
+{
+    Poco::ErrorHandler::set(&g_ErrHandler);
+}
 //---------------------------------------------------------------------------
 
 static const char *mimetype_from_path(const std::string &path)
@@ -55,8 +85,10 @@ void Server::submit_request(const VV &req, promise<VV> *response_promise)
 {
     lock_guard<mutex> lg(m_mutex);
 
-    int64_t reqtoken = m_request_emitter(req);
+    int64_t reqtoken = m_next_token++;
+    req->set("token", vv(reqtoken));
     m_outstanding_requests[reqtoken] = response_promise;
+    m_request_emitter(req);
 }
 //---------------------------------------------------------------------------
 
@@ -66,7 +98,7 @@ void Server::reply(int64_t token, const VV &reply)
 
     if (m_outstanding_requests.find(token) == m_outstanding_requests.end())
     {
-        L_FATAL << "HTTP: Double reply to " << token << "(" << reply << ")";
+//        L_FATAL << "HTTP: Double reply to " << token << "(" << reply << ")";
         throw Exception("HTTP No such token! Replied two times to same request.");
     }
 
@@ -109,13 +141,13 @@ class HTTP_SRV_Handler : public Poco::Net::HTTPRequestHandler
                 << vv_kv("params",          params)
                 << vv_kv("body",            os.str()));
 
-            L_DEBUG << "HTTP Request: " << req;
+//            L_DEBUG << "HTTP Request: " << req;
             m_srv->submit_request(req, &response_promise);
 
             f.wait();
 
             VV resp = f.get();
-            L_DEBUG << "HTTP Response: " << resp;
+//            L_DEBUG << "HTTP Response: " << resp;
 
             if (resp->_s("action") == "file")
             {
@@ -188,7 +220,7 @@ void Server::start(unsigned int port)
 
     m_http_srv = s;
 
-    L_DEBUG << "HTTP Server start on port: " << port;
+//    L_DEBUG << "HTTP Server start on port: " << port;
 
     // TODO: Handle stopping?!
 }
@@ -198,10 +230,10 @@ Server::~Server()
 {
     if (m_http_srv)
 	{
-        L_DEBUG << "HTTP Server stop.";
+//        L_DEBUG << "HTTP Server stop.";
         m_http_srv->stopAll(true);
         delete m_http_srv;
-        L_DEBUG << "HTTP Server deleted.";
+//        L_DEBUG << "HTTP Server deleted.";
 	}
 }
 //---------------------------------------------------------------------------
@@ -321,11 +353,11 @@ VV get(const std::string &url, const VVal::VV &opts)
         if (need_mtx_unlock) m_ssl_mtx.unlock();
         delete s;
     }
-    catch (const std::exception &e)
+    catch (const std::exception &)
     {
         if (need_mtx_unlock) m_ssl_mtx.unlock();
         delete s;
-        L_ERROR << "HTTP-Get: Exception: " << e.what();
+//        L_ERROR << "HTTP-Get: Exception: " << e.what();
         return vv_undef();
     }
 

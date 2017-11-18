@@ -99,6 +99,10 @@ Atom make_prog(GC &gc, Atom prog_info)
     new_prog->set_debug_info(debug);
     new_prog->set_data_from(data.m_d.vec);
 
+    Atom func_info =
+        debug.at(Atom(T_STR, gc.new_symbol(" FUNCTION-INFO ")));
+    new_prog->m_function_info = func_info.to_write_str();
+
     for (size_t i = 0; i < prog.m_d.vec->m_len + 1; i++)
     {
         INST instr;
@@ -237,22 +241,89 @@ void VM::report_arity_error(Atom &arity, size_t argc)
 #define VM_JMP_OUT_I 2
 #define VM_JMP_OUT_E 3
 
-#define VM_CALL_FRAME_SIZE 7
+#define VM_CALL_FRAME_SIZE 6
 #define VM_CF_CLOS  0
 #define VM_CF_PROG  1
 #define VM_CF_FRAME 2
 #define VM_CF_ROOT  3
 #define VM_CF_PC    4
-#define VM_CF_OUT_I 5
-#define VM_CF_OUT_E 6
+#define VM_CF_OUT   5
 
+//---------------------------------------------------------------------------
+
+static void dump_stack_trace(const std::string &title, AtomVec *cont_stack, PROG *cur_prog, INST *cur_pc)
+{
+    std::cout << "STACK TRACE(" << title << ")" << std::endl;
+
+    if (cur_pc && cur_prog)
+    {
+        size_t pc_idx = cur_pc - &(cur_prog->m_instructions[0]);
+        Atom a(T_INT, pc_idx);
+        Atom info = cur_prog->m_debug_info_map.at(a);
+        std::cout << "    [*] @" << pc_idx
+                  << "/" << (cur_prog->m_instructions_len - 1)
+                  << " " << cur_prog->m_function_info
+                  << "{" << info.to_write_str() << "}" << std::endl;
+    }
+
+    for (size_t i = cont_stack->m_len; i > 0; i--)
+    {
+        std::cout << "    [" << i << "] ";
+
+        Atom &frame = cont_stack->m_data[i - 1];
+        if (frame.m_type != T_VEC)
+        {
+            std::cout << "? weird frame: " << frame.m_type << std::endl;
+            continue;
+        }
+
+        AtomVec *f = frame.m_d.vec;
+
+        switch (f->m_len)
+        {
+            case VM_CLNUP_FRAME_SIZE:
+                std::cout << "CLEANUP " << std::endl;
+                break;
+            case VM_JUMP_FRAME_SIZE:
+                std::cout << "JUMP FRAME " << f->m_data[VM_JMP_TAG].to_write_str() << std::endl;
+                break;
+            case VM_CALL_FRAME_SIZE:
+            {
+                Atom &proc = f->m_data[VM_CF_PROG];
+                if (proc.m_type == T_UD && proc.m_d.ud != nullptr)
+                {
+                    PROG *prog = static_cast<PROG*>(proc.m_d.ud);
+                    INST *pc   = (INST *) f->m_data[VM_CF_PC].m_d.ptr;
+                    size_t pc_idx = pc - &(prog->m_instructions[0]);
+
+                    Atom a(T_INT, pc_idx);
+                    Atom info = prog->m_debug_info_map.at(a);
+
+                    std::cout << "CALL FRAME @" << pc_idx
+                              << "/" << (prog->m_instructions_len - 1)
+                              << " "
+                              << prog->m_function_info << "{" << info.to_write_str() << "}"
+                              << std::endl;
+                }
+                else
+                {
+                    std::cout << "INITIAL FRAME" << std::endl;
+                }
+                break;
+            }
+            default:
+                std::cout << "weird frame len=" << f->m_len << std::endl;
+                break;
+        }
+    }
+}
 //---------------------------------------------------------------------------
 
 Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 {
     using namespace std::chrono;
 
-    INST instant_ctrl_jmp;
+    INST instant_operation;
     Atom instant_ctrl_jmp_obj;
 
     GC_ROOT_MAP(m_rt->m_gc, root_env_map_gcroot) = root_env_map;
@@ -286,7 +357,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
     AtomVec *rr_data    = nullptr;
     Atom    *rr_v_frame = nullptr;
     Atom    *rr_v_data  = nullptr;
-    Atom    *rr_v_root  = root_env->m_data;
+    Atom    *rr_v_root  = nullptr;
     GC_ROOT(m_rt->m_gc, reg_rows_ref) =
         Atom(T_UD, new RegRowsReference(&rr_frame, &rr_data, &root_env));
 
@@ -304,24 +375,36 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
     GC_ROOT_VEC(m_rt->m_gc, empty_upv_row) = m_rt->m_gc.allocate_vector(0);
     AtomVec *clos_upvalues = empty_upv_row;
 
+    SET_ROOT_ENV(root_env);
+
     if (callable.m_type == T_UD && callable.m_d.ud->type() == "VM-PROG")
     {
         prog      = dynamic_cast<PROG*>(callable.m_d.ud);
         pc        = &(prog->m_instructions[0]);
+
+        SET_DATA_ROW(prog->data_array());
+        SET_FRAME_ROW(args);
     }
     else if (callable.m_type == T_CLOS)
     {
         if (   callable.m_d.vec->m_len == VM_CLOS_SIZE
             && callable.m_d.vec->m_data[0].m_type == T_UD)
         {
-            prog = dynamic_cast<PROG*>(callable.m_d.vec->m_data[0].m_d.ud);
-            pc   = &(prog->m_instructions[0]);
-            if (CHECK_ARITY(callable.m_d.vec->m_data[3], args->m_len) != 0)
-                report_arity_error(callable.m_d.vec->m_data[3], args->m_len);
-            if (callable.m_d.vec->m_data[1].m_d.vec)
-                clos_upvalues = callable.m_d.vec->m_data[1].m_d.vec;
-            // TODO: Handle calling a coroutine!
-            // FIXME: Handle copying upvalues into current frame (aka 'args')!
+            instant_operation.op = OP_CALL;
+            instant_operation.a  = 1;
+            instant_operation.ae = REG_ROW_FRAME;
+            instant_operation.b  = 2;
+            instant_operation.be = REG_ROW_FRAME;
+            instant_operation.o  = 0;
+            instant_operation.oe = REG_ROW_FRAME;
+
+            AtomVec *new_frame = m_rt->m_gc.allocate_vector(3);
+            new_frame->set(1, callable);
+            new_frame->set(2, Atom(T_VEC, args));
+
+            prog = nullptr;
+            pc   = &instant_operation;
+            SET_FRAME_ROW(new_frame);
         }
         else if (callable.m_d.vec->m_len == 3)
         {
@@ -358,20 +441,17 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
     VMProgStateGuard psg(m_prog, m_pc, prog, pc);
 
-    SET_DATA_ROW(m_prog->data_array());
-    SET_FRAME_ROW(args);
-//    SET_UPV_ROW(clos_upvalues);
-//    SET_PRIM_ROW(m_prim_table);
-
     // XXX: The root-call-frame actually keeps alive the whole code-tree, including
     //      any callable sub-m_prog objects. Thus, we don't have to explicitly
     //      keep alive the m-prog or it's data_array().
     //
-    //      => We just need to keep alive the UPV_ROW and the FRAME_ROW.
-    cont_stack = m_rt->m_gc.allocate_vector(VM_CALL_FRAME_SIZE);
+    //      Also it keeps alive the dummy rr_frame that is used to
+    //      call a T_CLOS that was passed to VM::eval().
+    cont_stack = m_rt->m_gc.allocate_vector(7);
     {
-        AtomVec *call_frame = m_rt->m_gc.allocate_vector(7);
+        AtomVec *call_frame = m_rt->m_gc.allocate_vector(VM_CALL_FRAME_SIZE);
         call_frame->set(VM_CF_CLOS, callable);
+        call_frame->set(VM_CF_FRAME, Atom(T_VEC, rr_frame));
         call_frame->set(VM_CALL_FRAME_SIZE - 1, Atom());
         cont_stack->push(Atom(T_VEC, call_frame));
     }
@@ -393,14 +473,14 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 #define E_SET_CHECK_REALLOC_D(env_idx, idx) do { \
     switch ((env_idx)) { \
         case REG_ROW_UPV: \
-        case REG_ROW_FRAME: if (rr_frame->m_len <= (size_t) (idx)) { rr_frame->check_size((idx)); rr_v_frame = rr_frame->m_data; } break; \
-        case REG_ROW_ROOT:  if (root_env->m_len <= (size_t) (idx)) { root_env->check_size((idx)); rr_v_root = root_env->m_data; } break; \
-        case REG_ROW_DATA:  if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((idx)); rr_v_data = rr_data->m_data; } break; \
+        case REG_ROW_FRAME: if (rr_frame->m_len <= (size_t) (idx)) { rr_frame->check_size((size_t) (idx)); rr_v_frame = rr_frame->m_data; } break; \
+        case REG_ROW_ROOT:  if (root_env->m_len <= (size_t) (idx)) { root_env->check_size((size_t) (idx)); rr_v_root = root_env->m_data; } break; \
+        case REG_ROW_DATA:  if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((size_t) (idx)); rr_v_data = rr_data->m_data; } break; \
         case REG_ROW_RREF: \
         { \
-            if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((idx)); rr_v_data = rr_data->m_data; } break; \
-            size_t ridx   = (size_t) rr_v_root[(idx)].m_d.vec->m_data[0].m_d.i; \
-            AtomVec *dest = rr_v_root[(idx)].m_d.vec->m_data[1].m_d.vec; \
+            if (rr_data->m_len <= (size_t) (idx)) { rr_data->check_size((size_t) (idx)); rr_v_data = rr_data->m_data; } break; \
+            size_t ridx   = (size_t) rr_v_root[(size_t) (idx)].m_d.vec->m_data[0].m_d.i; \
+            AtomVec *dest = rr_v_root[(size_t) (idx)].m_d.vec->m_data[1].m_d.vec; \
             if (dest->m_len <= ridx) { dest->check_size(ridx); } \
             break; \
         } \
@@ -458,7 +538,9 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 #define RESTORE_FROM_CALL_FRAME(call_frame, ret_val)  \
     do {                                              \
         Atom *cv = (call_frame).m_d.vec->m_data;      \
-        if (cv[1].m_type == T_NIL)                    \
+        Atom &proc = cv[VM_CF_PROG];                  \
+        if (   proc.m_type != T_UD                    \
+            || proc.m_d.ud == nullptr)                \
         {                                             \
             ret = (ret_val);                          \
             m_pc =                                    \
@@ -466,12 +548,11 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     m_prog->m_instructions_len - 2]); \
             break;                                    \
         }                                             \
-        Atom proc    = cv[VM_CF_PROG];                \
-        Atom frame   = cv[VM_CF_FRAME];               \
-        Atom r_env   = cv[VM_CF_ROOT];                \
-        Atom pc      = cv[VM_CF_PC];                  \
-        int32_t oidx = (int32_t) cv[VM_CF_OUT_I].m_d.i; \
-        int8_t  eidx = (int8_t)  cv[VM_CF_OUT_E].m_d.i; \
+        Atom &frame  = cv[VM_CF_FRAME];               \
+        Atom &r_env  = cv[VM_CF_ROOT];                \
+        Atom &pc     = cv[VM_CF_PC];                  \
+        int32_t oidx = (int32_t) cv[VM_CF_OUT].m_d.hpair.idx; \
+        int8_t  eidx = (int8_t)  cv[VM_CF_OUT].m_d.hpair.key; \
                                                       \
         m_prog   = static_cast<PROG*>(proc.m_d.ud);   \
         m_pc     = (INST *) pc.m_d.ptr;               \
@@ -500,8 +581,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
         data[VM_CF_FRAME].set_vec(rr_frame);            \
         data[VM_CF_ROOT].set_vec(root_env);             \
         data[VM_CF_PC].set_ptr(m_pc);                   \
-        data[VM_CF_OUT_I].set_int(P_O);                 \
-        data[VM_CF_OUT_E].set_int(PE_O);                \
+        data[VM_CF_OUT].set_hpair(PE_O, P_O);           \
     } while(0)
 
 #define JUMP_TO_CLEANUP(exec_cleanup, cleanup_frame, cond_val, tag, ret_val) \
@@ -545,7 +625,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
             {
                 cout << "VMTRC FRMS(" << cont_stack->m_len << "): ";
                 m_pc->to_string(cout);
-                cout << "ROOT: (" << Atom(T_VEC, root_env).id() << ")";
+                cout << " ROOT: (" << ((void *) root_env) << ")";
                 cout << " {ENV= ";
                 for (size_t i = 0; i < rr_frame->m_len; i++)
                 {
@@ -559,7 +639,8 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     else
                         cout << i << "[" << a.to_write_str() << "] ";
                 }
-                cout << "}" << get_current_debug_info().to_write_str() << endl;
+                cout << "} " << m_prog->m_function_info << " "
+                     << get_current_debug_info().to_write_str() << endl;
             }
 
             switch (m_pc->op)
@@ -775,10 +856,11 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     Atom cl(T_CLOS, m_rt->m_gc.allocate_vector(VM_CLOS_SIZE));
                     cl.m_d.vec->m_len = VM_CLOS_SIZE;
-                    cl.m_d.vec->m_data[0].set_ud(prog.m_d.ud);
-                    cl.m_d.vec->m_data[1].set_vec(upvalues);
-                    cl.m_d.vec->m_data[2].set_bool(is_coroutine);
-                    cl.m_d.vec->m_data[3] = tmp->at(1);
+                    cl.m_d.vec->m_data[VM_CLOS_PROG].set_ud(prog.m_d.ud);
+                    cl.m_d.vec->m_data[VM_CLOS_UPV].set_vec(upvalues);
+                    cl.m_d.vec->m_data[VM_CLOS_IS_CORO].set_bool(is_coroutine);
+                    cl.m_d.vec->m_data[VM_CLOS_ARITY] = tmp->at(1);
+                    cl.m_d.vec->m_data[VM_CLOS_ROOT_ENV].set_vec(root_env);
 
                     E_SET(O, cl);
                     break;
@@ -847,45 +929,19 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                         {
                             if (func->m_d.vec->m_len < VM_CLOS_SIZE)
                                 error("Bad closure found", *func);
-                            if (func->m_d.vec->m_data[0].m_type != T_UD)
+                            if (func->m_d.vec->m_data[VM_CLOS_PROG].m_type != T_UD)
                                 error("Bad closure found", *func);
 
-                            Atom &arity = func->m_d.vec->m_data[3];
-                            if (CHECK_ARITY(arity, frame->m_len) != 0)
-                                report_arity_error(arity, frame->m_len);
-
-//                            std::cout << "ARITY" << func->m_d.vec->m_data[3].to_write_str() << std::endl;
-                            if (arity.m_type == T_NIL
-                                || (arity.m_type == T_INT && arity.m_d.i < 0))
-                            {
-                                unsigned int va_pos =
-                                    arity.m_type == T_NIL ? 0
-                                    : (arity.m_type == T_INT && arity.m_d.i < 0)
-                                    ? ((unsigned int) (-arity.m_d.i))
-                                    : frame->m_len;
-
-//                                    std::cout << "VAVA" << frame->m_len << "," << va_pos << std::endl;
-
-                                AtomVec *v = nullptr;
-                                if (frame->m_len > va_pos)
-                                {
-                                    size_t va_len = frame->m_len - va_pos;
-                                    v = m_rt->m_gc.allocate_vector(va_len);
-                                    for (size_t i = 0; i < va_len; i++)
-                                        v->m_data[i] = frame->m_data[i + va_pos];
-                                    v->m_len = va_len;
-                                }
-                                else
-                                    v = m_rt->m_gc.allocate_vector(0);
-                                frame->set(va_pos, Atom(T_VEC, v));
-                            }
-
                             alloc = true;
+
+                            AtomVec *clos_root_env = func->m_d.vec->m_data[VM_CLOS_ROOT_ENV].m_d.vec;
+                            Atom &arity = func->m_d.vec->m_data[VM_CLOS_ARITY];
+
                             // save the current execution context:
                             RECORD_CALL_FRAME(*func, call_frame);
                             cont_stack->push(call_frame);
 
-                            if (func->m_d.vec->m_data[2].m_type == T_VEC)
+                            if (func->m_d.vec->m_data[VM_CLOS_IS_CORO].m_type == T_VEC)
                             {
                                 // XXX: Check if T_CLOS is a coroutine (!func->at(2).is_false())
                                 //      Then instead of a new entry point in PROG, we restore
@@ -895,27 +951,61 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                                 //      We also need to set the output-register to the
                                 //      value of frame.at(0).
 
+                                if (frame->m_len > 1)
+                                    error("Wrong number of arguments to a "
+                                          "yielded coroutine, expected 0 or 1, got",
+                                          Atom(T_INT, frame->m_len));
+
                                 Atom ret_val = frame->at(0);
 
                                 AtomVec *coro_cont_stack =
-                                    func->m_d.vec->m_data[2].m_d.vec;
-                                func->m_d.vec->m_data[2].set_bool(true);
+                                    func->m_d.vec->m_data[VM_CLOS_IS_CORO].m_d.vec;
+                                func->m_d.vec->m_data[VM_CLOS_IS_CORO].set_bool(true);
 
                                 Atom restore_frame = *(coro_cont_stack->last());
                                 coro_cont_stack->pop();
-                                for (size_t i = 0; i < coro_cont_stack->m_len; i++)
-                                    cont_stack->push(coro_cont_stack->m_data[i]);
+                                for (size_t i = coro_cont_stack->m_len; i > 0; i--)
+                                    cont_stack->push(coro_cont_stack->m_data[i - 1]);
 
                                 RESTORE_FROM_CALL_FRAME(restore_frame, ret_val);
                             }
                             else
                             {
-                                m_prog   = dynamic_cast<PROG*>(func->m_d.vec->m_data[0].m_d.ud);
+                                if (CHECK_ARITY(arity, frame->m_len) != 0)
+                                    report_arity_error(arity, frame->m_len);
+
+    //                            std::cout << "ARITY" << func->m_d.vec->m_data[VM_CLOS_ARITY].to_write_str() << std::endl;
+                                if (arity.m_type == T_NIL
+                                    || (arity.m_type == T_INT && arity.m_d.i < 0))
+                                {
+                                    unsigned int va_pos =
+                                        arity.m_type == T_NIL ? 0
+                                        : (arity.m_type == T_INT && arity.m_d.i < 0)
+                                        ? ((unsigned int) (-arity.m_d.i))
+                                        : frame->m_len;
+
+    //                                    std::cout << "VAVA" << frame->m_len << "," << va_pos << std::endl;
+
+                                    AtomVec *v = nullptr;
+                                    if (frame->m_len > va_pos)
+                                    {
+                                        size_t va_len = frame->m_len - va_pos;
+                                        v = m_rt->m_gc.allocate_vector(va_len);
+                                        for (size_t i = 0; i < va_len; i++)
+                                            v->m_data[i] = frame->m_data[i + va_pos];
+                                        v->m_len = va_len;
+                                    }
+                                    else
+                                        v = m_rt->m_gc.allocate_vector(0);
+                                    frame->set(va_pos, Atom(T_VEC, v));
+                                }
+
+                                m_prog   = dynamic_cast<PROG*>(func->m_d.vec->m_data[VM_CLOS_PROG].m_d.ud);
                                 m_pc     = &(m_prog->m_instructions[0]);
                                 m_pc--;
 
                                 SET_DATA_ROW(m_prog->data_array());
-                                AtomVec *upvs = func->m_d.vec->m_data[1].m_d.vec;
+                                AtomVec *upvs = func->m_d.vec->m_data[VM_CLOS_UPV].m_d.vec;
                                 if (upvs->m_len > 0)
                                 {
                                     for (size_t i = 0; i < upvs->m_len; i += 2)
@@ -926,6 +1016,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                                     }
                                 }
                                 SET_FRAME_ROW(frame);
+                                SET_ROOT_ENV(clos_root_env);
                             }
                             break;
                         }
@@ -945,19 +1036,51 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     Atom *env;
                     E_GET(env, B);
 
-                    if (!root_env->m_meta
-                        || root_env->m_meta->at(1).m_type != T_MAP)
-                    {
-                        error("Bad environment passed, REGS has no meta env attached",
-                              Atom(T_VEC, root_env));
-                    }
-                    AtomMap *eval_env = root_env->m_meta->at(1).m_d.map;
+                    AtomMap *eval_env = nullptr;
                     if (env->m_type != T_NIL)
                     {
                         if (env->m_type != T_MAP)
                             error("Bad environment (not a map) to 'eval'", *env);
                         eval_env = env->m_d.map;
                     }
+                    else
+                    {
+                        // OP_EVAL is wrapped into a (lambda (code . env) ...)
+                        // to inherit the root_env of the caller in case env is nil,
+                        // we walk the control stack downwards until we find the
+                        // original caller frame that was stored in OP_CALL.
+                        //
+                        // The (lambda (code . env) ...) is generated by the compiler
+                        // using a special root environment, which is completely
+                        // uninteresting to the actual user of (eval ...).
+                        AtomVec *caller_env = nullptr;
+                        for (size_t i = cont_stack->m_len; i > 0; i--)
+                        {
+                            AtomVec *frame = cont_stack->m_data[i - 1].m_d.vec;
+                            if (frame->m_len == VM_CALL_FRAME_SIZE)
+                            {
+                                caller_env = frame->m_data[VM_CF_ROOT].m_d.vec;
+                                break;
+                            }
+                        }
+
+                        if (!caller_env)
+                        {
+                            error("EVAL needs to be executed from a called function!",
+                                  Atom());
+                        }
+
+                        if (!caller_env->m_meta
+                            || caller_env->m_meta->at(1).m_type != T_MAP)
+                        {
+                            error("Bad environment passed in caller, root_env has no meta env attached",
+                                  Atom(T_VEC, caller_env));
+                        }
+
+                        eval_env = caller_env->m_meta->at(1).m_d.map;
+                    }
+
+                    //d// std::cout << "EVAL ENV=" << ((void *) eval_env) << "(" << code->to_write_str() << ")" << std::endl;
 
                     GC_ROOT(m_rt->m_gc, prog) =
                         m_compiler_call(*code, eval_env, "<vm-op-eval>", true);
@@ -991,7 +1114,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     AtomVec *eval_frame = m_rt->m_gc.allocate_vector(0);
                     SET_FRAME_ROW(eval_frame);
                     Atom cf_root_env =
-                    eval_env->at(Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")));
+                        eval_env->at(Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")));
                     if (cf_root_env.m_type != T_VEC)
                         error("Bad environment with 'eval', no [\" REGS \"] given",
                               cf_root_env);
@@ -1050,6 +1173,27 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     break;
                 }
 
+                case OP_GET_CORO:
+                {
+                    Atom func;
+                    size_t ret_cont_stack_idx = 0;
+                    for (size_t i = cont_stack->m_len; i > 0; i--)
+                    {
+                        Atom &frm = cont_stack->m_data[i - 1];
+                        if (   frm.m_type == T_VEC
+                            && frm.m_d.vec->m_len == VM_CALL_FRAME_SIZE
+                            && !frm.at(VM_CF_CLOS).at(VM_CLOS_IS_CORO).is_false())
+                        {
+                            func = frm.at(VM_CF_CLOS);
+                            break;
+                        }
+                    }
+
+                    E_SET_CHECK_REALLOC(O, O);
+                    E_SET(O, func);
+                    break;
+                }
+
                 case OP_YIELD:
                 {
                     E_GET(tmp, A);
@@ -1064,6 +1208,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                         {
                             break;
                         }
+                        c = nullptr;
                     }
 
                     if (!c || c->m_type == T_NIL)
@@ -1101,12 +1246,12 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     {
                         Atom &frm = cont_stack->m_data[i - 1];
                         //d// cout << "FRM: " << frm.m_type << " F: " << frm.at(0).at(2).to_write_str() << endl;
-                        if (!frm.at(0).at(2).is_false())
+                        if (!frm.at(VM_CF_CLOS).at(VM_CLOS_IS_CORO).is_false())
                         {
                             //d// cout << "FOUND COROUTINE CALL AT DEPTH="
                             //d//      << i << " of " << cont_stack->m_len << endl;
                             ret_call_frame = frm;
-                            func           = frm.at(0);
+                            func           = frm.at(VM_CF_CLOS);
                             ret_cont_stack_idx = i - 1;
                             break;
                         }
@@ -1116,8 +1261,12 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     if (func.m_type == T_CLOS)
                     {
+                        if (func.m_d.vec->at(VM_CLOS_IS_CORO).m_type != T_BOOL)
+                            error("Can't yield from an already yielded "
+                                  "coroutine. Recusive calling of a coroutine "
+                                  "is not supported!", Atom());
                         cont_copy->push(coro_cont_frame);
-                        func.m_d.vec->set(2, Atom(T_VEC, cont_copy));
+                        func.m_d.vec->set(VM_CLOS_IS_CORO, Atom(T_VEC, cont_copy));
                     }
                     else
                         error("Can't 'yield' from a non-coroutine call!",
@@ -1652,11 +1801,11 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
     {
         if (e.do_ctrl_jump())
         {
-            instant_ctrl_jmp.op = OP_CTRL_JMP;
-            instant_ctrl_jmp.o  = 0;
-            instant_ctrl_jmp.oe = REG_ROW_SPECIAL;
+            instant_operation.op = OP_CTRL_JMP;
+            instant_operation.o  = 0;
+            instant_operation.oe = REG_ROW_SPECIAL;
             instant_ctrl_jmp_obj.set_int(42);
-            m_pc = &instant_ctrl_jmp;
+            m_pc = &instant_operation;
             // TODO: Create error object and inject it somehow into the
             //       program!?
             // Question: Where to get the storage location from?
