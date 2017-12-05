@@ -2221,3 +2221,29 @@
       (import (tests-support import-test))
       impt)
    135)
+
+; Test std lib
+(define std-env {})
+(T-env '(begin (import (bukalisp std)) 1) 1 std-env)
+
+; Test map
+(T-env '(begin
+          (map (lambda (i) (* i 2))
+               [1 2 3 4]))
+       [2 4 6 8]
+       std-env)
+
+(T-env '(begin
+          (map (lambda (i j) [j (* i 2)])
+               [1 2 3 4]
+               [a: b: :c]))
+       [[a: 2] [b: 4] [c: 6] [nil 8]]
+       std-env)
+
+(T-env '(begin
+          (map (lambda (j i) [j (* i 2)])
+               [a: b: :c]
+               [1 2 3 4]))
+       [[a: 2] [b: 4] [c: 6]]
+       std-env)
+
