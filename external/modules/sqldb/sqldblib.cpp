@@ -44,6 +44,8 @@ VV_CLOSURE_DOC(sqldb_session,
 )
 {
     Session *s = Session::connect(vv_args->_(0));
+    if (!s)
+        return vv_undef();
     return vv_ptr((void *) s, "sqldb:session");
 }
 //---------------------------------------------------------------------------

@@ -24,6 +24,7 @@
 #include "httplib.h"
 #include <modules/vval_util.h>
 #include <modules/ev_loop/ev_loop_lib.h>
+#include <Poco/URI.h>
 #include "http.h"
 
 using namespace VVal;
@@ -155,6 +156,78 @@ VV_CLOSURE_DOC(http_get,
 }
 //---------------------------------------------------------------------------
 
+VV_CLOSURE_DOC(http_url_split,
+"@http procedure (http-url-split _url_ [_resolve-relative-url_])\n"
+"\n"
+"Splits an URL up into it's parts.\n"
+"If _resolve-relative-url_ is specified, it is resolved against\n"
+"the base URL _url_. This procedure will return a map containing:\n"
+"\n"
+"   {\n"
+"       path            \"...\"\n"
+"       path-normalized \"...\"\n"
+"       port            80\n"
+"       host            \"...\"\n"
+"       file-name       \"...\"\n"
+"       segments            [...]\n"
+"       segments-normalized [...]\n"
+"       fragment        \"...\"\n"
+"       password        \"...\"\n"
+"       query           \"...\"\n"
+"       query-decoded   \"...\"\n"
+"       scheme          \"...\"\n"
+"       userInfo        \"...\"\n"
+"       userName        \"...\"\n"
+"       params          [...]\n"
+"   }\n"
+)
+{
+    VV vv_url(vv_map());
+
+    Poco::URI uri(vv_args->_s(0));
+
+    if (vv_args->_(1)->is_defined())
+        uri.resolve(vv_args->_s(1));
+
+    VV vv_segs(vv_list());
+    std::vector<std::string> segments;
+    uri.getPathSegments(segments);
+    for (auto &s : segments)
+        vv_segs << vv(s);
+
+    Poco::URI::QueryParameters qpm = uri.getQueryParameters();
+    VV vv_params(vv_list());
+    for (auto param : qpm)
+        vv_params << (vv_list() << vv(param.first) << vv(param.second));
+
+    vv_url
+        << vv_kv("path",            uri.getPath())
+        << vv_kv("port",            uri.getPort())
+        << vv_kv("host",            uri.getHost())
+        << vv_kv("fragment",        uri.getFragment())
+        << vv_kv("file-name",       segments.size() > 0 ? segments.back() : "")
+        << vv_kv("segments",        vv_segs)
+        << vv_kv("user-info",       uri.getUserInfo())
+        << vv_kv("scheme",          uri.getScheme())
+        << vv_kv("query",           uri.getRawQuery())
+        << vv_kv("query-decoded",   uri.getQuery())
+        << vv_kv("params-decoded",  vv_params);
+
+    uri.normalize();
+    segments.clear();
+    uri.getPathSegments(segments);
+    vv_segs = vv_list();
+    for (auto &s : segments)
+        vv_segs << vv(s);
+
+    vv_url
+        << vv_kv("path-normalized",        uri.getPath())
+        << vv_kv("segments-normalized",    vv_segs);
+
+    return vv_url;
+}
+//---------------------------------------------------------------------------
+
 BukaLISPModule init_httplib()
 {
     VV reg(vv_list() << vv("http"));
@@ -167,10 +240,11 @@ BukaLISPModule init_httplib()
 
     http_srv::init_error_handlers();
 
-    SET_FUNC(bind,     http_bind);
-    SET_FUNC(free,     http_free);
-    SET_FUNC(response, http_response);
-    SET_FUNC(get,      http_get);
+    SET_FUNC(bind,          http_bind);
+    SET_FUNC(free,          http_free);
+    SET_FUNC(response,      http_response);
+    SET_FUNC(get,           http_get);
+    SET_FUNC(url-split,     http_url_split);
 
     return reg;
 }

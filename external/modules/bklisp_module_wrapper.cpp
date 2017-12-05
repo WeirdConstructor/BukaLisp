@@ -137,7 +137,7 @@ Atom vv2atom(bukalisp::VM *vm, const VV &vv)
 //}
 ////---------------------------------------------------------------------------
 
-VV atom2vv(VM *vm, Atom &a)
+VV atom2vv(VM *vm, const Atom &a)
 {
     switch (a.m_type)
     {

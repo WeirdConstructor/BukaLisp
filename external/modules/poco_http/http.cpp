@@ -22,7 +22,7 @@
 ******************************************************************************/
 
 #include "http.h"
-#include <Poco/Net/HTTPServer.h>
+//#include <Poco/Net/HTTPServer.h>
 #include <Poco/Net/HTTPClientSession.h>
 #include <Poco/Net/HTTPRequestHandlerFactory.h>
 #include <Poco/Net/HTTPRequestHandler.h>
@@ -35,6 +35,7 @@
 #include <Poco/URI.h>
 #include <Poco/ErrorHandler.h>
 #include <Poco/Net/HTTPServerResponse.h>
+#include <regex>
 #include <modules/vval_util.h>
 
 using namespace std;
@@ -74,9 +75,33 @@ void init_error_handlers()
 }
 //---------------------------------------------------------------------------
 
-static const char *mimetype_from_path(const std::string &path)
+static std::string mimetype_from_path(const std::string &path)
 {
-    return "text/plain";
+    std::string mimetype = "text/plain";
+
+    std::smatch string_match_capts;
+    if (regex_match(path, string_match_capts, std::regex(".*\\.([^/\\.]+)$")))
+    {
+        std::string file_ext = string_match_capts[1];
+        std::transform(
+            file_ext.begin(),
+            file_ext.end(),
+            file_ext.begin(),
+            ::tolower);
+
+        if      (file_ext == "html") mimetype = "text/html; charset=UTF-8";
+        else if (file_ext == "htm")  mimetype = "text/html; charset=UTF-8";
+        else if (file_ext == "js")   mimetype = "text/javascript; charset=UTF-8";
+        else if (file_ext == "json") mimetype = "application/json; charset=UTF-8";
+        else if (file_ext == "css")  mimetype = "text/css";
+        else if (file_ext == "txt")  mimetype = "text/plain; charset=UTF-8";
+        else if (file_ext == "jpg")  mimetype = "image/jpeg";
+        else if (file_ext == "jpeg") mimetype = "image/jpeg";
+        else if (file_ext == "png")  mimetype = "image/png";
+        else if (file_ext == "gif")  mimetype = "image/gif";
+    }
+
+    return mimetype;
 }
 
 //---------------------------------------------------------------------------

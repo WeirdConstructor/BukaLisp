@@ -26,7 +26,7 @@
 
 #include <iostream>
 #include <cstring>
-#include "endian.h"
+#include "compat_endian.h"
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>

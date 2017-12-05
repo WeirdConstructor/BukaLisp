@@ -1194,7 +1194,7 @@
 
 ; Test include
 (T '(begin
-      (include "..\\tests\\compiler\\test_compiler_incl.bkl")
+      (include "../tests/compiler/test_compiler_incl.bkl")
       test-include-ok)
    1)
 
@@ -1438,6 +1438,35 @@
         (push! o v))
       o)
    [])
+
+; Test do-each regressions
+(T '(let ((x 0))
+      (do-each (row [[1] [2] [3] [4]])
+        (if #t
+            (begin
+              (set! x (+ x (@0 row)))
+              (str (@0 row)))))
+      x)
+   10)
+
+(T '(let ((x 0))
+      (do-each (row [[1] [2] [3] [4]])
+        (case 0
+          (else
+            (set! x (+ x (@0 row)))
+            (str (@0 row)))))
+      x)
+   10)
+
+(T '(let ((x 0))
+      (do-each (row [[1] [2] [3] [4]])
+        (case (@0 row)
+          (else
+            (set! x (+ x (@0 row)))
+            (str X: (@0 row))
+            nil)))
+      x)
+   10)
 
 ; Testing some shallow copy operations and assignments
 (T '(let ((v [1 2 3])

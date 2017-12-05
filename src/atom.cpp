@@ -118,7 +118,7 @@ void Atom::set(size_t i, const Atom &v)
 }
 //---------------------------------------------------------------------------
 
-Atom Atom::meta()
+Atom Atom::meta() const 
 {
     if      (m_type == T_VEC && m_d.vec->m_meta)  return Atom(T_VEC, m_d.vec->m_meta);
     else if (m_type == T_CLOS && m_d.vec->m_meta) return Atom(T_VEC, m_d.vec->m_meta);

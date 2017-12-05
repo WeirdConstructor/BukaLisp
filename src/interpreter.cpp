@@ -723,8 +723,8 @@ Atom Interpreter::eval_include(Atom e, AtomVec *av)
               "symbol or keyword.", e);
     }
 
-    std::string libpath  = ".\\bukalisplib\\";
-    std::string filepath = libpath + av->m_data[1].m_d.sym->m_str;
+    std::string libpath  = get_library_path();
+    std::string filepath = libpath + BKL_PATH_SEP + av->m_data[1].m_d.sym->m_str;
 
     std::string code = slurp_str(filepath);
     return eval(filepath, code);
@@ -942,17 +942,27 @@ Atom Interpreter::call_compiler(
 }
 //---------------------------------------------------------------------------
 
+std::string Interpreter::get_library_path()
+{
+    const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
+#if defined(WIN32) || defined(_WIN32)
+    if (bukalisp_lib_path == NULL)
+        bukalisp_lib_path = ".\\bukalisplib";
+#else
+    if (bukalisp_lib_path == NULL)
+        bukalisp_lib_path = "./bukalisplib";
+#endif
+    return bukalisp_lib_path;
+}
+//---------------------------------------------------------------------------
+
 Atom Interpreter::get_compiler_func()
 {
     if (m_compiler_func.m_type != T_NIL)
         return m_compiler_func;
 
-    const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
-    if (bukalisp_lib_path == NULL)
-        bukalisp_lib_path = ".\\bukalisplib";
-
     std::string compiler_path =
-        std::string(bukalisp_lib_path) + "\\" + "compiler.bkl";
+        std::string(get_library_path()) + BKL_PATH_SEP + "compiler.bkl";
 
     try
     {

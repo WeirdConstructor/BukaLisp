@@ -23,27 +23,21 @@ else()
 endif()
 if (WIN32)
     find_package(Boost 1.60 COMPONENTS
-        log_setup
-        log
         system
         filesystem
         locale
         thread
         date_time
         regex
-        unit_test_framework
     REQUIRED)
 else()
     find_package(Boost 1.50 COMPONENTS
-        log_setup
-        log
         system
         filesystem
         locale
         thread
         date_time
         regex
-        unit_test_framework
     REQUIRED)
 endif()
 
@@ -55,17 +49,32 @@ if (WIN32)
         set(POCO_LIB     /mingw32/lib/)
         set(POCO_INCLUDE /mingw32/include/Poco/)
     endif()
-endif()
 
-set(POCO_INCLUDEDIRS
-    ${POCO_INCLUDE}/JSON/include
-    ${POCO_INCLUDE}/Foundation/include
-    ${POCO_INCLUDE}/Util/include
-    ${POCO_INCLUDE}/Net/include
-    ${POCO_INCLUDE}/NetSSL_OpenSSL/include
-    ${POCO_INCLUDE}/Crypto/include
-    ${POCO_INCLUDE}/../OpenSSL-Win32/include
-)
+    set(POCO_INCLUDEDIRS
+        ${POCO_INCLUDE}/JSON/include
+        ${POCO_INCLUDE}/Foundation/include
+        ${POCO_INCLUDE}/Util/include
+        ${POCO_INCLUDE}/Net/include
+        ${POCO_INCLUDE}/NetSSL_OpenSSL/include
+        ${POCO_INCLUDE}/Crypto/include
+        ${POCO_INCLUDE}/Zip/include
+        ${POCO_INCLUDE}/Data/include
+        ${POCO_INCLUDE}/Data/ODBC/include
+        ${POCO_INCLUDE}/../OpenSSL-Win32/include
+    )
+else()
+#    set(POCO_INCLUDEDIRS
+#        ${POCO_INCLUDE}/JSON/include
+#        ${POCO_INCLUDE}/Foundation/include
+#        ${POCO_INCLUDE}/Util/include
+#        ${POCO_INCLUDE}/Net/include
+#        ${POCO_INCLUDE}/NetSSL_OpenSSL/include
+#        ${POCO_INCLUDE}/Crypto/include
+#        ${POCO_INCLUDE}/Zip/include
+#        ${POCO_INCLUDE}/Data/include
+#        ${POCO_INCLUDE}/Data/ODBC/include
+#    )
+endif()
 
 set(POCO_LIBRARYDIRS ${POCO_LIB})
 if (WIN32)
@@ -77,6 +86,9 @@ if (WIN32)
         find_library(POCO_NETSSL_LIBRARY    NAMES PocoNetSSLmd      HINTS ${POCO_LIBRARYDIRS})
         find_library(POCO_XML_LIBRARY       NAMES PocoXMLmd         HINTS ${POCO_LIBRARYDIRS})
         find_library(POCO_CRYPTO_LIBRARY    NAMES PocoCryptomd      HINTS ${POCO_LIBRARYDIRS})
+        find_library(POCO_ZIP_LIBRARY       NAMES PocoZipmd         HINTS ${POCO_LIBRARYDIRS})
+        find_library(POCO_DATA_LIBRARY      NAMES PocoDatamd        HINTS ${POCO_LIBRARYDIRS})
+        find_library(POCO_ODBC_LIBRARY      NAMES PocoDataODBCmd    HINTS ${POCO_LIBRARYDIRS})
     else()
         find_library(POCO_LIBRARY           NAMES PocoFoundation    PATHS ${POCO_LIBRARYDIRS})
         find_library(POCO_NET_LIBRARY       NAMES PocoNet           HINTS ${POCO_LIBRARYDIRS})
@@ -85,6 +97,9 @@ if (WIN32)
         find_library(POCO_NETSSL_LIBRARY    NAMES PocoNetSSL        HINTS ${POCO_LIBRARYDIRS})
         find_library(POCO_XML_LIBRARY       NAMES PocoXML           HINTS ${POCO_LIBRARYDIRS})
         find_library(POCO_CRYPTO_LIBRARY    NAMES PocoCrypto        HINTS ${POCO_LIBRARYDIRS})
+        find_library(POCO_ZIP_LIBRARY       NAMES PocoZip           HINTS ${POCO_LIBRARYDIRS})
+        find_library(POCO_DATA_LIBRARY      NAMES PocoData          HINTS ${POCO_LIBRARYDIRS})
+        find_library(POCO_ODBC_LIBRARY      NAMES PocoDataODBC      HINTS ${POCO_LIBRARYDIRS})
     endif()
 else()
     find_library(POCO_LIBRARY           NAMES PocoFoundation PATHS ${POCO_LIBRARYDIRS})
@@ -93,6 +108,9 @@ else()
     find_library(POCO_NETSSL_LIBRARY    NAMES PocoNetSSL     HINTS ${POCO_LIBRARYDIRS})
     find_library(POCO_XML_LIBRARY       NAMES PocoXML        HINTS ${POCO_LIBRARYDIRS})
     find_library(POCO_CRYPTO_LIBRARY    NAMES PocoCrypto     HINTS ${POCO_LIBRARYDIRS})
+    find_library(POCO_ZIP_LIBRARY       NAMES PocoZip        HINTS ${POCO_LIBRARYDIRS})
+    find_library(POCO_DATA_LIBRARY      NAMES PocoData          HINTS ${POCO_LIBRARYDIRS})
+    find_library(POCO_ODBC_LIBRARY      NAMES PocoDataODBC      HINTS ${POCO_LIBRARYDIRS})
     set(POCO_JSON_LIBRARY)
 endif()
 
@@ -103,7 +121,8 @@ set(POCO_LIBRARIES
     ${POCO_JSON_LIBRARY}
     ${POCO_XML_LIBRARY}
     ${POCO_CRYPTO_LIBRARY}
-    ${POCO_UTIL_LIBRARY})
+    ${POCO_UTIL_LIBRARY}
+    ${POCO_ZIP_LIBRARY})
 
 if (WIN32)
     add_definitions(-DPOCO_WIN32_UTF8 -DPOCO_STATIC)

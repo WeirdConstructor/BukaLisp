@@ -65,7 +65,7 @@
 
 
 bukalisp::Atom vv2atom(bukalisp::VM *vm, const VVal::VV &vv);
-VVal::VV atom2vv(bukalisp::VM *vm, bukalisp::Atom &a);
+VVal::VV atom2vv(bukalisp::VM *vm, const bukalisp::Atom &a);
 VVal::VV atom2vv(bukalisp::VM *vm, bukalisp::AtomVec &a);
 
 class BukaLISPModule

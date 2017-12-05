@@ -21,63 +21,25 @@
 * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ******************************************************************************/
 
-#include "endian.h"
-#include "compat_stdint.h"
-#if defined(__BORLANDC__) && (__BORLANDC__ <= 0x0593) || defined(__MINGW32__) || defined(_MSC_VER)
-extern "C"
-{
-#include <winsock2.h>
-}
-#else
-extern "C"
-{
-#if not defined _MSC_VER
-#include <arpa/inet.h>
-#include <string.h>
-#endif
-}
-#endif
+#ifndef QLEndianH
+#define QLEndianH 1
 
+#if __cplusplus
 namespace endian
 {
+#else
+#define bool int
+#endif
+bool isBigEndian();
 
-bool isBigEndian() { uint32_t i = 1; return *(char *)&i == 0; }
-
-void encode16Bit(char *x)
-{ *((uint16_t *) x) = htons(*((uint16_t *) x)); }
-void decode16Bit(char *x)
-{ *((uint16_t *) x) = ntohs(*((uint16_t *) x)); }
-
-void encode32Bit(char *x)
-{ *((uint32_t *) x) = htonl(*((uint32_t *) x)); }
-void decode32Bit(char *x)
-{ *((uint32_t *) x) = ntohl(*((uint32_t *) x)); }
-
-void encode64Bit(char *x)
-{
-    if (isBigEndian()) return;
-
-    char out[8];
-
-    encode32Bit(x);
-    encode32Bit(x + 4);
-
-    memcpy(out,     x + 4, 4);
-    memcpy(out + 4, x,     4);
-    memcpy(x, out, 8);
+void encode16Bit(char *x);
+void decode16Bit(char *x);
+void encode32Bit(char *x);
+void decode32Bit(char *x);
+void encode64Bit(char *x);
+void decode64Bit(char *x);
+#if __cplusplus
 }
-void decode64Bit(char *x)
-{
-    if (isBigEndian()) return;
+#endif
 
-    char out[8];
-
-    decode32Bit(x);
-    decode32Bit(x + 4);
-
-    memcpy(out,     x + 4, 4);
-    memcpy(out + 4, x,     4);
-    memcpy(x, out, 8);
-}
-
-}
+#endif // QLEndianH

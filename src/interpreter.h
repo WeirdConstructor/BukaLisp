@@ -111,6 +111,7 @@ class Interpreter
             return ret;
         }
 
+        std::string get_library_path();
         Atom get_compiler_func();
         Atom call_compiler(
             Atom prog,
@@ -146,15 +147,15 @@ class Interpreter
 
         void error(const std::string &msg)
         {
-            throw add_stack_trace_error(BukaLISPException(msg));
+            BukaLISPException e(msg);
+            throw add_stack_trace_error(e);
         }
 
-        void error(const std::string &msg, Atom &err_atom)
+        void error(const std::string &msg, const Atom &err_atom)
         {
-            throw
-                add_stack_trace_error(
-                    BukaLISPException(
-                        msg + ", atom: " + err_atom.to_write_str()));
+            BukaLISPException e(
+                msg + ", atom: " + err_atom.to_write_str());
+            throw add_stack_trace_error(e);
         }
 
         Atom call(Atom func, AtomVec *av, bool eval_args = false, size_t arg_offs = 0);

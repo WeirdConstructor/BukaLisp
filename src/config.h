@@ -29,6 +29,18 @@
 #define GC_DEBUG_MODE 0
 //---------------------------------------------------------------------------
 
+// Disables usage of modules:
+#define USE_MODULES 1
+
+//---------------------------------------------------------------------------
+
+#if defined(WIN32) || defined(_WIN32)
+#   define BKL_PATH_SEP    "\\"
+#else
+#   define BKL_PATH_SEP    "/"
+#endif
+
+
 /******************************************************************************
 * Copyright (C) 2017 Weird Constructor
 *

@@ -29,8 +29,7 @@ It does not support full call-with-current-continuation. It has only support
 for coroutines, which is a limited kind of call/cc. There is no strong
 reason why, mostly because I haven't engineered it enough to provide them
 without overhead for the common case. While call/cc is a very clever construct,
-I find it more useful to provide actual control flow primitives like (return ...),
-(yield ...), (break ...) and (continue).
+I find it more useful to provide actual control flow primitives like (return ...).
 
 On the performance side BukaLisp performs well on par with Python. I would be
 glad to compete on the same performance level as Lua, but for that much more
@@ -54,7 +53,7 @@ target other languages like JavaScript or Lua (which is a long term goal).
 Project Home
 ------------
 
-You find the project home at GitHub: https://github.com/WeirdConstructor/BukLiVM
+You find the project home at GitHub: https://github.com/WeirdConstructor/BukaLisp
 
 If you find bugs, you may post an Issue on GitHub.
 

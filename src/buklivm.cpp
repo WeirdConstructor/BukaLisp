@@ -1,12 +1,17 @@
 // Copyright (C) 2017 Weird Constructor
 // For more license info refer to the the bottom of this file.
 
+#include "config.h"
 #include "buklivm.h"
 #include "atom_printer.h"
 #include "atom_cpp_serializer.h"
 #include "util.h"
-#include "modules/bklisp_module_wrapper.h"
 #include <chrono>
+#include <cmath>
+
+#if USE_MODULES
+#include "modules/bklisp_module_wrapper.h"
+#endif
 
 using namespace std;
 
@@ -153,6 +158,7 @@ void VM::init_prims()
 }
 //---------------------------------------------------------------------------
 
+#if USE_MODULES
 void VM::load_module(BukaLISPModule *m)
 {
     Atom funcs(T_MAP, m_rt->m_gc.allocate_map());
@@ -187,6 +193,7 @@ void VM::load_module(BukaLISPModule *m)
                 + "'");
     }
 }
+#endif
 //---------------------------------------------------------------------------
 
 AtomMap *VM::loaded_modules()
@@ -614,9 +621,9 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
     Atom *tmp = nullptr;
 
     bool alloc = false;
+    VM_START:
     try
     {
-        VM_START:
         while (m_pc->op != OP_END)
         {
 //            INST &PC = *m_pc;
@@ -632,9 +639,9 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     Atom &a = rr_v_frame[i];
                     if (a.m_type == T_UD && a.m_d.ud->type() == "VM-PROG")
                         cout << i << "[#<prog>] ";
-                    else if (a.m_type == T_MAP && a.size() > 5)
+                    else if (a.m_type == T_MAP && a.size() > 10)
                         cout << i << "[map:" << ((void *) a.m_d.map) << "] ";
-                    else if (a.m_type == T_VEC && a.size() > 5)
+                    else if (a.m_type == T_VEC && a.size() > 10)
                         cout << i << "[vec:" << ((void *) a.m_d.vec) << "] ";
                     else
                         cout << i << "[" << a.to_write_str() << "] ";
@@ -1602,6 +1609,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     alloc = true;
                     Atom iter(T_VEC, m_rt->m_gc.allocate_vector(2));
+                    iter.m_d.vec->m_len = 2;
                     if (vec.m_type == T_VEC)
                     {
                         iter.m_d.vec->m_data[0] = Atom(T_INT, -1);
@@ -1628,7 +1636,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     E_GET(tmp, B);
                     Atom &iter = *tmp;
-                    if (iter.m_type != T_VEC && iter.m_d.vec->m_len < 2)
+                    if (iter.m_type != T_VEC || iter.m_d.vec->m_len < 2)
                         error("Bad iterator found in NEXT", iter);
 
                     Atom *iter_elems = iter.m_d.vec->m_data;
@@ -1815,11 +1823,8 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
     }
     catch (std::exception &e)
     {
-        throw
-            add_stack_trace_error(
-                BukaLISPException(
-                    std::string("Exception in VM: ")
-                    + e.what()));
+        BukaLISPException ex(std::string("Exception in VM: ") + e.what());
+        throw add_stack_trace_error(ex);
     }
 
     cont_stack->pop();

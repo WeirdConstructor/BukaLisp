@@ -11,7 +11,6 @@
 #include <functional>
 #include <memory>
 #include "atom_userdata.h"
-#include "atom_map.h"
 
 #if WITH_MEM_POOL
 #include "mempool.h"
@@ -159,6 +158,18 @@ struct AtomVec
 };
 //---------------------------------------------------------------------------
 
+#if WITH_MEM_POOL
+extern MemoryPool<Atom> g_atom_array_pool;
+#endif
+
+//---------------------------------------------------------------------------
+
+} // namespace bukalisp
+
+#include "atom_map.h"
+
+namespace bukalisp
+{
 typedef HashTable<Atom, AtomHash> AtomMap;
 
 //---------------------------------------------------------------------------
@@ -315,7 +326,7 @@ struct Atom
     void set(const Atom &a, const Atom &v);
     void set(size_t i, const Atom &v);
 
-    Atom meta();
+    Atom meta() const;
 
     void add_equal_compare(
         std::vector<std::pair<Atom, Atom>> &to_compare,
@@ -1156,7 +1167,7 @@ class GC
             return new_vec;
         }
 
-        void set_meta_register(Atom &a, size_t i, Atom &meta)
+        void set_meta_register(Atom &a, size_t i, const Atom &meta)
         {
             if (   a.m_type == T_VEC
                 || a.m_type == T_CLOS)
@@ -1412,11 +1423,6 @@ void atom_tree_walker(
     std::function<void(std::function<void(Atom &a)> cont, unsigned int indent, Atom a)> cb);
 //---------------------------------------------------------------------------
 
-#if WITH_MEM_POOL
-extern MemoryPool<Atom> g_atom_array_pool;
-#endif
-
-//---------------------------------------------------------------------------
 }
 
 /******************************************************************************

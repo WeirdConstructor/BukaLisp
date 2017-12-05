@@ -70,6 +70,8 @@ class VariantValueException : public std::exception
         virtual const char *what() const noexcept { return m_msg.c_str(); }
 };
 
+std::string vv_dump(const VV &v);
+
 VV vv(int64_t v);
 VV vv(int32_t v);
 VV vv(int16_t v);

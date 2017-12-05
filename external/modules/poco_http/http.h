@@ -22,11 +22,12 @@
 ******************************************************************************/
 
 #pragma once
+
+#include <Poco/Net/HTTPServer.h>
 #include <functional>
 #include <unordered_map>
 #include <thread>
 #include <future>
-#include <Poco/Net/HTTPServer.h>
 #include <modules/vval.h>
 
 namespace http_srv

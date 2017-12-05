@@ -1,19 +1,3 @@
-// Copyright (C) 2017 Weird Constructor
-// For more license info refer to the the bottom of this file.
-
-#pragma once
-
-#include <string>
-#include "atom.h"
-
-namespace bukalisp
-{
-
-std::string write_atom(const Atom &a);
-std::string write_atom_pp(const Atom &a);
-
-}
-
 /******************************************************************************
 * Copyright (C) 2017 Weird Constructor
 *
@@ -36,3 +20,16 @@ std::string write_atom_pp(const Atom &a);
 * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ******************************************************************************/
+
+#pragma once
+
+//---------------------------------------------------------------------------
+
+#include <modules/bklisp_module_wrapper.h>
+
+//---------------------------------------------------------------------------
+
+BukaLISPModule init_costraenglib();
+
+//---------------------------------------------------------------------------
+

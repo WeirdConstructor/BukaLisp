@@ -14,7 +14,11 @@ Session *Session::connect(const VVal::VV &options)
     if (options->_s("driver") == "sqlite3")
     {
         SQLite3Session *s = new SQLite3Session;
-        s->init(options);
+        if (!s->init(options))
+        {
+            delete s;
+            return nullptr;
+        }
         return s;
     }
     else
@@ -22,8 +26,9 @@ Session *Session::connect(const VVal::VV &options)
 }
 //---------------------------------------------------------------------------
 
-void SQLite3Session::init(const VVal::VV &options)
+bool SQLite3Session::init(const VVal::VV &options)
 {
+    m_sqlite3 = nullptr;
     m_file = options->_s("file");
     int r =
         sqlite3_open_v2(
@@ -36,15 +41,21 @@ void SQLite3Session::init(const VVal::VV &options)
 
     if (r != SQLITE_OK)
     {
+        throw DatabaseException(
+            "init/connect for "
+            + vv_dump(options)
+            + ": "
+            + sqlite3_errmsg(m_sqlite3));
 //        L_ERROR << "DB: SQLITE3: init/connect for "
 //                << options
 //                << " failed: " << sqlite3_errmsg(m_sqlite3);
 
         sqlite3_close_v2(m_sqlite3);
-        m_sqlite3 = 0;
-        return;
+        m_sqlite3 = nullptr;
+        return false;
     }
 
+    return true;
 //    L_INFO << "DB: SQLITE3: connected to file '" << m_file << "'";
 }
 //---------------------------------------------------------------------------
@@ -131,7 +142,7 @@ bool SQLite3Session::execute(const VVal::VV &sqlTemplate)
 
     if (r != SQLITE_OK)
     {
-        string err = "prepare: " + string(sqlite3_errstr(r));
+        string err = "prepare: " + string(sqlite3_errstr(r)) + " SQL=[" + sql + "]";
 //        L_ERROR << "DB: SQLITE3: " << err << ", SQL=[" << sql << "]";
         this->close();
         throw DatabaseException(err);

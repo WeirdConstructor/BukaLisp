@@ -201,6 +201,26 @@ START_PRIM()
 END_PRIM(string->number);
 
 START_PRIM()
+    REQ_EQ_ARGC(string-downcase, 1)
+    std::string in = A0.to_display_str();
+    std::transform(in.begin(), in.end(), in.begin(), ::tolower);
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(in));
+END_PRIM_DOC(string-downcase,
+"@strings procedure (string-downcase _value_)\n"
+"\n"
+"Returns the lower case string version of _value_. Currently only supports ASCII properly.")
+
+START_PRIM()
+    REQ_EQ_ARGC(string-upcase, 1)
+    std::string in = A0.to_display_str();
+    std::transform(in.begin(), in.end(), in.begin(), ::toupper);
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(in));
+END_PRIM_DOC(string-upcase,
+"@strings procedure (string-upcase _value_)\n"
+"\n"
+"Returns the upper case string version of _value_. Currently only supports ASCII properly.")
+
+START_PRIM()
 	REQ_GT_ARGC(substring, 2);
 	std::string s = A0.to_display_str();
 	size_t start = (size_t) A1.to_int();
@@ -888,11 +908,7 @@ END_PRIM(sys-slurp-file)
 
 START_PRIM()
     REQ_EQ_ARGC(sys-path-separator, 0);
-#if defined(WIN32) || defined(_WIN32)
-    out = Atom(T_STR, m_rt->m_gc.new_symbol("\\"));
-#else
-    out = Atom(T_STR, m_rt->m_gc.new_symbol("/"));
-#endif
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(BKL_PATH_SEP));
 END_PRIM(sys-path-separator)
 
 START_PRIM()

@@ -314,7 +314,7 @@ class VM
 
         void set_documentation(
             const Atom &sym,
-            Atom &doc_string)
+            const Atom &doc_string)
         {
             m_documentation->set(sym, doc_string);
         }
@@ -332,7 +332,9 @@ class VM
 
         AtomMap *loaded_modules();
 
-        void load_module(BukaLISPModule *m);
+#       if USE_MODULES
+            void load_module(BukaLISPModule *m);
+#       endif
 
         void set_trace(bool t) { m_trace = t; }
 
@@ -359,10 +361,11 @@ class VM
 
         void error(const std::string &msg)
         {
-            throw add_stack_trace_error(BukaLISPException(msg));
+            BukaLISPException e(msg);
+            throw add_stack_trace_error(e);
         }
 
-        void error(const std::string &msg, Atom &err_atom)
+        void error(const std::string &msg, const Atom &err_atom)
         {
             error(msg + ", atom: " + err_atom.to_write_str());
         }

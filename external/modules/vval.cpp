@@ -298,4 +298,12 @@ std::ostream &operator<<(std::ostream &out, const VV &vv)
 #endif
 //---------------------------------------------------------------------------
 
+std::string vv_dump(const VV &v)
+{
+    std::stringstream ss;
+    ss << v;
+    return ss.str();
+}
+//---------------------------------------------------------------------------
+
 } // namespace VVal

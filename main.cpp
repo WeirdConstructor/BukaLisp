@@ -17,13 +17,17 @@
 #include "atom_printer.h"
 #include "bukalisp.h"
 #include "util.h"
+#include "config.h"
 
+#if USE_MODULES
 #include <modules/util/utillib.h>
 #include <modules/sys/syslib.h>
 #include <modules/ev_loop/ev_loop_lib.h>
 #include <modules/sqldb/sqldblib.h>
+#include <modules/costraeng/costraenglib.h>
 #include <modules/poco_http/httplib.h>
 #include <modules/testlib.h>
+#endif
 
 //---------------------------------------------------------------------------
 
@@ -118,7 +122,7 @@ class Reader
             m_root_set = m_gc.allocate_vector(0);
         }
 
-        std::string debug_info(Atom &a)
+        std::string debug_info(const Atom &a)
         {
             Atom meta = a.meta();
             std::string f = meta.at(0).at(0).to_display_str();
@@ -1154,19 +1158,24 @@ int main(int argc, char *argv[])
                 input_file_path = argv[i];
         }
 
-        std::vector<BukaLISPModule *> bukalisp_modules;
-        bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
-        bukalisp_modules.push_back(new BukaLISPModule(init_testlib()));
-        bukalisp_modules.push_back(new BukaLISPModule(init_syslib()));
-        bukalisp_modules.push_back(new BukaLISPModule(init_sqldblib()));
-        bukalisp_modules.push_back(new BukaLISPModule(init_httplib()));
-        bukalisp_modules.push_back(new BukaLISPModule(init_ev_loop_lib()));
+#       if USE_MODULES
+           std::vector<BukaLISPModule *> bukalisp_modules;
+           bukalisp_modules.push_back(new BukaLISPModule(init_utillib()));
+           bukalisp_modules.push_back(new BukaLISPModule(init_testlib()));
+           bukalisp_modules.push_back(new BukaLISPModule(init_syslib()));
+           bukalisp_modules.push_back(new BukaLISPModule(init_sqldblib()));
+           bukalisp_modules.push_back(new BukaLISPModule(init_httplib()));
+           bukalisp_modules.push_back(new BukaLISPModule(init_ev_loop_lib()));
+           bukalisp_modules.push_back(new BukaLISPModule(init_costraenglib()));
+           auto load_vm_modules = [&](VM &vm)
+           {
+               for (auto &mod : bukalisp_modules)
+                   vm.load_module(mod);
+           };
 
-        auto load_vm_modules = [&](VM &vm)
-        {
-            for (auto &mod : bukalisp_modules)
-                vm.load_module(mod);
-        };
+#       else
+           auto load_vm_modules = [&](VM &vm) -> void { };
+#       endif
 
         if (tests)
         {

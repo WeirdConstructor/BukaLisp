@@ -6,7 +6,7 @@ cmake_policy(SET CMP0008 OLD)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 add_library(bukalisp_lib STATIC
-    external/endian.cpp
+    external/compat_endian.cpp
     external/JSON.cpp
     src/atom_printer.cpp
     src/atom.cpp

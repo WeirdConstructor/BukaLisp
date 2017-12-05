@@ -43,6 +43,7 @@ class DatabaseException : public std::exception
         DatabaseException(const std::string &msg) : m_msg(msg) {}
 
         virtual const char *what() const noexcept { return m_msg.c_str(); }
+        virtual ~DatabaseException() { }
 };
 //---------------------------------------------------------------------------
 
@@ -53,7 +54,7 @@ class Session
 
         Session() { }
         virtual ~Session() { }
-        virtual void init(const VVal::VV &options) = 0;
+        virtual bool init(const VVal::VV &options) = 0;
         virtual bool execute(const VVal::VV &sqlTemplate) = 0;
         virtual VVal::VV row() = 0;
         virtual bool next() = 0;
@@ -72,7 +73,7 @@ class SQLite3Session : public Session
         SQLite3Session() : m_sqlite3(0), m_stmt(0) { }
         virtual ~SQLite3Session();
 
-        virtual void init(const VVal::VV &options);
+        virtual bool init(const VVal::VV &options);
         virtual bool execute(const VVal::VV &sqlTemplate);
         virtual VVal::VV row();
         virtual bool next();
