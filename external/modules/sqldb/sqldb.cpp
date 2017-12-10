@@ -67,6 +67,42 @@ static void free_cpp_buf(void *ptr)
 }
 //---------------------------------------------------------------------------
 
+void SQLite3Session::txn_start()
+{
+    int r = sqlite3_exec(m_sqlite3, "BEGIN TRANSACTION", NULL, NULL, NULL);
+    if (r != SQLITE_OK)
+    {
+        string err = "txn_start: " + string(sqlite3_errstr(r));
+        this->close();
+        throw DatabaseException(err);
+    }
+}
+//---------------------------------------------------------------------------
+
+void SQLite3Session::txn_commit()
+{
+    int r = sqlite3_exec(m_sqlite3, "COMMIT", NULL, NULL, NULL);
+    if (r != SQLITE_OK)
+    {
+        string err = "txn_commit: " + string(sqlite3_errstr(r));
+        this->close();
+        throw DatabaseException(err);
+    }
+}
+//---------------------------------------------------------------------------
+
+void SQLite3Session::txn_rollback()
+{
+    int r = sqlite3_exec(m_sqlite3, "ROLLBACK", NULL, NULL, NULL);
+    if (r != SQLITE_OK)
+    {
+        string err = "txn_rollback: " + string(sqlite3_errstr(r));
+        this->close();
+        throw DatabaseException(err);
+    }
+}
+//---------------------------------------------------------------------------
+
 bool SQLite3Session::execute(const VVal::VV &sqlTemplate)
 {
     VV params(vv_list());

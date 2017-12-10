@@ -5,6 +5,7 @@
 #include <chrono>
 
 std::string slurp_str(const std::string &filepath);
+bool write_str(const std::string &filepath, const std::string &data);
 
 class BenchmarkTimer
 {

@@ -108,6 +108,14 @@ VV_CLOSURE_DOC(http_response,
 "    { :action :file :path \"webdata/index.html\" } ; content-type is automatically generated\n"
 "    { :action :file :path \"webdata/index.html\" :contenttype \"text/html; charset=utf-8\" }\n"
 "    { :action :data :data \"foobar\" :contenttype \"text/plain; charset=utf-8\" }\n"
+"\n"
+"You can send headers that tell the browser not to cache:\n"
+"\n"
+"   {no-cache-flag: true}\n"
+"\n"
+"You can pass additional headers with this:\n"
+"\n"
+"    {cookies:  _map-of-cookie-names-and-values_}\n"
 "\n\nFor an example see `http-bind`\n"
 )
 {

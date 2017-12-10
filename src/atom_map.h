@@ -340,22 +340,29 @@ struct HashTable
         size_t hash, size_t idx,
         const Atom &key, const Atom &data)
     {
+        using namespace std;
         AT_HT_ITER_START(cur, search_begin, idx);
-    //    cout << "START=" << ((void *) m_begin)
-    //         << "; END=" << ((void *) m_end) << endl;
-        while (   (cur + 3) != search_begin
-               && cur[0].m_type == T_HPAIR)
+        //cout << "START=" << ((void *) m_begin)
+        //     << "; END=" << ((void *) m_end) << endl;
+        if (cur[0].m_type == T_HPAIR)
         {
             AT_HT_ITER_NEXT(cur);
-    //        cout << "NEXT CUR: " << ((void *) cur) << endl;
+            while (   cur           != search_begin
+                   && cur[0].m_type == T_HPAIR)
+            {
+                AT_HT_ITER_NEXT(cur);
+                // cout << "NEXT CUR: " << ((void *) cur) << endl;
+            }
+
+            if (   cur[0].m_type == T_HPAIR
+                && cur == search_begin)
+            {
+                throw BukaLISPException(
+                    "Error while inserting into atom hash table");
+                return;
+            }
         }
-        if (   cur[0].m_type == T_HPAIR
-            && cur == search_begin)
-        {
-            throw BukaLISPException(
-                "Error while inserting into atom hash table");
-            return;
-        }
+
         if (cur[0].m_type != T_INT)
             m_item_count++;
 
@@ -374,6 +381,7 @@ struct HashTable
             grow();
 
         AT_HT_CALC_IDX_HASH(key, hash, idx);
+        // std::cout << "hash: " << hash << " idx: " << idx << std::endl;
         insert_at(hash, idx, key, data);
     }
     //---------------------------------------------------------------------------

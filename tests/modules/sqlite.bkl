@@ -20,5 +20,35 @@
       (unless (equal? (sql-row s) {:id 123 :name nil})
         (error FAIL:))
       (unless (not (sql-next s))
+        (error FAIL:))
+      (let ((committed #f))
+        (with-cleanup
+          (sql-txn-start s)
+          (unless committed
+            (sql-txn-rollback s))
+          (begin
+            (sql-execute!
+              s
+              ["INSERT INTO test1 (id, name) VALUES(50, 'böß')"])
+            (sql-execute!
+              s
+              ["INSERT INTO test1 (id, name) VALUES(51, 'böß')"]))))
+      (when (sql-execute! s ["SELECT * FROM test1 WHERE id=50"])
+        (error FAIL:))
+      (let ((committed #f))
+        (with-cleanup
+          (sql-txn-start s)
+          (unless committed
+            (sql-txn-rollback s))
+          (begin
+            (sql-execute!
+              s
+              ["INSERT INTO test1 (id, name) VALUES(50, 'böß')"])
+            (sql-execute!
+              s
+              ["INSERT INTO test1 (id, name) VALUES(51, 'böß')"])
+            (sql-txn-commit s)
+            (set! committed #t))))
+      (unless (sql-execute! s ["SELECT * FROM test1 WHERE id=50"])
         (error FAIL:)))))
 :OK

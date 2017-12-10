@@ -174,6 +174,22 @@ class HTTP_SRV_Handler : public Poco::Net::HTTPRequestHandler
             VV resp = f.get();
 //            L_DEBUG << "HTTP Response: " << resp;
 
+            if (resp->_b("no-cache-flag"))
+            {
+                response.set("Cache-Control",
+                             "no-cache, no-store, must-revalidate");
+                response.set("Pragma",
+                             "no-cache");
+                response.set("Expires",
+                             "0");
+            }
+
+            if (resp->_("headers")->is_defined())
+            {
+                for (auto hdr : *(resp->_("headers")))
+                    response.set(hdr->_s(0), hdr->_s(1));
+            }
+
             if (resp->_s("action") == "file")
             {
                 response.setStatusAndReason(

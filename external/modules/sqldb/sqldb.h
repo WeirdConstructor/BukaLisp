@@ -58,6 +58,9 @@ class Session
         virtual bool execute(const VVal::VV &sqlTemplate) = 0;
         virtual VVal::VV row() = 0;
         virtual bool next() = 0;
+        virtual void txn_start() = 0;
+        virtual void txn_commit() = 0;
+        virtual void txn_rollback() = 0;
         virtual void close() = 0;
 };
 //---------------------------------------------------------------------------
@@ -75,6 +78,9 @@ class SQLite3Session : public Session
 
         virtual bool init(const VVal::VV &options);
         virtual bool execute(const VVal::VV &sqlTemplate);
+        virtual void txn_start();
+        virtual void txn_commit();
+        virtual void txn_rollback();
         virtual VVal::VV row();
         virtual bool next();
         virtual void close();

@@ -42,6 +42,33 @@ UTF8Buffer *slurp(const std::string &filepath)
 }
 //---------------------------------------------------------------------------
 
+bool write_str(const std::string &filepath, const std::string &data)
+{
+    std::string tmpoutpath = filepath + ".bkltmp.~";
+    ofstream output_file(tmpoutpath.c_str(),
+                         ios::out | ios::binary | ios::trunc);
+
+    if (!output_file.is_open())
+        throw bukalisp::BukLiVMException("Couldn't open '" + tmpoutpath + "'");
+
+    output_file.write(data.data(), data.size());
+    output_file.close();
+
+    std::string bakoutpath = filepath + ".bklbak.~";
+    remove(bakoutpath.c_str());
+    if (rename(filepath.c_str(), bakoutpath.c_str()) != 0)
+        return false;
+    if (rename(tmpoutpath.c_str(), filepath.c_str()) != 0)
+    {
+        rename(bakoutpath.c_str(), filepath.c_str());
+        return false;
+    }
+    remove(bakoutpath.c_str());
+
+    return true;
+}
+//---------------------------------------------------------------------------
+
 std::string slurp_str(const std::string &filepath)
 {
     ifstream input_file(filepath.c_str(),

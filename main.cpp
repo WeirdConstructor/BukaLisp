@@ -348,15 +348,16 @@ void test_atom_hash_table()
         ht.set(Atom(T_INT, 12), Atom(T_INT, 112));
         TEST_EQ(ht.size(), 11, "correct size 2 of bigger ht");
 
+        //cout << ht.debug_dump();
         std::string except;
         try
         { ht.set(Atom(T_INT, 13), Atom(T_INT, 113)); }
         catch (std::exception &e) { except = e.what(); }
-        TEST_EQ(!!except.find("inserting"), true,
+        TEST_EQ(except.find("inserting") != std::string::npos, true,
                 "exception on overly full, corner case");
 
 
-        // cout << ht.debug_dump();
+        //cout << ht.debug_dump();
         int64_t sum = 0;
         Atom *cur = nullptr;
         while (cur = ht.next(cur))
@@ -365,7 +366,7 @@ void test_atom_hash_table()
             sum += cur[1].m_d.i;
         }
 
-        TEST_EQ(sum, 111 + 23 + 112 + 27 + 22 + 29 + 25 + 110 + 113 + 26 + 28,
+        TEST_EQ(sum, 111 + 23 + 112 + 27 + 22 + 29 + 25 + 110 + 24 + 26 + 28,
                 "hash iteration works");
 
         // cout << "SUM: " << sum << endl;

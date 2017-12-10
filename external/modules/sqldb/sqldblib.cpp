@@ -99,6 +99,56 @@ VV_CLOSURE_DOC(sqldb_next,
 }
 //---------------------------------------------------------------------------
 
+VV_CLOSURE_DOC(sqldb_txn_start,
+"@sql procedure (sql-txn-start _db-handle_)\n\n"
+"Starts an SQL transaction:\n"
+"\n"
+"    (let ((committed #f))\n"
+"      (with-cleanup\n"
+"        (sql-txn-start db)\n"
+"        (unless committed (sql-txn-rollback db))\n"
+"        (begin\n"
+"          (sql-execute! db [\"UPDATE ...\"])\n"
+"          ; ...\n"
+"          (sql-txn-commit db)\n"
+"          (set! committed #t))))\n"
+)
+{
+    sqldb::Session *s =
+        vv_args->_P<sqldb::Session>(0, "sqldb:session");
+    s->txn_start();
+    return vv_undef();
+}
+//---------------------------------------------------------------------------
+
+VV_CLOSURE_DOC(sqldb_txn_commit,
+"@sql procedure (sql-txn-commit _db-handle_)\n\n"
+"Commits a SQL transaction.\n"
+"\n"
+"See also `sql-txn-start`.\n"
+)
+{
+    sqldb::Session *s =
+        vv_args->_P<sqldb::Session>(0, "sqldb:session");
+    s->txn_commit();
+    return vv_undef();
+}
+//---------------------------------------------------------------------------
+
+VV_CLOSURE_DOC(sqldb_txn_rollback,
+"@sql procedure (sql-txn-rollback _db-handle_)\n\n"
+"Rolls back a SQL transaction.\n"
+"\n"
+"See also `sql-txn-start`.\n"
+)
+{
+    sqldb::Session *s =
+        vv_args->_P<sqldb::Session>(0, "sqldb:session");
+    s->txn_rollback();
+    return vv_undef();
+}
+//---------------------------------------------------------------------------
+
 VV_CLOSURE_DOC(sqldb_close,
 "@sql procedure (sql-close _db-handle_)\n\n"
 "Closes any open SQL statement.\n"
@@ -138,12 +188,15 @@ BukaLISPModule init_sqldblib()
 #define SET_FUNC(functionName, closureName) \
     mod << (vv_list() << vv(#functionName) << VVC_NEW_##closureName(obj))
 
-    SET_FUNC(session,  sqldb_session);
-    SET_FUNC(execute!, sqldb_execute_M);
-    SET_FUNC(row,      sqldb_row);
-    SET_FUNC(next,     sqldb_next);
-    SET_FUNC(close,    sqldb_close);
-    SET_FUNC(destroy,  sqldb_destroy);
+    SET_FUNC(session,      sqldb_session);
+    SET_FUNC(execute!,     sqldb_execute_M);
+    SET_FUNC(row,          sqldb_row);
+    SET_FUNC(next,         sqldb_next);
+    SET_FUNC(close,        sqldb_close);
+    SET_FUNC(destroy,      sqldb_destroy);
+    SET_FUNC(txn-start,    sqldb_txn_start);
+    SET_FUNC(txn-commit,   sqldb_txn_commit);
+    SET_FUNC(txn-rollback, sqldb_txn_rollback);
 
     return reg;
 }

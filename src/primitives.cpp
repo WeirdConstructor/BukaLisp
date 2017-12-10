@@ -907,6 +907,18 @@ START_PRIM()
 END_PRIM(sys-slurp-file)
 
 START_PRIM()
+    REQ_EQ_ARGC(sys-write-file, 2);
+    if (   A0.m_type != T_STR
+        && A0.m_type != T_SYM
+        && A0.m_type != T_KW)
+    {
+        error("'bkl-write-file' requires a string, symbol "
+              "or keyword as first argument.", A0);
+    }
+    out = Atom(T_BOOL, write_str(A0.m_d.sym->m_str, A1.to_display_str()));
+END_PRIM(sys-write-file)
+
+START_PRIM()
     REQ_EQ_ARGC(sys-path-separator, 0);
     out = Atom(T_STR, m_rt->m_gc.new_symbol(BKL_PATH_SEP));
 END_PRIM(sys-path-separator)
