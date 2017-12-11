@@ -1,8 +1,6 @@
 // Copyright (C) 2017 Weird Constructor
 // For more license info refer to the the bottom of this file.
 
-#include "parse_util.h"
-
 #define BIN_OP_LOOPS(op) \
         if (args.m_len > 1) { \
             if (out.m_type == T_DBL) { \
@@ -116,17 +114,12 @@ START_PRIM()
         error("'number->string' too many arguments");
     if (args.m_len == 1)
     {
-        if (A0.m_type == T_DBL)
-            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.m_d.d)));
-        else if (A0.m_type == T_INT)
-            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.m_d.i)));
-        else
-            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.to_int())));
+        out = Atom(T_STR, m_rt->m_gc.new_symbol(A0.to_write_str()));
     }
     else
     {
         if (A0.m_type == T_DBL)
-            out = Atom(T_STR, m_rt->m_gc.new_symbol(std::to_string(A0.m_d.d)));
+            out = Atom(T_STR, m_rt->m_gc.new_symbol(A0.to_write_str()));
         else
         {
             int base  = (int) A1.to_int();
@@ -152,53 +145,87 @@ START_PRIM()
 END_PRIM(number->string)
 
 START_PRIM()
+    REQ_EQ_ARGC(any->inexact, 1);
+    out.set_dbl(A0.to_dbl());
+END_PRIM(any->inexact)
+
+START_PRIM()
     REQ_GT_ARGC(string->number, 0);
     if (args.m_len > 2)
         error("'string->number' too many arguments");
-    switch (A0.m_type)
+    int base = 0;
+    if (args.m_len == 2)
     {
-        case T_NIL:
-            out.set_int(0);
-            return;
-        case T_INT:
-        case T_DBL:
-            out = A0;
-            return;
-        case T_SYM:
-        case T_KW:
-        case T_STR:
-        {
-            std::string str = A0.m_d.sym->m_str;
-			if (args.m_len == 2)
-			{
-				int base = (int) A1.to_int();
-				if (base < 2 || base > 36)
-					error("'string->number' support only base >= 2"
-						  "and base <= 36",
-						  A1);
-				str = std::to_string(base) + "r" + str;
-			}
-            UTF8Buffer u8P(str.data(), str.size());
-            double d_val;
-            int64_t i_val;
-            bool is_double = false;
-            bool is_bad = false;
-            u8BufParseNumber(u8P, d_val, i_val, is_double, is_bad);
-            if (is_bad)
-            {
-                out = Atom();
-                return;
-            }
-
-            if (is_double) out.set_dbl(d_val);
-            else           out.set_int(i_val);
-            return;
-        }
-        default:
-            out.set_int(A0.to_int());
-            return;
+        base = (int) A1.to_int();
+        if (base < 2 || base > 36)
+            error("'string->number' support only base >= 2"
+                  "and base <= 36",
+                  A1);
     }
+    out = A0.any_to_number(base);
 END_PRIM(string->number);
+
+START_PRIM()
+    REQ_EQ_ARGC(any->number, 1);
+    out = A0.any_to_number(0);
+END_PRIM(any->number);
+
+START_PRIM()
+    REQ_EQ_ARGC(any->exact, 1);
+    out.set_int(A0.any_to_exact());
+END_PRIM(any->exact);
+
+START_PRIM()
+    REQ_EQ_ARGC(any->inexact, 1);
+    out.set_dbl(A0.any_to_inexact());
+END_PRIM(any->inexact);
+
+#define DEF_SIMPLE_NUM_PRIM(name, std_func) \
+START_PRIM() \
+    REQ_EQ_ARGC(name, 1); \
+    if (A0.m_type == T_DBL) \
+        out.set_dbl(std_func(A0.m_d.d)); \
+    else \
+        out.set_int(A0.any_to_exact()); \
+END_PRIM(name)
+
+DEF_SIMPLE_NUM_PRIM(floor, std::floor)
+DEF_SIMPLE_NUM_PRIM(truncate, std::trunc)
+DEF_SIMPLE_NUM_PRIM(ceiling, std::ceil)
+DEF_SIMPLE_NUM_PRIM(round, (double) std::llround)
+
+#define DEF_SIMPLE_MATHFUNC_PRIM(name, std_func) \
+START_PRIM() \
+    REQ_EQ_ARGC(name, 1); \
+    out.set_dbl(std_func((double) A0.to_dbl())); \
+END_PRIM(name)
+
+DEF_SIMPLE_MATHFUNC_PRIM(exp, std::exp)
+DEF_SIMPLE_MATHFUNC_PRIM(sin, std::sin)
+DEF_SIMPLE_MATHFUNC_PRIM(cos, std::cos)
+DEF_SIMPLE_MATHFUNC_PRIM(tan, std::tan)
+DEF_SIMPLE_MATHFUNC_PRIM(asin, std::asin)
+DEF_SIMPLE_MATHFUNC_PRIM(acos, std::acos)
+
+START_PRIM()
+    REQ_GT_ARGC(atan, 0);
+    if (args.m_len > 2)
+        error("'atan' too many arguments");
+    if (args.m_len == 1)
+        out.set_dbl(std::atan(A0.to_dbl()));
+    else
+        out.set_dbl(std::atan2(A0.to_dbl(), A1.to_dbl()));
+END_PRIM(atan)
+
+START_PRIM()
+    REQ_GT_ARGC(log, 1);
+    if (args.m_len > 2)
+        error("'log' too many arguments");
+    if (args.m_len == 1)
+        out.set_dbl(std::log(A0.to_dbl()));
+    else
+        out.set_dbl(std::log(A0.to_dbl()) / std::log(A1.to_dbl()));
+END_PRIM(log)
 
 START_PRIM()
     REQ_EQ_ARGC(string-downcase, 1)

@@ -4,6 +4,7 @@
 #ifndef BUKALISP_UTIL_H
 #define BUKALISP_UTIL_H 1
 #include "utf8buffer.h"
+#include <iomanip>
 
 namespace bukalisp
 {

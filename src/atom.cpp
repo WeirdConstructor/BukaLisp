@@ -4,6 +4,8 @@
 #include "atom.h"
 #include "atom_printer.h"
 #include <sstream>
+#include "parse_util.h"
+
 
 using namespace std;
 
@@ -176,6 +178,60 @@ std::string Atom::to_write_str(bool pretty) const
         return write_atom_pp(*this);
     else
         return write_atom(*this);
+}
+//---------------------------------------------------------------------------
+
+Atom Atom::any_to_number(int base) const
+{
+    Atom out;
+    switch (m_type)
+    {
+        case T_NIL:
+            out.set_int(0);
+            break;
+        case T_INT:
+        case T_DBL:
+            out = *this;
+            break;
+        case T_SYM:
+        case T_KW:
+        case T_STR:
+        {
+            std::string str = m_d.sym->m_str;
+			if (base)
+				str = std::to_string(base) + "r" + str;
+            UTF8Buffer u8P(str.data(), str.size());
+            double d_val;
+            int64_t i_val;
+            bool is_double = false;
+            bool is_bad = false;
+            u8BufParseNumber(u8P, d_val, i_val, is_double, is_bad);
+            if (is_bad)
+                break;
+
+            if (is_double) out.set_dbl(d_val);
+            else           out.set_int(i_val);
+            break;
+        }
+        default:
+            out.set_int(this->to_int());
+            break;
+    }
+    return out;
+}
+//---------------------------------------------------------------------------
+
+int64_t Atom::any_to_exact() const
+{
+    Atom n = any_to_number(0);
+    return n.to_int();
+}
+//---------------------------------------------------------------------------
+
+double Atom::any_to_inexact() const
+{
+    Atom n = any_to_number(0);
+    return n.to_dbl();
 }
 //---------------------------------------------------------------------------
 

@@ -246,6 +246,10 @@ struct Atom
     { return m_type == T_INT ? static_cast<double>(m_d.i)
              :                 m_d.d; }
 
+    Atom any_to_number(int base) const;
+    int64_t any_to_exact() const;
+    double any_to_inexact() const;
+
     std::string to_display_str() const;
     std::string to_write_str(bool pretty = false) const;
     std::string to_shallow_str() const;

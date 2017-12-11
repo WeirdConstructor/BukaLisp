@@ -39,7 +39,7 @@ void write_simple_atom(const Atom &a, std::ostream &o)
     {
         case T_NIL:  o << "nil";                                  break;
         case T_INT:  o << a.m_d.i;                                break;
-        case T_DBL:  o << a.m_d.d;                                break;
+        case T_DBL:  o << std::setprecision(15) << a.m_d.d;       break;
         case T_BOOL: o << (a.m_d.b ? "#true" : "#false");         break;
         case T_SYM:  o << a.m_d.sym->m_str;                       break;
         case T_KW:   o << a.m_d.sym->m_str << ":";                break;
