@@ -111,7 +111,6 @@ class Interpreter
             return ret;
         }
 
-        std::string get_library_path();
         Atom get_compiler_func();
         Atom call_compiler(
             Atom prog,

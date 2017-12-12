@@ -4,9 +4,21 @@
 #include <cstdio>
 #include <iostream>
 #include <fstream>
+#include <cstring>
+#include <codecvt>
 #include "buklivm.h"
 #include "utf8buffer.h"
 #include "util.h"
+
+#if defined(WIN32) || defined(_WIN32)
+#include <windows.h>
+#else
+extern "C"
+{
+#  include <unistd.h>
+#  include <libgen.h>
+}
+#endif
 
 using namespace std;
 using namespace bukalisp;
@@ -93,6 +105,56 @@ std::string slurp_str(const std::string &filepath)
     std::string data(unneccesary_buffer_just_to_copy, size);
     delete[] unneccesary_buffer_just_to_copy;
     return data;
+}
+//---------------------------------------------------------------------------
+
+std::string from_wstring(const std::wstring &wstr)
+{
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> utf8_utf16_converter;
+    return utf8_utf16_converter.to_bytes(wstr);
+}
+//---------------------------------------------------------------------------
+
+std::wstring to_wstring(const std::string &str)
+{
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> utf8_utf16_converter;
+    return utf8_utf16_converter.from_bytes(str);
+}
+//---------------------------------------------------------------------------
+
+std::string application_dir_path()
+{
+#if defined(WIN32) || defined(_WIN32)
+    HMODULE hModule = GetModuleHandleW(NULL);
+    WCHAR path[MAX_PATH];
+    GetModuleFileNameW(hModule, path, MAX_PATH);
+
+    wchar_t csDrive[_MAX_DRIVE];
+    wchar_t csDir  [_MAX_DIR];
+    wchar_t csName [_MAX_FNAME];
+    wchar_t csExt  [_MAX_EXT];
+    _wsplitpath(path,
+                (wchar_t *) &csDrive,
+                (wchar_t *) &csDir,
+                (wchar_t *) &csName,
+                (wchar_t *) &csExt);
+
+    return from_wstring(std::wstring(csDrive) + std::wstring(csDir));
+#else
+    char result[PATH_MAX];
+    auto s = readlink("/proc/self/exe", result, PATH_MAX);
+    if (s <= 0) return "";
+    char *dir = dirname(result);
+    std::string file_path(dir, strlen(dir));
+    return file_path;
+#endif
+}
+//---------------------------------------------------------------------------
+
+bool file_exists(std::string &filename)
+{
+    std::ifstream infile(filename);
+    return infile.good();
 }
 //---------------------------------------------------------------------------
 

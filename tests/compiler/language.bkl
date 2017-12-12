@@ -18,7 +18,6 @@
 
 ;(PUSH-DEBUG)
 
-
 ;(error X:)
 ;----------------------------------------------------------------------------
 
@@ -2320,3 +2319,10 @@
        [[a: 2] [b: 4] [c: 6]]
        std-env)
 
+; Testing ports
+(T '(let ((path "tests/compiler/test_read.bkl")
+          (file (open-input-file path)))
+      (with-cleanup
+        (close-port file)
+        (read-all file)))
+   [[1 2 'test] x:])

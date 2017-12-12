@@ -240,25 +240,6 @@
 ;----------------------------------------------------------------------------
 
 (define S1-ROOT-ENV {})
-(define add-syntax
-  (lambda (sym fn)
-    (@!sym S1-ROOT-ENV [syntax: fn])))
-
-(include "compiler/stage1_syntax.bkl")
-
-(do-each (k v (bkl-primitive-map))
-  (@!k S1-ROOT-ENV [prim: k]))
-
-(define add-optimized-prim
-  (lambda (root-env prim-k compile-func)
-    (let ((var (@prim-k root-env)))
-      (when (nil? var)
-        (error "Unknown primitive to optimize" prim-k))
-      (@!2 var compile-func))))
-
-(include "compiler/stage1_opt_prim.bkl")
-
-(@!" IS-ROOT-ENV " S1-ROOT-ENV #t)
 
 (define init-root-env
   (lambda (root-env)
@@ -301,3 +282,23 @@
       (@!sym root-env var)
       (@!reg-idx (@" REGS " root-env) content)
       (@!2 var reg-idx))))
+
+(define add-syntax
+  (lambda (sym fn)
+    (@!sym S1-ROOT-ENV [syntax: fn])))
+
+(include "compiler/stage1_syntax.bkl")
+
+(do-each (k v (bkl-primitive-map))
+  (@!k S1-ROOT-ENV [prim: k]))
+
+(define add-optimized-prim
+  (lambda (root-env prim-k compile-func)
+    (let ((var (@prim-k root-env)))
+      (when (nil? var)
+        (error "Unknown primitive to optimize" prim-k))
+      (@!2 var compile-func))))
+
+(include "compiler/stage1_opt_prim.bkl")
+
+(@!" IS-ROOT-ENV " S1-ROOT-ENV #t)

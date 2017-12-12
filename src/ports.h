@@ -1,36 +1,54 @@
 // Copyright (C) 2017 Weird Constructor
 // For more license info refer to the the bottom of this file.
 
-#include <string>
-#include <chrono>
+#pragma once
 
-std::string slurp_str(const std::string &filepath);
-bool write_str(const std::string &filepath, const std::string &data);
+#include "atom.h"
 
-std::string from_wstring(const std::wstring &str);
-std::wstring to_wstring(const std::string &str);
-std::string application_dir_path();
-bool file_exists(std::string &filename);
-
-class BenchmarkTimer
+namespace bukalisp
 {
-        std::chrono::high_resolution_clock::time_point m_t1;
+
+struct Runtime;
+
+class Port : public UserData
+{
+    private:
+        Runtime      *m_rt;
+        std::string   m_file;
+        std::ostream *m_ostream;
+        std::istream *m_istream;
+        std::fstream *m_fstream;
+
+        Port() : m_rt(0) { }
 
     public:
-        BenchmarkTimer()
-            : m_t1(std::chrono::high_resolution_clock::now())
+        Port(Runtime *rt)
+            : m_ostream(nullptr),
+              m_istream(nullptr),
+              m_fstream(nullptr),
+              m_rt(rt)
         {
         }
 
-        double diff()
+        void open_input_file(const std::string &path, bool is_text);
+        void open_stdin();
+        void close();
+
+        Atom read();
+
+        virtual std::string type() { return "Port"; }
+        virtual std::string as_string()
         {
-            std::chrono::high_resolution_clock::time_point t2 =
-                std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> time_span
-                = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - m_t1);
-            return time_span.count();
+            return "#<port:" + std::to_string((uint64_t) this) + ">";
         }
+
+        virtual void mark(GC *gc, uint8_t clr) { UserData::mark(gc, clr); }
+
+        virtual ~Port() { this->close(); }
 };
+
+}
+//---------------------------------------------------------------------------
 
 /******************************************************************************
 * Copyright (C) 2017 Weird Constructor

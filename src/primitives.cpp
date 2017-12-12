@@ -21,6 +21,14 @@
 
 #define NO_ARG_NIL if (args.m_len <= 0) { out = Atom(); return; }
 
+#define REQ_S_ARG(arg, msg) \
+    if (   (arg).m_type != T_STR \
+        && (arg).m_type != T_SYM \
+        && (arg).m_type != T_KW) \
+    { \
+        error(msg, (arg)); \
+    }
+
 START_PRIM()
     NO_ARG_NIL;
     out = args.m_data[0];
@@ -923,25 +931,17 @@ END_PRIM_DOC(size,
 
 START_PRIM()
     REQ_EQ_ARGC(sys-slurp-file, 1);
-    if (   A0.m_type != T_STR
-        && A0.m_type != T_SYM
-        && A0.m_type != T_KW)
-    {
-        error("'bkl-slurp-file' requires a string, symbol "
-              "or keyword as first argument.", A0);
-    }
+    REQ_S_ARG(A0,
+        "'bkl-slurp-file' requires a string, symbol "
+        "or keyword as first argument.");
     out = Atom(T_STR, m_rt->m_gc.new_symbol(slurp_str(A0.m_d.sym->m_str)));
 END_PRIM(sys-slurp-file)
 
 START_PRIM()
     REQ_EQ_ARGC(sys-write-file, 2);
-    if (   A0.m_type != T_STR
-        && A0.m_type != T_SYM
-        && A0.m_type != T_KW)
-    {
-        error("'bkl-write-file' requires a string, symbol "
-              "or keyword as first argument.", A0);
-    }
+    REQ_S_ARG(A0,
+        "'bkl-write-file' requires a string, symbol "
+        "or keyword as first argument.");
     out = Atom(T_BOOL, write_str(A0.m_d.sym->m_str, A1.to_display_str()));
 END_PRIM(sys-write-file)
 
@@ -1071,7 +1071,7 @@ END_PRIM_DOC(bkl-set-doc!,
 "\n"
 "Stores _doc-string_ in the central documentation library.\n"
 "This function is mainly useful if you want to annotate your\n"
-"own code with documenation. BukaLISP usually registers everything itself.\n"
+"own code with documentation. BukaLISP usually registers everything itself.\n"
 "\n"
 "See also: `?doc`\n"
 )
@@ -1238,9 +1238,9 @@ START_PRIM()
     }
     out = Atom(T_VEC, found);
 END_PRIM_DOC(?doc,
-"@documenation procedure (?doc \"*_search-str_\")\n"
-"@documenation procedure (?doc \"?_search-str_\")\n"
-"@documenation procedure (?doc \"_search-str_\")\n"
+"@documentation procedure (?doc \"*_search-str_\")\n"
+"@documentation procedure (?doc \"?_search-str_\")\n"
+"@documentation procedure (?doc \"_search-str_\")\n"
 "\n"
 "This procedure retrieves documentation from the internal documentation\n"
 "database. It returns a list of all matching documentation strings\n"
@@ -1263,6 +1263,40 @@ END_PRIM_DOC(?doc,
 "\n"
 "See also: `bkl-set-doc!`\n"
 )
+
+START_PRIM()
+    REQ_EQ_ARGC(bkl-find-lib-file, 1);
+    REQ_S_ARG(A0,
+        "'bkl-find-lib-file' requires a string, symbol "
+        "or keyword as first argument.");
+    out =
+        Atom(T_STR,
+            m_rt->m_gc.new_symbol(
+                m_rt->find_in_libdirs(A0.m_d.sym->m_str)));
+END_PRIM_DOC(bkl-find-lib-file,
+"@runtime procedure (bkl-find-lib-file _string_)\n\n"
+"Tries to find the filename (or sub path) _string_ in the\n"
+"lib paths of `bklisp`.\n"
+"If the file was not found in any lib directory, the empty\n"
+"string is returned. Otherwise the full path to that file is returned.\n"
+"Standard lib directory paths are in order:\n"
+"\n"
+"    ./bukalisplib/\n"
+"    $ENV{BUKALISP_LIB}/\n"
+"    <path-to-bklisp-binary>/\n"
+"    <path-to-bklisp-binary>/bukalisplib/\n")
+
+START_PRIM()
+    REQ_EQ_ARGC(file-exists?, 1);
+    REQ_S_ARG(A0,
+        "'file-exists' requires a string, symbol "
+        "or keyword as first argument.");
+    out.set_bool(file_exists(A0.m_d.sym->m_str));
+END_PRIM_DOC(file-exists?,
+"@sys procedure (file-exists? _string_)\n\n"
+"Checks if the file _string_ is readable and existent.\n")
+
+#include "port_primitives.cpp"
 
 #if IN_INTERPRETER
 

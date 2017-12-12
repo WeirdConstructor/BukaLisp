@@ -723,8 +723,10 @@ Atom Interpreter::eval_include(Atom e, AtomVec *av)
               "symbol or keyword.", e);
     }
 
-    std::string libpath  = get_library_path();
-    std::string filepath = libpath + BKL_PATH_SEP + av->m_data[1].m_d.sym->m_str;
+    std::string filename = av->m_data[1].m_d.sym->m_str;
+    std::string filepath = m_rt->find_in_libdirs(filename);
+    if (filepath.empty())
+        error("'include' can't find " + filename + " in any include path.", e);
 
     std::string code = slurp_str(filepath);
     return eval(filepath, code);
@@ -942,27 +944,18 @@ Atom Interpreter::call_compiler(
 }
 //---------------------------------------------------------------------------
 
-std::string Interpreter::get_library_path()
-{
-    const char *bukalisp_lib_path = std::getenv("BUKALISP_LIB");
-#if defined(WIN32) || defined(_WIN32)
-    if (bukalisp_lib_path == NULL)
-        bukalisp_lib_path = ".\\bukalisplib";
-#else
-    if (bukalisp_lib_path == NULL)
-        bukalisp_lib_path = "./bukalisplib";
-#endif
-    return bukalisp_lib_path;
-}
-//---------------------------------------------------------------------------
-
 Atom Interpreter::get_compiler_func()
 {
     if (m_compiler_func.m_type != T_NIL)
         return m_compiler_func;
 
     std::string compiler_path =
-        std::string(get_library_path()) + BKL_PATH_SEP + "compiler.bkl";
+        m_rt->find_in_libdirs("compiler.bkl");
+
+    if (compiler_path.empty())
+        throw BukaLISPException(
+            "interpreter", "", 0, "get_compiler_func",
+            "Can't find compiler in any include directories!");
 
     try
     {

@@ -1,70 +1,69 @@
 // Copyright (C) 2017 Weird Constructor
 // For more license info refer to the the bottom of this file.
 
-#pragma once
-
-#include "atom.h"
-#include "atom_generator.h"
-#include "parser.h"
 #include "ports.h"
+#include "runtime.h"
+#include <fstream>
+
+using namespace std;
 
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
-struct Runtime
+Atom Port::read()
 {
-    GC             m_gc;
-    AtomGenerator  m_ag;
-    Tokenizer      m_tok;
-    Parser         m_par;
-
-
-    std::vector<std::string> m_library_dir_paths;
-
-    Runtime()
-        : m_ag(&m_gc),
-          m_par(m_tok, &m_ag)
+    if (m_istream)
     {
-        init_lib_dir_paths();
+        std::string data(std::istreambuf_iterator<char>(*m_istream), {});
+        return m_rt->read(m_file, data);
+    }
+    else
+        return Atom();
+
+}
+//---------------------------------------------------------------------------
+
+void Port::open_stdin()
+{
+    m_file = "<stdin>";
+    m_istream = &cin;
+}
+//---------------------------------------------------------------------------
+
+void Port::open_input_file(const string &path, bool is_text)
+{
+    m_file = path;
+    m_fstream = new fstream;
+    m_istream = (istream *) m_fstream;
+
+    if (is_text)
+        m_fstream->open(m_file.c_str(), fstream::in);
+    else
+        m_fstream->open(m_file.c_str(), fstream::in | fstream::binary);
+
+    if (m_fstream->fail())
+    {
+        this->close();
+        throw BukaLISPException("Couldn't open file '" + path + "'.");
+        return;
+    }
+}
+//---------------------------------------------------------------------------
+
+void Port::close()
+{
+    if (m_fstream)
+    {
+        m_fstream->close();
+        delete m_fstream;
     }
 
-    std::string find_in_libdirs(const std::string &fileSubPath);
-    void init_lib_dir_paths();
-
-    Atom read(const std::string &input_name, const std::string &input)
-    {
-        m_par.reset();
-        m_tok.reset();
-        m_tok.tokenize(input_name, input);
-        // m_tok.dump_tokens();
-        AtomVec *elems = m_gc.allocate_vector(0);
-        while (!m_par.is_eof())
-        {
-            m_ag.start();
-            if (!m_par.parse())
-            {
-                // XXX: Is never reached, if m_par gets an error,
-                //      an exception is thrown by AtomGenerator
-                std::cerr << "ERROR while parsing " << input_name << std::endl;
-                return Atom();
-            }
-            if (!m_par.is_eof())
-            {
-                elems->push(m_ag.root());
-//                std::cout << "ELEMS PUSH " << Atom(T_VEC, elems).at(1).meta().to_write_str() << std::endl;
-            }
-        }
-        return Atom(T_VEC, elems);
-    }
-
-    size_t pot_alive_vecs() { return m_gc.count_potentially_alive_vectors(); }
-    size_t pot_alive_maps() { return m_gc.count_potentially_alive_maps(); }
-    size_t pot_alive_syms() { return m_gc.count_potentially_alive_syms(); }
-
-    void collect() { m_gc.collect(); }
-};
-
+    m_fstream = nullptr;
+    m_istream = nullptr;
+    m_ostream = nullptr;
+    m_file    = "";
+}
 //---------------------------------------------------------------------------
 
 }

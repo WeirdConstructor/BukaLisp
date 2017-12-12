@@ -1,36 +1,46 @@
 // Copyright (C) 2017 Weird Constructor
 // For more license info refer to the the bottom of this file.
 
-#include <string>
-#include <chrono>
+#include "runtime.h"
+#include "util.h"
 
-std::string slurp_str(const std::string &filepath);
-bool write_str(const std::string &filepath, const std::string &data);
-
-std::string from_wstring(const std::wstring &str);
-std::wstring to_wstring(const std::string &str);
-std::string application_dir_path();
-bool file_exists(std::string &filename);
-
-class BenchmarkTimer
+namespace bukalisp
 {
-        std::chrono::high_resolution_clock::time_point m_t1;
+//---------------------------------------------------------------------------
 
-    public:
-        BenchmarkTimer()
-            : m_t1(std::chrono::high_resolution_clock::now())
-        {
-        }
+void Runtime::init_lib_dir_paths()
+{
+    m_library_dir_paths.push_back("." BKL_PATH_SEP "bukalisplib");
 
-        double diff()
+    const char *bukalisp_lib_path_env = std::getenv("BUKALISP_LIB");
+    if (bukalisp_lib_path_env)
+        m_library_dir_paths.push_back(bukalisp_lib_path_env);
+
+    std::string exepath = application_dir_path();
+    if (!exepath.empty())
+        m_library_dir_paths.push_back(exepath);
+
+    if (!exepath.empty())
+        m_library_dir_paths.push_back(exepath + BKL_PATH_SEP + "bukalisplib");
+}
+//---------------------------------------------------------------------------
+
+std::string Runtime::find_in_libdirs(const std::string &fileSubPath)
+{
+    for (auto fp : m_library_dir_paths)
+    {
+        std::string filePath = fp + BKL_PATH_SEP + fileSubPath;
+        if (file_exists(filePath))
         {
-            std::chrono::high_resolution_clock::time_point t2 =
-                std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> time_span
-                = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - m_t1);
-            return time_span.count();
+            return filePath;
         }
-};
+    }
+
+    return "";
+}
+//---------------------------------------------------------------------------
+
+}
 
 /******************************************************************************
 * Copyright (C) 2017 Weird Constructor
