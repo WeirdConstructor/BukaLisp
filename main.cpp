@@ -1279,7 +1279,9 @@ int main(int argc, char *argv[])
                 vm.set_trace(i_trace_vm);
                 i.set_trace(i_trace);
                 i.set_force_always_gc(i_force_gc);
+                BenchmarkTimer bt;
                 Atom r = i.eval(input_file_path, slurp_str(input_file_path));
+                cout << "time: " << bt.diff() << "ms" << endl;
                 std::string rs = write_atom(r);
                 cout << rs << endl;
             }
@@ -1371,6 +1373,7 @@ int main(int argc, char *argv[])
 
             try
             {
+                BenchmarkTimer bt;
                 Atom r =
                     i.call_compiler(
                         input_file_path,
@@ -1378,6 +1381,7 @@ int main(int argc, char *argv[])
                         root_env,
                         false);
                 cout << r.to_write_str() << endl;
+                cout << "time: " << bt.diff() << "ms" << endl;
             }
             catch (std::exception &e)
             {
