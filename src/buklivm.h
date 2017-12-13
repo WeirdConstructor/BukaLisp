@@ -93,6 +93,7 @@ class VMException : public std::exception
     X(PUSH_CLNUP,    31) /*                                        */ \
     X(POP_CLNUP,     32) /*                                        */ \
     X(GET_CORO,      33) /*                                        */ \
+    X(STACK_TRC,     34) /*                                        */ \
     X(ADD,          100) /*                                        */ \
     X(SUB,          101) /*                                        */ \
     X(MUL,          102) /*                                        */ \

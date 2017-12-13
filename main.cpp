@@ -1134,6 +1134,7 @@ int main(int argc, char *argv[])
         bool i_force_gc = false;
         bool i_trace_vm = false;
         bool do_stat    = false;
+        bool bootstrap  = false;
 
         for (int i = 1; i < argc; i++)
         {
@@ -1150,6 +1151,8 @@ int main(int argc, char *argv[])
                 i_trace_vm = true;
             else if (arg == "-S")
                 do_stat = true;
+            else if (arg == "-b")
+                bootstrap = true;
             else if (arg[0] == '-')
             {
                 std::cerr << "unknown option: " << argv[i] << std::endl;
@@ -1283,6 +1286,75 @@ int main(int argc, char *argv[])
             catch (std::exception &e)
             {
                 cerr << "[" << input_file_path << "] Exception: " << e.what() << endl;
+            }
+        }
+        else if (bootstrap && !input_file_path.empty())
+        {
+            Runtime rt;
+            VM vm(&rt);
+            load_vm_modules(vm);
+            Interpreter i(&rt, &vm);
+            i.set_trace(i_trace);
+            i.set_force_always_gc(i_force_gc);
+
+
+            std::string compiler_filepath = rt.find_in_libdirs("compiler.bkl");
+
+            BenchmarkTimer timer_comp_comp;
+            Atom compiler;
+            {
+                GC_ROOT_MAP(rt.m_gc, root_env_c) = rt.m_gc.allocate_map();
+                compiler =
+                    i.call_compiler(
+                        compiler_filepath,
+                        slurp_str(compiler_filepath),
+                        root_env_c,
+                        false);
+//                std::cout << "Compiler env: " << Atom(T_MAP, root_env_c).to_write_str(true) << std::endl;
+//                std::cout << "PROG: " << compiler.to_write_str(true) << std::endl;
+            }
+            GC_ROOT(rt.m_gc, compiler_r) = compiler;
+            std::cout << "Compiler bootstrapping done, took: " << timer_comp_comp.diff() << "ms" << std::endl;
+
+            try
+            {
+                BenchmarkTimer read_timer;
+                Atom prog_code =
+                    rt.read(input_file_path, slurp_str(input_file_path));
+
+                std::cout << "Read time of '" << input_file_path << "': "
+                          << read_timer.diff() << "ms" << std::endl;
+
+                auto compile_func =
+                    [&](Atom prog,
+                        AtomMap *root_env,
+                        const std::string &input_name,
+                        bool only_compile)
+                    {
+                        GC_ROOT_VEC(rt.m_gc, args) = rt.m_gc.allocate_vector(4);
+                        args->m_len = 4;
+                        args->m_data[0] = Atom(T_STR, rt.m_gc.new_symbol(input_name));
+                        args->m_data[1] = prog;
+                        args->m_data[2].set_map(root_env);
+                        args->m_data[3].set_bool(only_compile);
+                        return vm.eval(compiler, root_env, args);
+                    };
+
+                vm.set_compiler_call(compile_func);
+
+                BenchmarkTimer compile_timer;
+                GC_ROOT_MAP(rt.m_gc, root_env) = rt.m_gc.allocate_map();
+                Atom compiled_prog =
+                    compile_func(prog_code, root_env, input_file_path, true);
+                std::cout << "Compilation of '" << input_file_path << "': "
+                          << compile_timer.diff() << "ms" << std::endl;
+                vm.set_trace(i_trace_vm);
+                Atom r = vm.eval(compiled_prog, root_env, nullptr);
+                cout << r.to_write_str() << endl;
+            }
+            catch (std::exception &e)
+            {
+                cerr << "Exception: " << e.what() << endl;
             }
         }
         else if (!input_file_path.empty())

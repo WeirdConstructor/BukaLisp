@@ -40,6 +40,9 @@
             (set! i (+ i 1)))
           m))
 
+      ($define! self (op-stack-trc title)
+        (push-op STACK_TRC: 0 title 0 0))
+
       ($define! self (op-nop)
         (push-op NOP: 0 0 0 0))
 
@@ -186,4 +189,5 @@
         (push-op NEXT: ok-idx val-idx iter-idx 0))
 
       ($define! self (op-ikey key-idx iter-idx)
-        (push-op IKEY: key-idx iter-idx 0 0)))))
+        (push-op IKEY: key-idx iter-idx 0 0))
+      self)))

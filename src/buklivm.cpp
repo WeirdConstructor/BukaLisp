@@ -652,6 +652,12 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
             switch (m_pc->op)
             {
+                case OP_STACK_TRC:
+                {
+                    E_GET(tmp, A);
+                    dump_stack_trace(tmp->to_display_str(), cont_stack, m_prog, m_pc);
+                    break;
+                }
                 case OP_DUMP_ENV_STACK:
                 {
                 // TODO: Check
@@ -893,11 +899,12 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     E_SET_CHECK_REALLOC(O, O);
 
                     Atom *func;
+                    Atom *argv_tmp;
                     E_GET(func, A);
-                    E_GET(tmp, B);
-                    if (tmp->m_type != T_VEC)
-                        error("Bad argument index vector!", *tmp);
-                    AtomVec *av    = tmp->m_d.vec;
+                    E_GET(argv_tmp, B);
+                    if (argv_tmp->m_type != T_VEC)
+                        error("Bad argument index vector!", *argv_tmp);
+                    AtomVec *av    = argv_tmp->m_d.vec;
                     AtomVec *frame = nullptr;
 
                     if (PE_B == REG_ROW_DATA)
@@ -928,16 +935,15 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                             (*func->m_d.func)(*(frame), *ot);
         //                    cout << "frame: " << frame.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
                             if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
-
-        //                    m_rt->m_gc.give_back_vector(frame.m_d.vec, true);
+                            //*argv_tmp = Atom();
                             break;
                         }
                         case T_CLOS:
                         {
                             if (func->m_d.vec->m_len < VM_CLOS_SIZE)
-                                error("Bad closure found", *func);
+                                error("Bad closure found (size)", Atom(T_VEC, func->m_d.vec));
                             if (func->m_d.vec->m_data[VM_CLOS_PROG].m_type != T_UD)
-                                error("Bad closure found", *func);
+                                error("Bad closure found (no PROG)", *func);
 
                             alloc = true;
 

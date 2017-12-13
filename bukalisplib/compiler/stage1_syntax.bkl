@@ -133,6 +133,14 @@
 ;----------------------------------------------------------------------------
 
 (add-syntax
+  'bkl-vm-stack-trace
+  (lambda (ctx args T gtx)
+    (unless (= (length args) 2)
+      (error "'bkl-vm-stack-trace' takes one argument" args))
+    ['#1#stack-trace (T ctx (@1 args))]))
+;----------------------------------------------------------------------------
+
+(add-syntax
   'raise
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
@@ -409,6 +417,7 @@
         (error "'define-macro' parameter list must consist only of symbols"
                params)))
     (define macro-name (first params))
+    (displayln MACRO-EVAL: args)
     (define macro-func
       (eval (.AM gtx (append ['lambda (drop params 1)]
                              (drop args 2)))))
@@ -932,4 +941,3 @@ value.
       ['#1#eval (T ctx (@1 arg))]
       ['#1#eval (T ctx (@1 arg)) (T ctx (@2 arg))])))
 ;----------------------------------------------------------------------------
-

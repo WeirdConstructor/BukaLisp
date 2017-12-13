@@ -1,38 +1,43 @@
 ;----------------------------------------------------------------------------
+(displayln START-COMPILER-COMPILE:)
 (include "compiler/stage2.bkl")
 
 ;----------------------------------------------------------------------------
 (define *DEBUG* #f)
 (define PUSH-DEBUG (lambda () (set! *DEBUG* #t)))
-(define POP-DEBUG (lambda () (set! *DEBUG* #t)))
+(define POP-DEBUG (lambda () (set! *DEBUG* #f)))
 
 (define global-saved-eval-vm-closure nil)
 
 (define bukalisp-compile
   (lambda (name expr root-env only-compile?)
+;    (displayln CALL-COMPILER: name STATISTICS: (bkl-gc-statistics))
     (unless (@" IS-ROOT-ENV " root-env)
       (init-root-env root-env))
     ; Wrap up eval-syntax into a closure, to hide it's syntactic nature
     ; from callers more throughout.
-    (when (eqv? (@0 (@'eval root-env)) prim:)
-;      (displayln START-COMPILE-EVAL:)
-      (let ((local-root (spawn-root-env))
-            (eval-closure global-saved-eval-vm-closure))
-        (when (nil? eval-closure)
-          (let ((eval-prog (bukalisp-compile
-                             "<internal-eval>"
-                             '((lambda (code . env)
-                                 (if (empty? env)
-                                   (eval code)
-                                   (eval code (first env)))))
-                             (assign local-root
-                                     ['eval [syntax: eval-syntax]])
-                             #t)))
-            (set! global-saved-eval-vm-closure
-              (bkl-run-vm-prog eval-prog local-root))
-            (set! eval-closure global-saved-eval-vm-closure)))
-;        (displayln ENDED-COMPILE-EVAL:)
-        (set-root-env-var root-env 'eval eval-closure)))
+;    (when (eqv? (@0 (@'eval root-env)) prim:)
+;;      (displayln START-COMPILE-EVAL:)
+;      (let ((local-root (spawn-root-env))
+;            (eval-closure global-saved-eval-vm-closure))
+;        (when (nil? eval-closure)
+;          (let ((eval-prog (bukalisp-compile
+;                             "<internal-eval>"
+;                             '((lambda (code . env)
+;                                 (displayln INT-EVAL: code)
+;                                 (let ((ret (if (empty? env)
+;                                   (eval code)
+;                                   (eval code (first env)))))
+;                                   (displayln RET-EVAL: ret)
+;                                   ret)))
+;                             (assign local-root
+;                                     ['eval [syntax: eval-syntax]])
+;                             #t)))
+;            (set! global-saved-eval-vm-closure
+;              (bkl-run-vm-prog eval-prog local-root))
+;            (set! eval-closure global-saved-eval-vm-closure)))
+;;        (displayln ENDED-COMPILE-EVAL:)
+;        (set-root-env-var root-env 'eval eval-closure)))
     ; Attach the root env map as meta to the root env registers, so we
     ; have a chance to recover it in the VM later.
     (bkl-set-meta (@" REGS " root-env) 1 root-env)
@@ -60,9 +65,11 @@
 ;        (displayln ROOT-ENV: (pp-str (root-env: gtx)))
         (let ((prog (.to-vm-prog (F: ctx) P name)))
           (when *DEBUG* (displayln PROG: prog))
+          #;(displayln END-CALL-COMPILER: only-compile?)
           (if only-compile?
             prog
             (bkl-run-vm-prog prog root-env)))))))
 ;----------------------------------------------------------------------------
 
+(displayln END-COMPILER-COMPILE:)
 bukalisp-compile

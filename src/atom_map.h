@@ -97,6 +97,7 @@ struct HashTable
 
 #else // NOT WITH_STD_UNORDERED_MAP
 
+#define HT_INIT_SIZE 11
 template<typename Atom, typename HashFunc>
 struct HashTable
 {
@@ -107,7 +108,7 @@ struct HashTable
     size_t          m_item_count;
     size_t          m_size_tbl_idx;
 
-    Atom            m_initial_buffer[3 * 23];
+    Atom            m_initial_buffer[3 * HT_INIT_SIZE];
 
     //---------------------------------------------------------------------------
 
@@ -135,7 +136,7 @@ struct HashTable
     }
 
     HashTable()
-        : m_table_size(23),
+        : m_table_size(HT_INIT_SIZE),
           m_size_tbl_idx(3),
           m_item_count(0),
           m_inhibit_grow(false),
@@ -152,7 +153,7 @@ struct HashTable
         m_end          = m_begin + (m_table_size * 3);
         m_item_count   = 0;
         m_size_tbl_idx = 3;
-        m_table_size   = 23;
+        m_table_size   = HT_INIT_SIZE;
     }
 
     ~HashTable() { free_tbl(m_begin); }

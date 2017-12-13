@@ -28,7 +28,7 @@ class BenchmarkTimer
                 std::chrono::high_resolution_clock::now();
             std::chrono::duration<double> time_span
                 = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - m_t1);
-            return time_span.count();
+            return time_span.count() * 1000.0;
         }
 };
 

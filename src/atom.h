@@ -950,47 +950,45 @@ class GC
 
         Atom get_statistics();
 
-        void give_back_vector(AtomVec *cur, bool dec = false)
+        void give_back_vector(AtomVec *cur)
         {
 //          std::cout << "SWEEP VEC " << cur << std::endl;
-            if (cur->m_alloc >= GC_BIG_VEC_LEN)
-            {
-                delete cur;
-            }
-            else if (cur->m_alloc > GC_MEDIUM_VEC_LEN)
-            {
-                // FIXME: We need to limit the number of medium sized
-                //        vectors. or else small vectors will just
-                //        end up here. the problem is, that then
-                //        new small vectors will be allocated.
-                cur->m_gc_next   = m_medium_vectors;
-                cur->m_gc_color  = GC_COLOR_FREE;
-                cur->m_len       = 0;
-                m_medium_vectors = cur;
-            }
-            else if (cur->m_alloc >= GC_SMALL_VEC_LEN)
-            {
-                cur->m_gc_next  = m_small_vectors;
-                cur->m_gc_color = GC_COLOR_FREE;
-                cur->m_len      = 0;
-                m_small_vectors = cur;
-            }
-            else if (cur->m_alloc >= GC_TINY_VEC_LEN)
-            {
-                cur->m_gc_next  = m_tiny_vectors;
-                cur->m_gc_color = GC_COLOR_FREE;
-                cur->m_len      = 0;
-                m_tiny_vectors = cur;
-            }
-            else
-            {
-                std::cerr << "WARNING: Got a smaller than 10 vector to delete!"
-                          << std::endl;
-                delete cur;
-            }
-
-            if (dec)
-                m_num_new_vectors--;
+            delete cur;
+//            if (cur->m_alloc >= GC_BIG_VEC_LEN)
+//            {
+//                delete cur;
+//            }
+//            else if (cur->m_alloc > GC_MEDIUM_VEC_LEN)
+//            {
+//                // FIXME: We need to limit the number of medium sized
+//                //        vectors. or else small vectors will just
+//                //        end up here. the problem is, that then
+//                //        new small vectors will be allocated.
+//                cur->m_gc_next   = m_medium_vectors;
+//                cur->m_gc_color  = GC_COLOR_FREE;
+//                cur->m_len       = 0;
+//                m_medium_vectors = cur;
+//            }
+//            else if (cur->m_alloc >= GC_SMALL_VEC_LEN)
+//            {
+//                cur->m_gc_next  = m_small_vectors;
+//                cur->m_gc_color = GC_COLOR_FREE;
+//                cur->m_len      = 0;
+//                m_small_vectors = cur;
+//            }
+//            else if (cur->m_alloc >= GC_TINY_VEC_LEN)
+//            {
+//                cur->m_gc_next  = m_tiny_vectors;
+//                cur->m_gc_color = GC_COLOR_FREE;
+//                cur->m_len      = 0;
+//                m_tiny_vectors = cur;
+//            }
+//            else
+//            {
+//                std::cerr << "WARNING: Got a smaller than 10 vector to delete!"
+//                          << std::endl;
+//                delete cur;
+//            }
         }
 
         void reg_userdata(UserData *ud)
@@ -1121,46 +1119,48 @@ class GC
         {
             AtomVec *new_vec = nullptr;
 
-            if (alloc_len > GC_MEDIUM_VEC_LEN)
-            {
-                new_vec = new AtomVec;
-//                new_vec->alloc(alloc_len == 0 ? 10 : alloc_len);
-                new_vec->alloc(alloc_len);
-//                std::cout << "NEWVEC " << new_vec << std::endl;
-            }
-            else if (alloc_len > GC_SMALL_VEC_LEN)
-            {
-                if (!m_medium_vectors)
-                {
-                    allocate_new_vectors(
-                        m_medium_vectors, m_num_medium_vectors, GC_MEDIUM_VEC_LEN);
-                }
-
-                new_vec          = m_medium_vectors;
-                m_medium_vectors = m_medium_vectors->m_gc_next;
-            }
-            else if (alloc_len > GC_TINY_VEC_LEN)
-            {
-                if (!m_small_vectors)
-                {
-                    allocate_new_vectors(
-                        m_small_vectors, m_num_small_vectors, GC_SMALL_VEC_LEN);
-                }
-
-                new_vec         = m_small_vectors;
-                m_small_vectors = m_small_vectors->m_gc_next;
-            }
-            else
-            {
-                if (!m_tiny_vectors)
-                {
-                    allocate_new_vectors(
-                        m_tiny_vectors, m_num_tiny_vectors, GC_TINY_VEC_LEN);
-                }
-
-                new_vec        = m_tiny_vectors;
-                m_tiny_vectors = m_tiny_vectors->m_gc_next;
-            }
+            new_vec = new AtomVec;
+            new_vec->alloc(alloc_len);
+//            if (alloc_len > GC_MEDIUM_VEC_LEN)
+//            {
+//                new_vec = new AtomVec;
+////                new_vec->alloc(alloc_len == 0 ? 10 : alloc_len);
+//                new_vec->alloc(alloc_len);
+////                std::cout << "NEWVEC " << new_vec << std::endl;
+//            }
+//            else if (alloc_len > GC_SMALL_VEC_LEN)
+//            {
+//                if (!m_medium_vectors)
+//                {
+//                    allocate_new_vectors(
+//                        m_medium_vectors, m_num_medium_vectors, GC_MEDIUM_VEC_LEN);
+//                }
+//
+//                new_vec          = m_medium_vectors;
+//                m_medium_vectors = m_medium_vectors->m_gc_next;
+//            }
+//            else if (alloc_len > GC_TINY_VEC_LEN)
+//            {
+//                if (!m_small_vectors)
+//                {
+//                    allocate_new_vectors(
+//                        m_small_vectors, m_num_small_vectors, GC_SMALL_VEC_LEN);
+//                }
+//
+//                new_vec         = m_small_vectors;
+//                m_small_vectors = m_small_vectors->m_gc_next;
+//            }
+//            else
+//            {
+//                if (!m_tiny_vectors)
+//                {
+//                    allocate_new_vectors(
+//                        m_tiny_vectors, m_num_tiny_vectors, GC_TINY_VEC_LEN);
+//                }
+//
+//                new_vec        = m_tiny_vectors;
+//                m_tiny_vectors = m_tiny_vectors->m_gc_next;
+//            }
 
             new_vec->init(m_current_color, 0);
 

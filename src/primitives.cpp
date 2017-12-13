@@ -1302,6 +1302,7 @@ END_PRIM_DOC(file-exists?,
 
 START_PRIM()
     REQ_GT_ARGC(eval, 1);
+    std::cout << "I-EVAL CALLED" << std::endl;
     if (args.m_len > 1)
     {
         if (A1.m_type != T_MAP)
@@ -1340,6 +1341,8 @@ END_PRIM(invoke-compiler)
 
 START_PRIM()
     REQ_GT_ARGC(eval, 1);
+    std::cout << "VM-EVAL CALLED" << std::endl;
+
     Atom exprs(T_VEC, m_rt->m_gc.allocate_vector(1));
     exprs.m_d.vec->push(A0);
 

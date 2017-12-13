@@ -1,10 +1,39 @@
-(include "compiler.bkl")
+(displayln AAA:)
+(displayln (bkl-gc-statistics))
+;(include "compiler.bkl")
 
+(define set-root-env-var
+  (lambda (root-env sym content)
+    (let ((var      (@sym root-env))
+          (reg-idx  nil))
+      (if var
+        (if (eqv? (first var) glob-var:)
+          (set! reg-idx (@2 var))
+          (begin
+            (set! var [glob-var: sym])
+            (@!sym root-env var)))
+        (set! var [glob-var: sym]))
+      (unless reg-idx
+        (when (nil? (@" REGS " root-env))
+          (@!" REGS " root-env []))
+        (set! reg-idx (length (@" REGS " root-env))))
+      (@!sym root-env var)
+      (@!reg-idx (@" REGS " root-env) content)
+      (@!2 var reg-idx))))
+
+(define DI!
+  (lambda (src to)
+    (when (bkl-get-meta src)
+      (bkl-set-meta to 0 (@0 (bkl-get-meta src))))
+    to))
+
+(displayln YYY:)
 (define T-env
   (lambda (code expected root-env)
     (set! code (DI! code [code]))
 ;    (when (nil? env) (set! env [{} []]))
-    (let ((r (bukalisp-compile "tests" code root-env #f)))
+;    (let ((r (bukalisp-compile "tests" code root-env #f)))
+    (let ((r (invoke-compiler code "tests" #f root-env)))
 ;      (displayln ROOT_ENV: (pp-str root-env))
 ;      (pp-str root-env)
       (if (eqv? (write-str r) (write-str expected))
@@ -17,6 +46,52 @@
 ;----------------------------------------------------------------------------
 
 ;(PUSH-DEBUG)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;; TODO
+;; Test nested eval:
+;(T '(let ((x {}))
+;      (eval '1 x)
+;      (eval '(define M 10) x)
+;      (displayln XX: x)
+;      (eval '(+ 1
+;                (eval '(+ 1
+;                          (eval M)))) x))
+;   12)
+;
+;; Test macros:
+;(T '(begin
+;      (define x 10)
+;      (define m nil)
+;      (let ()
+;       (define-macro (x a b)
+;         ['quote [a b a b]])
+;       (set! m (x 9 11)))
+;      [m x])
+;   [[9 11 9 11] 10])
+;;;;;;;;;;;;;;;;;;;;;;;;;;;; TODO
+
+;(T '(begin
+;      (define x +)
+;      (set! x (x 1.5 1)))
+;   2.5)
+;(displayln XXX:)
+;(T '(let ((o { 10 (lambda () 12) }))
+;      (.10 o))
+;   12)
+;(displayln (bkl-gc-statistics))
+;(while #t 10)
+;(T '(let ((o { 'm (lambda () 10) }))
+;      (.((lambda () 'm)) o))
+;   10)
+;(T '(let ((o { 'm (lambda () 10) m: (lambda () 20) }))
+;      [(.m o) (.m: o)])
+;   [10 20])
+;(T '(let ((o {}))
+;      ($define! o (xxx a b . c)
+;        [a b c])
+;      [(.xxx o 1 2)
+;       (.xxx o 1 2 3 4 5)])
+;   [[1 2 []] [1 2 [3 4 5]]])
 
 ;(error X:)
 ;----------------------------------------------------------------------------
@@ -1073,11 +1148,11 @@
 
 ; test recursive calling into VM:
 (let ((my-env {})
-      (func (bukalisp-compile
-              "tests_x1"
+      (func (invoke-compiler
               ['(displayln foo-out: (+ 10 20))]
-              my-env
-              #t)))
+              "tests_x1"
+              #t
+              my-env)))
   (set-root-env-var my-env 'xxx func)
   (T-env '(begin
             (define k 10)
@@ -1308,6 +1383,23 @@
        ((@'foo o) 8 8 8)
        ((@'foo o) 9 9 9)])
    [9 76 216 279])
+
+; Test method call syntax:
+(T '(let ((o { 10 (lambda () 12) }))
+      (.10 o))
+   12)
+(T '(let ((o { 'm (lambda () 10) }))
+      (.((lambda () 'm)) o))
+   10)
+(T '(let ((o { 'm (lambda () 10) m: (lambda () 20) }))
+      [(.m o) (.m: o)])
+   [10 20])
+(T '(let ((o {}))
+      ($define! o (xxx a b . c)
+        [a b c])
+      [(.xxx o 1 2)
+       (.xxx o 1 2 3 4 5)])
+   [[1 2 []] [1 2 [3 4 5]]])
 
 ; Test return:
 (T '(begin (define x 11) (set! x 32) (return x)) 32)
@@ -1586,14 +1678,16 @@
       (eval 'x env))
    24)
 
-; Test nested eval:
-(T '(let ((x {}))
-      (eval '1 x)
-      (eval '(define M 10) x)
-      (eval '(+ 1
-                (eval '(+ 1
-                          (eval M)))) x))
-   12)
+; XXX FIXME
+;; Test nested eval:
+;(T '(let ((x {}))
+;      (eval '1 x)
+;      (eval '(define M 10) x)
+;      (displayln XX: x)
+;      (eval '(+ 1
+;                (eval '(+ 1
+;                          (eval M)))) x))
+;   12)
 
 ; Test eval as procedure:
 (T '(let ((e eval))
@@ -2326,3 +2420,4 @@
         (close-port file)
         (read-all file)))
    [[1 2 'test] x:])
+

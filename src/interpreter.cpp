@@ -47,6 +47,7 @@ AtomMap *Interpreter::init_root_env()
     DEF_SYNTAX($define!);
     DEF_SYNTAX(displayln-time);
     DEF_SYNTAX(include);
+    DEF_SYNTAX(bkl-vm-stack-trace);
     DEF_SYNTAX(with-cleanup);
 
 #define START_PRIM() \
@@ -95,7 +96,6 @@ void Interpreter::init()
                                     bool only_compile)
         {
             GC_ROOT(m_rt->m_gc,     prog_r)           = prog;
-            GC_ROOT_MAP(m_rt->m_gc, debug_info_map_r) = debug_info_map_r;
             GC_ROOT_MAP(m_rt->m_gc, root_env_r)       = root_env;
             return this->call_compiler(prog, root_env,
                                        input_name, only_compile);
@@ -858,6 +858,7 @@ Atom Interpreter::eval(Atom e)
                 else if (s == ".")        ret = eval_dot_call(e, av);
                 else if (s == "$define!") ret = eval_meth_def(e, av);
                 else if (s == "include")  ret = eval_include(e, av);
+                else if (s == "bkl-vm-stack-trace") ret = Atom();
                 else if (s == "with-cleanup")
                                           ret = eval_with_cln(e, av);
                 else if (s == "displayln-time")
@@ -949,6 +950,8 @@ Atom Interpreter::get_compiler_func()
     if (m_compiler_func.m_type != T_NIL)
         return m_compiler_func;
 
+    std::cout << "GET COMPILER FUNC START" << std::endl;
+
     std::string compiler_path =
         m_rt->find_in_libdirs("compiler.bkl");
 
@@ -982,6 +985,8 @@ Atom Interpreter::get_compiler_func()
         throw InterpreterException(
             "Compiler did not return a function! : "
             + m_compiler_func.to_write_str());
+
+    std::cout << "GET COMPILER FUNC END" << std::endl;
 
     return m_compiler_func;
 }

@@ -468,6 +468,12 @@ Atom GC::get_statistics()
     e->push(Atom(T_INT, num)); \
     v->push(Atom(T_VEC, e));
 
+#define     BKLISP_GC_NEW_ST_ENTRY_STR(name, str) \
+    e = this->allocate_vector(0); \
+    e->push(Atom(T_KW,  this->new_symbol(name))); \
+    e->push(Atom(T_STR, this->new_symbol(str))); \
+    v->push(Atom(T_VEC, e));
+
     BKLISP_GC_NEW_ST_ENTRY("alive-vectors", m_num_alive_vectors);
     BKLISP_GC_NEW_ST_ENTRY("alive-maps",    m_num_alive_maps);
     BKLISP_GC_NEW_ST_ENTRY("alive-syms",    m_num_alive_syms);
@@ -518,6 +524,10 @@ Atom GC::get_statistics()
         n_tiny++;
         mv = mv->m_gc_next;
     }
+
+#if WITH_MEM_POOL
+    BKLISP_GC_NEW_ST_ENTRY_STR("atom-array-pool",      g_atom_array_pool.statistics());
+#endif
 
     BKLISP_GC_NEW_ST_ENTRY("medium-vector-pool",       n_medium);
     BKLISP_GC_NEW_ST_ENTRY("small-vector-pool",        n_small);
