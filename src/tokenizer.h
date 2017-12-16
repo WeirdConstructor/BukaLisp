@@ -164,6 +164,11 @@ class Tokenizer
                     m_u8buf.skip_bytes(2);
                     push(Token("@^!"));
                 }
+                else if (c == '@' && m_u8buf.first_byte() == '^')
+                {
+                    m_u8buf.skip_bytes(1);
+                    push(Token("@^"));
+                }
                 else if (c == '@' && m_u8buf.first_byte() == '!')
                 {
                     m_u8buf.skip_bytes(1);
@@ -229,6 +234,33 @@ class Tokenizer
                     {
                         push(Token("#q"));
                     }
+                }
+                else if (c == '#' && charClass(m_u8buf.first_byte(), "0123456789"))
+                {
+                    std::string num;
+                    c = m_u8buf.first_byte(true);
+
+                    while (c != '=' && c != '#')
+                    {
+                        if (!charClass(c, "0123456789"))
+                            break;
+
+                        num += c;
+                        c = m_u8buf.first_byte(true);
+                    }
+
+                    if (c == '=')
+                    {
+                        push(Token("#LBL="));
+                        push(Token(num));
+                    }
+                    else if (c == '#')
+                    {
+                        push(Token("#LBL#"));
+                        push(Token(num));
+                    }
+
+                    if (checkEOF()) return;
                 }
                 else if (c == '#' && m_u8buf.first_byte() == '|')
                 {

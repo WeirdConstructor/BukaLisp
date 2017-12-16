@@ -18,16 +18,16 @@
           (let-new-var-names [])
           (new-ctx           (assign ctx [env:      new-env
                                           let-vars: let-new-var-names]))
-          (body              (.AM gtx ['#1#begin]))
-          (out-form          ['#1#let let-new-var-names body]))
+          (body              (.AM gtx ['#s1#begin]))
+          (out-form          ['#s1#let let-new-var-names body]))
       (do-each (bind-pair var-binds)
         (let ((bind-name    (@0 bind-pair))
               (new-var-name (gtx-gensym gtx bind-name))
               (var-t        [var: new-var-name bind-name]))
           (@!bind-name new-env var-t)
           (push! let-new-var-names new-var-name)
-          (push! body (.AM gtx ['#1#set!
-                                (append '#1#var (drop var-t 1))
+          (push! body (.AM gtx ['#s1#set!
+                                (append '#s1#var (drop var-t 1))
                                 (T (assign
                                      new-ctx
                                      [lambda-name: bind-name])
@@ -38,14 +38,14 @@
         (when (= (length body) 2)
           (set! body (@1 body)))
         (if (found-upv-in-env? new-env)
-          ['#1#let
+          ['#s1#let
            (append
              let-new-var-names
              (only-in-first
                (upvalues-in-env new-env)
                let-new-var-names))
-           ['#1#create-upv let: (upvalues-in-env new-env) body]]
-          ['#1#let let-new-var-names body])))))
+           ['#s1#create-upv let: (upvalues-in-env new-env) body]]
+          ['#s1#let let-new-var-names body])))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -71,8 +71,8 @@
     (when (> (length args) 4)
       (error "'if' can not have more than 3 arguments" args))
     (if (= (length args) 3)
-      ['#1#if (T ctx (@1 args)) (T ctx (@2 args)) (T ctx nil)]
-      ['#1#if (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))])))
+      ['#s1#if (T ctx (@1 args)) (T ctx (@2 args)) (T ctx nil)]
+      ['#s1#if (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -80,10 +80,10 @@
   (lambda (ctx args T gtx)
     (when (< (length args) 3)
       (error "'unless' needs at least 2 arguments" args))
-    ['#1#if
-     (.AM gtx ['#1#not (T ctx (@1 args))])
+    ['#s1#if
+     (.AM gtx ['#s1#not (T ctx (@1 args))])
      (.AM gtx (s1-begin T ctx (drop args 2)))
-     (.AM gtx '(#1#nil))]))
+     (.AM gtx '(#s1#nil))]))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -91,10 +91,10 @@
   (lambda (ctx args T gtx)
     (when (< (length args) 3)
       (error "'when' needs at least 2 arguments" args))
-    ['#1#if
+    ['#s1#if
      (T ctx (@1 args))
      (.AM gtx (s1-begin T ctx (drop args 2)))
-     (.AM gtx '(#1#nil))]))
+     (.AM gtx '(#s1#nil))]))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -105,7 +105,7 @@
     (unless (= (length args) 3)
       (error "'set!' needs exactly 2 arguments" args))
     (let ((var-t (T ctx (@1 args))))
-      (append '#1#set! [var-t (T ctx (@2 args))]))))
+      (append '#s1#set! [var-t (T ctx (@2 args))]))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -113,7 +113,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'return' needs exactly 1 arguments" args))
-    (append '#1#return [(T ctx (@1 args))])))
+    (append '#s1#return [(T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -121,7 +121,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'yield' needs exactly 1 arguments" args))
-    (append '#1#yield [(T ctx (@1 args))])))
+    (append '#s1#yield [(T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -129,7 +129,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 1)
       (error "'current-coroutine' takes no arguments" args))
-    ['#1#current-coroutine]))
+    ['#s1#current-coroutine]))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -137,7 +137,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'bkl-vm-stack-trace' takes one argument" args))
-    ['#1#stack-trace (T ctx (@1 args))]))
+    ['#s1#stack-trace (T ctx (@1 args))]))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -145,7 +145,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'raise' needs exactly 1 arguments" args))
-    (append '#1#return-from [['#1#data nil] (T ctx (@1 args))])))
+    (append '#s1#return-from [['#s1#data nil] (T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -161,7 +161,7 @@
       (.AM gtx [[(@1 args) nil]])
       (lambda (ctx T gtx)
         (.AM gtx
-             ['#1#handle-exceptions
+             ['#s1#handle-exceptions
               (T ctx (@1 args))
               (T ctx (@2 args))
               (s1-begin T ctx (drop args 3))])))))
@@ -191,14 +191,14 @@
                     [['= clnup-cond-var-sym 2] ['return
                                                 clnup-val-var-sym]]]))
           (if (= (length args) 3)
-            ['#1#with-cleanup
+            ['#s1#with-cleanup
              [(T ctx clnup-cond-var-sym)
               (T ctx clnup-tag-var-sym)
               (T ctx clnup-val-var-sym)
               continuation-check]
              [(T ctx (@1 args))]
              (T ctx (@2 args))]
-            ['#1#with-cleanup
+            ['#s1#with-cleanup
              [(T ctx clnup-cond-var-sym)
               (T ctx clnup-tag-var-sym)
               (T ctx clnup-val-var-sym)
@@ -215,7 +215,7 @@
     (unless (or (symbol? (@1 args))
                 (keyword? (@1 args)))
       (error "'block' tag needs to be either a symbol or a keyword" args))
-    ['#1#block (@1 args)
+    ['#s1#block (@1 args)
      (s1-begin T ctx (drop args 2))]))
 ;----------------------------------------------------------------------------
 
@@ -224,7 +224,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 3)
       (error "'return-from' needs exactly 2 arguments the tag and the value" args))
-    (append '#1#return-from [(T ctx (@1 args)) (T ctx (@2 args))])))
+    (append '#s1#return-from [(T ctx (@1 args)) (T ctx (@2 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -235,7 +235,7 @@
     (unless (or (symbol? (@1 args))
                 (keyword? (@1 args)))
       (error "'return-from' tag needs to be either a symbol or a keyword" args))
-    (append '#1#return-from [(.S1-T-Q gtx ctx (@1 args)) (T ctx (@2 args))])))
+    (append '#s1#return-from [(.S1-T-Q gtx ctx (@1 args)) (T ctx (@2 args))])))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -287,18 +287,18 @@
                                 []))
             (non-upv-let-vars (only-in-first let-vars defined-upvalues))
             (lambda-body (if (found-upv-in-env? new-env)
-                           (let ((upv-body ['#1#create-upv
+                           (let ((upv-body ['#s1#create-upv
                                             lambda:
                                             (upvalues-in-env new-env)
                                             compiled-body]))
                              (if (> (length defined-upvalues) 0)
-                               [['#1#let defined-upvalues upv-body]]
+                               [['#s1#let defined-upvalues upv-body]]
                                [upv-body]))
                            [compiled-body])))
         (unless (empty? non-upv-let-vars)
-          (set! lambda-body [['#1#let non-upv-let-vars (first lambda-body)]]))
+          (set! lambda-body [['#s1#let non-upv-let-vars (first lambda-body)]]))
         (append
-          '#1#lambda
+          '#s1#lambda
           (.AM gtx (if (nil? va-arg)
                      [[lambda-name new-args nil    lambda-upv is-coroutine?]]
                      [[lambda-name new-args va-arg lambda-upv is-coroutine?]]))
@@ -348,17 +348,17 @@
                       (var-s1-sym nil))
                   (if is-root-env?
                     (begin
-                      (set! var-s1-sym '#1#glob-var)
+                      (set! var-s1-sym '#s1#glob-var)
                       (let ((glob-reg-idx (length (@" REGS " (env: ctx)))))
                         (push! (@" REGS " (env: ctx)) nil)
                         (set! var [glob-var: var-name glob-reg-idx])))
                     (begin
-                      (set! var-s1-sym '#1#var)
+                      (set! var-s1-sym '#s1#var)
                       (let ((new-var-name (gtx-gensym gtx var-name)))
                         (push! (let-vars: ctx) new-var-name)
                         (set! var [var: new-var-name var-name]))))
                   (@!var-name (env: ctx) var)
-                  ['#1#set! (append var-s1-sym (drop var 1))
+                  ['#s1#set! (append var-s1-sym (drop var 1))
                    (T (assign ctx [lambda-name: var-name])
                       (@2 args))]))
       ((list) (unless (> (length args) 2)
@@ -376,17 +376,17 @@
                     (var            nil))
                 (if is-root-env?
                   (begin
-                    (set! var-s1-sym '#1#glob-var)
+                    (set! var-s1-sym '#s1#glob-var)
                     (let ((glob-reg-idx (length (@" REGS " (env: ctx)))))
                       (push! (@" REGS " (env: ctx)) nil)
                       (set! var [glob-var: func-name glob-reg-idx])))
                   (begin
-                    (set! var-s1-sym '#1#var)
+                    (set! var-s1-sym '#s1#var)
                     (let ((new-var-name (gtx-gensym gtx func-name)))
                       (push! (let-vars: ctx) new-var-name)
                       (set! var [var: new-var-name func-name]))))
                 (@!func-name (env: ctx) var)
-                ['#1#set! (append var-s1-sym (drop var 1))
+                ['#s1#set! (append var-s1-sym (drop var 1))
                  (T (assign ctx [lambda-name: func-name])
                     (.AM gtx
                          (if is-coroutine?
@@ -423,7 +423,7 @@
                              (drop args 2)))))
     (@!macro-name (env: ctx)
                   [macro: macro-func macro-name])
-    (.AM gtx ['#1#nil])))
+    (.AM gtx ['#s1#nil])))
 ;----------------------------------------------------------------------------
 
 (define find-include-file
@@ -475,8 +475,8 @@
          (error
            "'$define!' parameter list may only contain symbols"
            (@2 args))))
-    ['#1#set method:
-     ['#1#data (first (@2 args))]
+    ['#s1#set method:
+     ['#s1#data (first (@2 args))]
      (T ctx (@1 args))
      (T (assign ctx [lambda-name: (first (@2 args))])
         (.AM
@@ -553,7 +553,7 @@ value.
           (.AM gtx [[(@0 iter-desc) nil]
                     [(@1 iter-desc) nil]])
           (lambda (ctx T gtx)
-            ['#1#do-each
+            ['#s1#do-each
              [(T ctx (@1 iter-desc))
               (T ctx (@0 iter-desc))]
              obj
@@ -564,7 +564,7 @@ value.
           ctx T gtx
           (.AM gtx [[(@0 iter-desc) nil]])
           (lambda (ctx T gtx)
-            ['#1#do-each
+            ['#s1#do-each
              [(T ctx (@0 iter-desc))]
              obj
              (s1-begin T ctx (drop args 2))]))))))
@@ -575,7 +575,7 @@ value.
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
       (error "'while' needs at least 2 arguments (test and body)" args))
-    ['#1#while
+    ['#s1#while
      (T ctx (@1 args))
      (s1-begin T ctx (drop args 2))]))
 ;----------------------------------------------------------------------------
@@ -596,7 +596,7 @@ value.
         ctx T gtx
          (.AM gtx [[(@0 iter-desc) (@1 iter-desc)]])
          (lambda (ctx T gtx)
-           ['#1#for [(T ctx (@2 iter-desc))
+           ['#s1#for [(T ctx (@2 iter-desc))
                      (T ctx (if (nil? (@3 iter-desc))
                               1
                               (@3 iter-desc)))
@@ -644,12 +644,12 @@ value.
                   (@0 bind)
                   (T ctx (@2 iter))))
               (push! step-exprs
-                     (DI! iter ['#1#set! (@0 bind) step]))
+                     (DI! iter ['#s1#set! (@0 bind) step]))
               (set! i (+ i 1))))
           (if (> (length step-exprs) 1)
-            (unshift! step-exprs '#1#begin)
+            (unshift! step-exprs '#s1#begin)
             (set! step-exprs (first step-exprs)))
-          ['#1#do
+          ['#s1#do
            (T ctx test-expr)
            (s1-begin T ctx test-end-block)
            step-exprs
@@ -669,7 +669,7 @@ value.
                   (string? method-name))
         (set! method-name (T ctx method-name)))
       (append
-        '#1#method-call
+        '#s1#method-call
         [method-name]
         [(T ctx obj)]
         (.AM gtx (map (lambda (v) (T ctx v)) m-args))))))
@@ -687,13 +687,13 @@ value.
       (lambda (rest-ops)
         (let ((next-rest-ops (drop rest-ops 1))
               (operand       (first rest-ops)))
-          ['#1#begin
-           ['#1#set! tmp-var (T ctx operand)]
+          ['#s1#begin
+           ['#s1#set! tmp-var (T ctx operand)]
            (.AM
              gtx
              (if (> (length next-rest-ops) 0)
-               ['#1#if tmp-var tmp-var (build-sub-tree next-rest-ops)]
-               ['#1#if tmp-var tmp-var false-v]))])))
+               ['#s1#if tmp-var tmp-var (build-sub-tree next-rest-ops)]
+               ['#s1#if tmp-var tmp-var false-v]))])))
 
     (compile-let-block
       ctx T gtx
@@ -703,8 +703,8 @@ value.
           (set! tmp-var (T ctx tmp-var)))
         (.AM gtx
              (if (> (length args) 2)
-               ['#1#if tmp-var tmp-var (build-sub-tree (drop args 2))]
-               ['#1#if tmp-var tmp-var false-v]))))))
+               ['#s1#if tmp-var tmp-var (build-sub-tree (drop args 2))]
+               ['#s1#if tmp-var tmp-var false-v]))))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -719,13 +719,13 @@ value.
       (lambda (rest-ops)
         (let ((next-rest-ops (drop rest-ops 1))
               (operand       (first rest-ops)))
-          ['#1#begin
-           ['#1#set! tmp-var (T ctx operand)]
+          ['#s1#begin
+           ['#s1#set! tmp-var (T ctx operand)]
            (.AM
              gtx
              (if (> (length next-rest-ops) 0)
-               ['#1#if tmp-var (build-sub-tree next-rest-ops) false-v]
-               ['#1#if tmp-var tmp-var false-v]))])))
+               ['#s1#if tmp-var (build-sub-tree next-rest-ops) false-v]
+               ['#s1#if tmp-var tmp-var false-v]))])))
     (compile-let-block
       ctx T gtx
       (.AM gtx [[tmp-var operand]])
@@ -734,8 +734,8 @@ value.
           (set! tmp-var (T ctx tmp-var)))
         (.AM gtx
              (if (> (length args) 2)
-               ['#1#if tmp-var (build-sub-tree (drop args 2)) false-v]
-               ['#1#if tmp-var tmp-var false-v]))))))
+               ['#s1#if tmp-var (build-sub-tree (drop args 2)) false-v]
+               ['#s1#if tmp-var tmp-var false-v]))))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -745,7 +745,7 @@ value.
     ;       debug meta info from the clauses, so we can have more 
     ;       precise error messages!
     (define else-clause nil)
-    (define out ['#1#cond])
+    (define out ['#s1#cond])
     (unless (> (length arg) 1)
       (error "'cond' clause must have at least one clause" arg))
     (do-each (clause (drop arg 1))
@@ -772,7 +772,7 @@ value.
                   [clause:
                     tmp-var
                     (DI! (@2 clause)
-                         ['#1#apply
+                         ['#s1#apply
                           (T ctx (@2 clause))
                           [tmp-var]])])))
             [clause:
@@ -814,7 +814,7 @@ value.
         (.AM gtx [[tmp-var key-value]])
         (lambda (ctx T gtx)
           (set! tmp-var (T ctx tmp-var))
-          (define out-cond ['#1#cond])
+          (define out-cond ['#s1#cond])
           (do-each (clause (drop arg 2))
             (unless (eqv? (first clause) 'else)
               (if (eqv? (@1 clause) '=>)
@@ -825,9 +825,9 @@ value.
                              [clause:
                                (DI!
                                  (first clause)
-                                 ['#1#eqv tmp-var (.S1-T-Q gtx ctx element)])
+                                 ['#s1#eqv tmp-var (.S1-T-Q gtx ctx element)])
                                (DI! clause
-                                    ['#1#apply
+                                    ['#s1#apply
                                      (T ctx (@2 clause))
                                      [tmp-var]])]))))
                 (let ((expr-block
@@ -836,14 +836,14 @@ value.
                     (begin
                       (push! out-cond
                              [clause:
-                               ['#1#eqv tmp-var (.S1-T-Q gtx ctx element)]
+                               ['#s1#eqv tmp-var (.S1-T-Q gtx ctx element)]
                                expr-block])))))))
           (when else-clause
             (push! out-cond
               (if (eqv? (@1 else-clause) '=>)
                 [else: (DI!
                          else-clause
-                         ['#1#apply
+                         ['#s1#apply
                           (T ctx (@2 else-clause))
                           [tmp-var]])]
                 [else: (s1-begin T ctx (DI!
@@ -887,7 +887,7 @@ value.
             (@!ex exported-values [glob-var: ex value]))
           (@!ex exported-values exp-var))))
     (@!lib-name LIBRARIES [lib-root-env exported-values])
-    ['#1#data exported-values]))
+    ['#s1#data exported-values]))
 ;----------------------------------------------------------------------------
 
 (add-syntax
@@ -928,16 +928,17 @@ value.
                                   sym
                                   (@2 var))
                 (@!sym (root-env: gtx) var)))))))
-    ['#1#data nil]))
+    ['#s1#data nil]))
 ;----------------------------------------------------------------------------
 
-(define eval-syntax
+(add-syntax
+  'eval
   (lambda (ctx arg T gtx)
     (when (> (length arg) 3)
       (error "Too many arguments to 'eval'" arg))
     (when (< (length arg) 2)
       (error "Too few arguments to 'eval'" arg))
     (if (= (length arg) 2)
-      ['#1#eval (T ctx (@1 arg))]
-      ['#1#eval (T ctx (@1 arg)) (T ctx (@2 arg))])))
+      ['#s1#eval (T ctx (@1 arg))]
+      ['#s1#eval (T ctx (@1 arg)) (T ctx (@2 arg))])))
 ;----------------------------------------------------------------------------

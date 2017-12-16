@@ -62,6 +62,13 @@ class Interpreter
                 delete p;
         }
 
+        void cleanup_you_are_unused_now()
+        {
+            m_compiler_func.clear();
+            m_env_stack->m_len = 0;
+            m_call_stack->m_len = 0;
+        }
+
         void init();
 
         void set_trace(bool e) { m_trace = e; }

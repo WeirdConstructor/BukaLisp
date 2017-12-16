@@ -67,14 +67,21 @@ bool write_str(const std::string &filepath, const std::string &data)
     output_file.close();
 
     std::string bakoutpath = filepath + ".bklbak.~";
+
     remove(bakoutpath.c_str());
-    if (rename(filepath.c_str(), bakoutpath.c_str()) != 0)
-        return false;
+
+    if (file_exists(filepath))
+    {
+        if (rename(filepath.c_str(), bakoutpath.c_str()) != 0)
+            return false;
+    }
+
     if (rename(tmpoutpath.c_str(), filepath.c_str()) != 0)
     {
         rename(bakoutpath.c_str(), filepath.c_str());
         return false;
     }
+
     remove(bakoutpath.c_str());
 
     return true;
@@ -151,7 +158,7 @@ std::string application_dir_path()
 }
 //---------------------------------------------------------------------------
 
-bool file_exists(std::string &filename)
+bool file_exists(const std::string &filename)
 {
     std::ifstream infile(filename);
     return infile.good();

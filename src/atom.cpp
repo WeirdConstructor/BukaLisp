@@ -51,13 +51,14 @@ const size_t HASH_TABLE_SIZES[] = {
 //---------------------------------------------------------------------------
 
 #if WITH_MEM_POOL
-MemoryPool<Atom> g_atom_array_pool;
+thread_local MemoryPool<Atom> g_atom_array_pool;
 #endif
 
 //---------------------------------------------------------------------------
 
 size_t count_elements(const Atom &a)
 {
+    AtomMap refmap;
     std::vector<Atom> to_count;
     to_count.push_back(a);
 
@@ -67,6 +68,18 @@ size_t count_elements(const Atom &a)
     {
         Atom at = to_count.back();
         to_count.pop_back();
+
+        if (at.m_type == T_VEC || at.m_type == T_MAP)
+        {
+            if (refmap.at(at).m_type != T_NIL)
+            {
+                s++;
+                continue;
+            }
+            else
+                refmap.set(at, Atom(T_INT, 1));
+        }
+
         switch (at.m_type)
         {
             case T_VEC:
@@ -82,6 +95,14 @@ size_t count_elements(const Atom &a)
                         to_count.push_back(MAP_ITER_KEY(i));
                         to_count.push_back(MAP_ITER_VAL(i));
                     }
+                }
+                break;
+            case T_UD:
+                {
+                    Atom a;
+                    if (at.m_d.ud)
+                        at.m_d.ud->to_atom(a);
+                    to_count.push_back(a);
                 }
                 break;
             default:
@@ -152,9 +173,9 @@ size_t Atom::size() const
         case T_BOOL:    return sizeof(m_d.b);
         case T_DBL:     return sizeof(m_d.d);
         case T_PRIM:    return sizeof(m_d.func);
-        case T_UD:      return sizeof(m_d.ud);
         case T_C_PTR:   return sizeof(m_d.ptr);
 
+        case T_UD:
         case T_VEC:
         case T_CLOS:
         case T_MAP:
@@ -364,6 +385,15 @@ void AtomVec::pop()
 }
 //---------------------------------------------------------------------------
 
+Atom AtomVec::pop_last()
+{
+    Atom a;
+    if (m_len > 0)
+        a = m_data[--m_len];
+    return a;
+}
+//---------------------------------------------------------------------------
+
 void AtomVec::set(size_t idx, const Atom &a)
 {
     if (idx >= m_len)
@@ -434,6 +464,22 @@ void AtomVec::check_size(size_t idx)
     }
 
     m_len = idx + 1;
+}
+//---------------------------------------------------------------------------
+
+void AtomVec::clear_alloc()
+{
+#if WITH_MEM_POOL
+    if (m_data)
+        g_atom_array_pool.free(m_data);
+#else
+    if (m_data)
+        delete[] m_data;
+#endif
+    m_data  = nullptr;
+    m_len   = 0;
+    m_alloc = 0;
+    m_meta  = nullptr;
 }
 //---------------------------------------------------------------------------
 

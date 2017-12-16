@@ -97,7 +97,8 @@ struct HashTable
 
 #else // NOT WITH_STD_UNORDERED_MAP
 
-#define HT_INIT_SIZE 11
+#define HT_INIT_SIZE    23
+#define HT_NEXT_TBL_IDX 3
 template<typename Atom, typename HashFunc>
 struct HashTable
 {
@@ -106,7 +107,7 @@ struct HashTable
     HashFunc        m_hash_func;
     size_t          m_table_size;
     size_t          m_item_count;
-    size_t          m_size_tbl_idx;
+    size_t          m_next_size_tbl_idx;
 
     Atom            m_initial_buffer[3 * HT_INIT_SIZE];
 
@@ -126,7 +127,7 @@ struct HashTable
 
     HashTable(bool is_debug)
         : m_table_size(0),
-          m_size_tbl_idx(0),
+          m_next_size_tbl_idx(0),
           m_item_count(0),
           m_begin(nullptr),
           m_end(nullptr),
@@ -137,7 +138,7 @@ struct HashTable
 
     HashTable()
         : m_table_size(HT_INIT_SIZE),
-          m_size_tbl_idx(3),
+          m_next_size_tbl_idx(HT_NEXT_TBL_IDX),
           m_item_count(0),
           m_inhibit_grow(false),
           m_meta(nullptr)
@@ -149,11 +150,18 @@ struct HashTable
     void clear()
     {
         free_tbl(m_begin);
-        m_begin        = &m_initial_buffer[0];
-        m_end          = m_begin + (m_table_size * 3);
-        m_item_count   = 0;
-        m_size_tbl_idx = 3;
-        m_table_size   = HT_INIT_SIZE;
+        m_table_size        = HT_INIT_SIZE;
+        m_next_size_tbl_idx = HT_NEXT_TBL_IDX;
+        m_item_count        = 0;
+        m_begin             = &m_initial_buffer[0];
+        m_end               = m_begin + (m_table_size * 3);
+
+        Atom *cur = m_begin;
+        while (cur != m_end)
+        {
+            cur->clear();
+            cur += 3;
+        }
     }
 
     ~HashTable() { free_tbl(m_begin); }
@@ -298,7 +306,7 @@ struct HashTable
     {
         if (m_begin && m_inhibit_grow) return;
 
-        size_t new_size = HASH_TABLE_SIZES[m_size_tbl_idx++];
+        size_t new_size = HASH_TABLE_SIZES[m_next_size_tbl_idx++];
 
     //    cout << "GROW " << m_table_size << " => " << new_size << endl;
 

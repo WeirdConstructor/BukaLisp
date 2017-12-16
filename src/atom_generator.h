@@ -29,18 +29,27 @@ class AtomGenerator : public bukalisp::SEX_Builder
     private:
         GC                       *m_gc;
         bool                      m_include_debug_info;
+
+        GC_ROOT_MEMBER(m_meta_vec);
         GC_ROOT_MEMBER(m_last);
         GC_ROOT_MEMBER(m_last_key);
         GC_ROOT_MEMBER_VEC(m_stack);
+        GC_ROOT_MEMBER_MAP(m_refmap);
+
+        int64_t                   m_next_label;
 
     public:
         AtomGenerator(GC *gc)
             : m_gc(gc), m_include_debug_info(true),
               GC_ROOT_MEMBER_INITALIZE_VEC(*gc, m_stack),
+              GC_ROOT_MEMBER_INITALIZE(*gc, m_meta_vec),
               GC_ROOT_MEMBER_INITALIZE(*gc, m_last),
-              GC_ROOT_MEMBER_INITALIZE(*gc, m_last_key)
+              GC_ROOT_MEMBER_INITALIZE(*gc, m_last_key),
+              GC_ROOT_MEMBER_INITALIZE_MAP(*gc, m_refmap),
+              m_next_label(-1)
         {
             m_stack = gc->allocate_vector(10);
+            m_refmap = gc->allocate_map();
         }
         virtual ~AtomGenerator() { }
 
@@ -54,6 +63,7 @@ class AtomGenerator : public bukalisp::SEX_Builder
             m_last.clear();
             m_last_key.clear();
             m_stack->clear();
+            m_refmap->clear();
         }
 
         void start()
@@ -71,10 +81,52 @@ class AtomGenerator : public bukalisp::SEX_Builder
             throw BukaLISPException("reader", inp_name, line, tok, what);
         }
 
+        virtual void push_meta(int64_t idx)
+        {
+            if (idx < 0) idx = 0;
+
+            if (m_meta_vec.m_type == T_NIL)
+                m_meta_vec.set_vec(m_gc->allocate_vector((size_t) idx + 1));
+
+            m_stack->push(m_meta_vec);
+            m_stack->push(Atom(T_INT, idx));
+            m_meta_vec = Atom();
+        }
+
+        virtual void label(int64_t lbl_id)
+        {
+            Atom a = m_refmap->at(Atom(T_INT, lbl_id));
+            add(a);
+        }
+
+        virtual void next_label(int64_t lbl_id)
+        {
+            m_next_label = lbl_id;
+        }
+
+#define ON_NXT_LBL_SET_REFMAP(atom) \
+    if (m_next_label >= 0) \
+    { \
+        m_refmap->set(Atom(T_INT, m_next_label), (atom)); \
+        m_next_label = -1; \
+    }
+
+#define CLEAR_META() m_meta_vec = Atom();
+
+#define ON_NXT_IF_SET_META(atom_ds) \
+    if (m_meta_vec.m_type != T_NIL) \
+    { \
+        (atom_ds)->m_meta = m_meta_vec.m_d.vec; \
+        m_meta_vec = Atom(); \
+    }
+
         virtual void start_list()
         {
             AtomVec *new_vec = m_gc->allocate_vector(0);
             Atom new_vec_atom(T_VEC, new_vec);
+
+            ON_NXT_IF_SET_META(new_vec);
+            ON_NXT_LBL_SET_REFMAP(new_vec_atom);
 
             if (m_include_debug_info)
             {
@@ -99,6 +151,9 @@ class AtomGenerator : public bukalisp::SEX_Builder
             AtomMap *new_map = m_gc->allocate_map();
             Atom new_map_atom(T_MAP, new_map);
 
+            ON_NXT_IF_SET_META(new_map);
+            ON_NXT_LBL_SET_REFMAP(new_map_atom);
+
             if (m_include_debug_info)
             {
                 AtomVec *meta_info = m_gc->allocate_vector(2);
@@ -114,7 +169,7 @@ class AtomGenerator : public bukalisp::SEX_Builder
         virtual void end_kv_key()
         {
             m_stack->push(m_last);
-            m_stack->push(Atom(T_INT, 1));
+            m_stack->push(Atom(T_INT, -1));
         }
         virtual void end_kv_pair()
         {
@@ -138,10 +193,23 @@ class AtomGenerator : public bukalisp::SEX_Builder
                 else if (elem->m_type == T_INT)
                 {
                     m_stack->pop();
-                    Atom key = *(m_stack->last());
-                    m_stack->pop();
-                    m_stack->last()->m_d.map->set(key, a);
-                    m_last = *(m_stack->last());
+                    if (elem->m_d.i == -1)
+                    {
+                        Atom key = *(m_stack->last());
+                        m_stack->pop();
+                        m_stack->last()->m_d.map->set(key, a);
+                        m_last = *(m_stack->last());
+                    }
+                    else
+                    {
+                        Atom meta_vec = *(m_stack->last());
+                        m_stack->pop();
+                        if (meta_vec.m_type != T_VEC)
+                            throw BukaLISPException(
+                                "atom generator encountered bad meta syntax");
+                        meta_vec.m_d.vec->set((size_t) elem->m_d.i, a);
+                        m_meta_vec = meta_vec;
+                    }
                 }
                 else
                     m_last = a;
@@ -154,6 +222,8 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             Atom a(T_STR);
             a.m_d.sym = m_gc->new_symbol(str);
+            CLEAR_META();
+            ON_NXT_LBL_SET_REFMAP(a);
             add(a);
         }
 
@@ -161,6 +231,8 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             Atom a(T_SYM);
             a.m_d.sym = m_gc->new_symbol(symstr);
+            CLEAR_META();
+            ON_NXT_LBL_SET_REFMAP(a);
             add(a);
         }
 
@@ -168,6 +240,8 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             Atom a(T_KW);
             a.m_d.sym = m_gc->new_symbol(symstr);
+            CLEAR_META();
+            ON_NXT_LBL_SET_REFMAP(a);
             add(a);
         }
 
@@ -175,6 +249,8 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             Atom a(T_INT);
             a.m_d.i = i;
+            CLEAR_META();
+            ON_NXT_LBL_SET_REFMAP(a);
             add(a);
         }
 
@@ -182,12 +258,16 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             Atom a(T_DBL);
             a.m_d.d = d;
+            CLEAR_META();
+            ON_NXT_LBL_SET_REFMAP(a);
             add(a);
         }
 
         virtual void atom_nil()
         {
             Atom a(T_NIL);
+            CLEAR_META();
+            ON_NXT_LBL_SET_REFMAP(a);
             add(a);
         }
 
@@ -195,6 +275,8 @@ class AtomGenerator : public bukalisp::SEX_Builder
         {
             Atom a(T_BOOL);
             a.m_d.b = b;
+            CLEAR_META();
+            ON_NXT_LBL_SET_REFMAP(a);
             add(a);
         }
 };

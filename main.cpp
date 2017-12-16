@@ -1299,7 +1299,6 @@ int main(int argc, char *argv[])
             i.set_trace(i_trace);
             i.set_force_always_gc(i_force_gc);
 
-
             std::string compiler_filepath = rt.find_in_libdirs("compiler.bkl");
 
             BenchmarkTimer timer_comp_comp;
@@ -1311,12 +1310,15 @@ int main(int argc, char *argv[])
                         compiler_filepath,
                         slurp_str(compiler_filepath),
                         root_env_c,
-                        false);
+                        true);
 //                std::cout << "Compiler env: " << Atom(T_MAP, root_env_c).to_write_str(true) << std::endl;
+                compiler = vm.eval(compiler, nullptr);
 //                std::cout << "PROG: " << compiler.to_write_str(true) << std::endl;
             }
             GC_ROOT(rt.m_gc, compiler_r) = compiler;
             std::cout << "Compiler bootstrapping done, took: " << timer_comp_comp.diff() << "ms" << std::endl;
+
+            i.cleanup_you_are_unused_now();
 
             try
             {
@@ -1339,19 +1341,19 @@ int main(int argc, char *argv[])
                         args->m_data[1] = prog;
                         args->m_data[2].set_map(root_env);
                         args->m_data[3].set_bool(only_compile);
-                        return vm.eval(compiler, root_env, args);
+                        return vm.eval(compiler, args);
                     };
 
+                vm.set_trace(i_trace_vm);
                 vm.set_compiler_call(compile_func);
 
-                BenchmarkTimer compile_timer;
                 GC_ROOT_MAP(rt.m_gc, root_env) = rt.m_gc.allocate_map();
+                BenchmarkTimer compile_timer;
                 Atom compiled_prog =
                     compile_func(prog_code, root_env, input_file_path, true);
                 std::cout << "Compilation of '" << input_file_path << "': "
                           << compile_timer.diff() << "ms" << std::endl;
-                vm.set_trace(i_trace_vm);
-                Atom r = vm.eval(compiled_prog, root_env, nullptr);
+                Atom r = vm.eval(compiled_prog, nullptr);
                 cout << r.to_write_str() << endl;
             }
             catch (std::exception &e)

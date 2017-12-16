@@ -195,7 +195,6 @@ VV atom2vv(VM *vm, const Atom &a)
 
                     return atom2vv(vm,
                                    vm->eval(GC_ROOT_SHP_REF(func_ref),
-                                            nullptr,
                                             a_args.m_d.vec));
                 };
             return vv_closure(clos, vv_undef());

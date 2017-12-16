@@ -19,94 +19,84 @@ namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
-std::string PROG::as_string()
+std::string PROG::as_string(bool pretty)
 {
-    std::stringstream ss;
-    ss << "#<prog:\n";
-    for (size_t i = 0; i < m_atom_data.m_d.vec->m_len; i++)
-    {
-        ss << " [" << i << "]: " << write_atom(m_atom_data.m_d.vec->m_data[i]) << "\n";
-    }
-
-    for (size_t i = 0; i < m_instructions_len; i++)
-    {
-        ss << " {" << i << "}: ";
-        m_instructions[i].to_string(ss);
-        ss << "\n";
-    }
-    ss << ">";
-    return ss.str();
+    Atom a;
+    to_atom(a);
+    return a.to_write_str(pretty);
 }
 //---------------------------------------------------------------------------
 
-void parse_op_desc(INST &instr, Atom &desc)
-{
-    if (desc.m_type != T_VEC)
-        return;
-
-    AtomVec *av = desc.m_d.vec;
-    if (av->m_len < 7)
-    {
-        cout << "Too few elements in op desc (7 needed): "
-             << desc.to_write_str() << endl;
-        return;
-    }
-
-    std::string op_name;
-    Atom op_name_s = av->m_data[0];
-    if (   op_name_s.m_type != T_SYM
-        && op_name_s.m_type != T_KW)
-        return;
-
-    op_name = op_name_s.m_d.sym->m_str;
-
-    uint8_t op_code = 0;
-
-#define X(name, code) else if (op_name == #name) op_code = code;
-    if (op_name == "***") op_code = 0;
-    OP_CODE_DEF(X)
-    else
-    {
-        cout << "unknown op name: " << op_name << endl;
-    }
-#undef X
-
-    instr.op = op_code;
-    instr.o  = (int32_t) av->m_data[1].to_int();
-    instr.oe = (int32_t) av->m_data[2].to_int();
-    instr.a  = (int32_t) av->m_data[3].to_int();
-    instr.ae = (int32_t) av->m_data[4].to_int();
-    instr.b  = (int32_t) av->m_data[5].to_int();
-    instr.be = (int32_t) av->m_data[6].to_int();
-    instr.c  = (int32_t) av->m_data[7].to_int();
-    instr.ce = (int32_t) av->m_data[8].to_int();
-}
-//---------------------------------------------------------------------------
-
-Atom make_prog(GC &gc, Atom prog_info)
+Atom PROG::create_prog_from_info(GC &gc, Atom prog_info)
 {
     if (prog_info.m_type != T_VEC)
-        return Atom();
+        throw BukaLISPException(
+            "'bkl-make-vm-prog' can only operate on a list");
 
-    Atom data     = prog_info.m_d.vec->m_data[0];
-    Atom prog     = prog_info.m_d.vec->m_data[1];
-    Atom debug    = prog_info.m_d.vec->m_data[2];
+    if (prog_info.m_d.vec->m_len < 5)
+        throw BukaLISPException(
+            "'bkl-make-vm-prog' needs a list with at least 5 elements");
 
-    if (   data.m_type      != T_VEC
-        || prog.m_type      != T_VEC
-        || debug.m_type     != T_MAP)
-        return Atom();
+    Atom tag = prog_info.m_d.vec->m_data[0];
+    if (   tag.m_type == T_VEC
+        && tag.at(0).m_type == T_SYM
+        && tag.at(0).m_d.sym->m_str == "BKL-VM-PROG")
+        throw BukaLISPException(
+            "'bkl-make-vm-prog' expected 'BKL-VM-PROG' tag as first element");
+
+    Atom func_info = prog_info.m_d.vec->m_data[1];
+    Atom data      = prog_info.m_d.vec->m_data[2];
+    Atom prog      = prog_info.m_d.vec->m_data[3];
+    Atom debug     = prog_info.m_d.vec->m_data[4];
+    Atom root_env  = prog_info.m_d.vec->m_data[5];
+
+    if (data.m_type != T_VEC)
+        throw BukaLISPException("'bkl-make-vm-prog' bad data element @2");
+
+    if (prog.m_type != T_VEC)
+        throw BukaLISPException("'bkl-make-vm-prog' bad code element @3");
+
+    if (debug.m_type != T_MAP)
+        throw BukaLISPException("'bkl-make-vm-prog' bad debug element @4");
+
+    if (root_env.m_type != T_MAP)
+        throw BukaLISPException("'bkl-make-vm-prog' bad root-env element @5");
 
     PROG *new_prog =
         new PROG(gc,
                  data.m_d.vec->m_len,
                  prog.m_d.vec->m_len + 1);
-    new_prog->set_debug_info(debug);
-    new_prog->set_data_from(data.m_d.vec);
+    gc.reg_userdata(new_prog);
 
-    Atom func_info =
-        debug.at(Atom(T_STR, gc.new_symbol(" FUNCTION-INFO ")));
+    Atom root_regs =
+        root_env.m_d.map->at(Atom(T_STR, gc.new_symbol(" REGS ")));
+
+    if (root_regs.m_type != T_VEC)
+        throw BukaLISPException(
+            "'bkl-make-vm-prog' root-env REGS needs to be a vector");
+
+    new_prog->set_root_env(root_env, root_regs.m_d.vec);
+    new_prog->set_debug_info(debug);
     new_prog->m_function_info = func_info.to_write_str();
+
+    for (size_t i = 0; i < data.m_d.vec->m_len; i++)
+    {
+        Atom d = data.m_d.vec->m_data[i];
+
+        if (   d.m_type == T_VEC
+            && d.at(0).m_type == T_SYM
+            && d.at(0).m_d.sym->m_str == "BKL-VM-PROG")
+            d = PROG::create_prog_from_info(gc, d);
+        else if (   d.m_type == T_VEC
+                 && d.at(0).m_type == T_SYM
+                 && d.at(0).m_d.sym->m_str == "BKL-CLOSURE")
+        {
+            d.m_d.vec->shift();
+            d.m_type = T_CLOS;
+        }
+
+        new_prog->m_atom_data.m_d.vec->set(i, d);
+    }
 
     for (size_t i = 0; i < prog.m_d.vec->m_len + 1; i++)
     {
@@ -124,13 +114,13 @@ Atom make_prog(GC &gc, Atom prog_info)
             instr.ce = 0;
         }
         else
-            parse_op_desc(instr, prog.m_d.vec->m_data[i]);
+            instr.from_atom(prog.m_d.vec->m_data[i]);
+
         new_prog->set(i, instr);
     }
 
     Atom ud(T_UD);
     ud.m_d.ud = new_prog;
-    Atom newud = ud;
     return ud;
 }
 //---------------------------------------------------------------------------
@@ -326,40 +316,14 @@ static void dump_stack_trace(const std::string &title, AtomVec *cont_stack, PROG
 }
 //---------------------------------------------------------------------------
 
-Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
+Atom VM::eval(Atom callable, AtomVec *args)
 {
     using namespace std::chrono;
 
     INST instant_operation;
     Atom instant_ctrl_jmp_obj;
 
-    GC_ROOT_MAP(m_rt->m_gc, root_env_map_gcroot) = root_env_map;
-
-    AtomVec *root_env = nullptr;
-    if (root_env_map)
-    {
-        Atom root_env_regs =
-            root_env_map->at(
-                Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")));
-        if (root_env_regs.m_type == T_NIL)
-        {
-            root_env = m_rt->m_gc.allocate_vector(0);
-            root_env_map->set(
-                Atom(T_STR, m_rt->m_gc.new_symbol(" REGS ")),
-                Atom(T_VEC, root_env));
-        }
-        else if (root_env_regs.m_type != T_VEC)
-        {
-            error("Bad registers from root_env in VM", root_env_regs);
-        }
-        else
-        {
-            root_env = root_env_regs.m_d.vec;
-        }
-    }
-    else
-        root_env = m_rt->m_gc.allocate_vector(0);
-
+    AtomVec *root_env   = nullptr;
     AtomVec *rr_frame   = nullptr;
     AtomVec *rr_data    = nullptr;
     Atom    *rr_v_frame = nullptr;
@@ -382,15 +346,14 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
     GC_ROOT_VEC(m_rt->m_gc, empty_upv_row) = m_rt->m_gc.allocate_vector(0);
     AtomVec *clos_upvalues = empty_upv_row;
 
-    SET_ROOT_ENV(root_env);
-
-    if (callable.m_type == T_UD && callable.m_d.ud->type() == "VM-PROG")
+    if (callable.m_type == T_UD && callable.m_d.ud->type() == "BKL-VM-PROG")
     {
         prog      = dynamic_cast<PROG*>(callable.m_d.ud);
         pc        = &(prog->m_instructions[0]);
 
-        SET_DATA_ROW(prog->data_array());
+        SET_DATA_ROW(prog->m_data_vec);
         SET_FRAME_ROW(args);
+        SET_ROOT_ENV(prog->m_root_regs);
     }
     else if (callable.m_type == T_CLOS)
     {
@@ -438,8 +401,8 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
     }
     else
     {
-//        error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
-        cout << "VM-ERROR: Bad input type to run-vm-prog, expected VM-PROG or closure, got: "
+//        error("Bad input type to run-vm-prog, expected BKL-VM-PROG.", A0);
+        cout << "VM-ERROR: Bad input type to run-vm-prog, expected BKL-VM-PROG or closure, got: "
              << callable.to_write_str() << endl;
         return Atom();
     }
@@ -450,7 +413,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
     // XXX: The root-call-frame actually keeps alive the whole code-tree, including
     //      any callable sub-m_prog objects. Thus, we don't have to explicitly
-    //      keep alive the m-prog or it's data_array().
+    //      keep alive the m-prog or it's m_atom_data
     //
     //      Also it keeps alive the dummy rr_frame that is used to
     //      call a T_CLOS that was passed to VM::eval().
@@ -563,7 +526,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                                                       \
         m_prog   = static_cast<PROG*>(proc.m_d.ud);   \
         m_pc     = (INST *) pc.m_d.ptr;               \
-        SET_DATA_ROW(m_prog->data_array());           \
+        SET_DATA_ROW(m_prog->m_data_vec);             \
         SET_FRAME_ROW(frame.m_d.vec);                 \
         SET_ROOT_ENV(r_env.m_d.vec);                  \
                                                       \
@@ -631,13 +594,14 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
             if (m_trace)
             {
                 cout << "VMTRC FRMS(" << cont_stack->m_len << "): ";
-                m_pc->to_string(cout);
+                Atom pc_a = m_pc->to_atom(m_rt->m_gc);
+                cout << pc_a.to_write_str();
                 cout << " ROOT: (" << ((void *) root_env) << ")";
                 cout << " {ENV= ";
                 for (size_t i = 0; i < rr_frame->m_len; i++)
                 {
                     Atom &a = rr_v_frame[i];
-                    if (a.m_type == T_UD && a.m_d.ud->type() == "VM-PROG")
+                    if (a.m_type == T_UD && a.m_d.ud->type() == "BKL-VM-PROG")
                         cout << i << "[#<prog>] ";
                     else if (a.m_type == T_MAP && a.size() > 10)
                         cout << i << "[map:" << ((void *) a.m_d.map) << "] ";
@@ -646,7 +610,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     else
                         cout << i << "[" << a.to_write_str() << "] ";
                 }
-                cout << "} " << m_prog->m_function_info << " "
+                cout << "} " << (m_prog ? m_prog->m_function_info : std::string()) << " "
                      << get_current_debug_info().to_write_str() << endl;
             }
 
@@ -835,8 +799,8 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     E_GET(tmp, A);
                     Atom &prog = *tmp;
-                    if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
-                        error("VM can't make closure from non VM-PROG", prog);
+                    if (prog.m_type != T_UD || prog.m_d.ud->type() != "BKL-VM-PROG")
+                        error("VM can't make closure from non BKL-VM-PROG", prog);
 
                     E_GET(tmp, B);
                     if (tmp->m_type != T_VEC)
@@ -873,7 +837,6 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     cl.m_d.vec->m_data[VM_CLOS_UPV].set_vec(upvalues);
                     cl.m_d.vec->m_data[VM_CLOS_IS_CORO].set_bool(is_coroutine);
                     cl.m_d.vec->m_data[VM_CLOS_ARITY] = tmp->at(1);
-                    cl.m_d.vec->m_data[VM_CLOS_ROOT_ENV].set_vec(root_env);
 
                     E_SET(O, cl);
                     break;
@@ -947,7 +910,6 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                             alloc = true;
 
-                            AtomVec *clos_root_env = func->m_d.vec->m_data[VM_CLOS_ROOT_ENV].m_d.vec;
                             Atom &arity = func->m_d.vec->m_data[VM_CLOS_ARITY];
 
                             // save the current execution context:
@@ -1017,7 +979,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                                 m_pc     = &(m_prog->m_instructions[0]);
                                 m_pc--;
 
-                                SET_DATA_ROW(m_prog->data_array());
+                                SET_DATA_ROW(m_prog->m_data_vec);
                                 AtomVec *upvs = func->m_d.vec->m_data[VM_CLOS_UPV].m_d.vec;
                                 if (upvs->m_len > 0)
                                 {
@@ -1029,7 +991,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                                     }
                                 }
                                 SET_FRAME_ROW(frame);
-                                SET_ROOT_ENV(clos_root_env);
+                                SET_ROOT_ENV(m_prog->m_root_regs);
                             }
                             break;
                         }
@@ -1077,11 +1039,9 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                             }
                         }
 
+                        // Fallback is the current root env of the compiled PROG:
                         if (!caller_env)
-                        {
-                            error("EVAL needs to be executed from a called function!",
-                                  Atom());
-                        }
+                            caller_env = m_prog->m_root_regs;
 
                         if (!caller_env->m_meta
                             || caller_env->m_meta->at(1).m_type != T_MAP)
@@ -1097,8 +1057,8 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
 
                     GC_ROOT(m_rt->m_gc, prog) =
                         m_compiler_call(*code, eval_env, "<vm-op-eval>", true);
-                    if (prog.m_type != T_UD || prog.m_d.ud->type() != "VM-PROG")
-                        error("In 'eval' compiler did not return proper VM-PROG",
+                    if (prog.m_type != T_UD || prog.m_d.ud->type() != "BKL-VM-PROG")
+                        error("In 'eval' compiler did not return proper BKL-VM-PROG",
                               prog);
 
                     // save the current execution context:
@@ -1123,7 +1083,7 @@ Atom VM::eval(Atom callable, AtomMap *root_env_map, AtomVec *args)
                     m_pc--;
 //                    std::cout << "PUT PROG: " << ((void *) m_pc) << ";" << ((void *) m_prog) << std::endl;
 
-                    SET_DATA_ROW(m_prog->data_array());
+                    SET_DATA_ROW(m_prog->m_data_vec);
                     AtomVec *eval_frame = m_rt->m_gc.allocate_vector(0);
                     SET_FRAME_ROW(eval_frame);
                     Atom cf_root_env =

@@ -1157,14 +1157,14 @@
   (T-env '(begin
             (define k 10)
             ((lambda ()
-               (bkl-run-vm-prog xxx {})))
+               (bkl-run-vm xxx)))
             (+ 12.345 k))
          22.345
          my-env))
 
 ; Calling the VM directly using a closure
 (T '(let ((closure (lambda (a b) (+ a b))))
-      (bkl-run-vm closure nil [1 2]))
+      (bkl-run-vm closure [1 2]))
    3)
 
 ; Test conditionals:
@@ -1690,8 +1690,10 @@
 ;   12)
 
 ; Test eval as procedure:
-(T '(let ((e eval))
-      (e '(+ 1 2 3)))
+(T '(begin
+      (import (bukalisp std))
+      (let ((e eval))
+        (e '(+ 1 2 3))))
    6)
 
 ; Testing coroutine predicates:
@@ -2421,3 +2423,29 @@
         (read-all file)))
    [[1 2 'test] x:])
 
+; Testing PROG serialization and read/write of the resulting structure:
+(begin
+  (define PROG
+    '((begin
+       (define (x a b) (+ a b))
+       (+ 1 2 (x 3 4)))))
+
+  (define t-prog-1
+    (invoke-compiler PROG "serializer test" #t {}))
+  (let ((ser-t-prog-1 (userdata->atom t-prog-1))
+        (ser-t-prog-s (write-str ser-t-prog-1))
+        (ser-t-prog-o (first (read-str ser-t-prog-s))))
+    (unless (equal? ser-t-prog-1 ser-t-prog-o)
+      (error "Serializing a programm did not work!" [ser-t-prog-1 ser-t-prog-o]))))
+
+(begin
+  (define comp-file (bkl-find-lib-file "compiler.bkl"))
+  (define COMP-PROG-IN (read-str (sys-slurp-file comp-file)))
+  (define comp-prog (invoke-compiler COMP-PROG-IN comp-file #t {}))
+  (define comp-prog-ud (userdata->atom comp-prog))
+  (define comp-prog-ud-s1 (write-str comp-prog-ud))
+  (define comp-prog-ud-r1 (first (read-str comp-prog-ud-s1)))
+  (unless (equal? comp-prog-ud comp-prog-ud-r1)
+    (error "Can't serialize compiled compiler!")))
+
+ALL-OK:

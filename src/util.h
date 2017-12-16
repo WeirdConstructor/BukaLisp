@@ -10,7 +10,7 @@ bool write_str(const std::string &filepath, const std::string &data);
 std::string from_wstring(const std::wstring &str);
 std::wstring to_wstring(const std::string &str);
 std::string application_dir_path();
-bool file_exists(std::string &filename);
+bool file_exists(const std::string &filename);
 
 class BenchmarkTimer
 {

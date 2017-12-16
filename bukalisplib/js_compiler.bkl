@@ -61,7 +61,7 @@
 (define js-transformer
   (lambda (stage-2-data ctx gtx)
     (find-transform-match
-      [['#1#begin
+      [['#s1#begin
         (lambda (ctx arg T gtx)
           (let ((P (str-pad)))
             (if (= (length arg) 1)
@@ -75,17 +75,17 @@
                 (.append-pad P last-P)
                 (.append-value P last-P)
                 P))))]
-       ['#1#data
+       ['#s1#data
         (lambda (ctx arg T gtx)
           (let ((P (str-pad)))
             (.set-value-no-sideeffect P (@0 arg))
             P))]
-       ['#1#var
+       ['#s1#var
         (lambda (ctx arg T gtx)
           (let ((P (str-pad)))
             (.set-value-no-sideeffect P (@0 arg))
             P))]
-       ['#1#set!
+       ['#s1#set!
         (lambda (ctx arg T gtx)
           (let ((P (str-pad)))
             (.add-debug-from-gtx P gtx)
@@ -96,7 +96,7 @@
               (.add-line P (str (.value var-p) " = " (.value value-p) ";"))
               (.append-value P var-p)
               P)))]
-       ['#1#lambda
+       ['#s1#lambda
         (lambda (ctx arg T gtx)
           (let ((P (str-pad)))
             (.add-debug-from-gtx P gtx)

@@ -136,23 +136,23 @@ class Atom2CPP
                                             "Can't serialize T_C_PTR");
                 case T_UD:
                 {
-                    if (a.m_d.ud->type() != "VM-PROG")
+                    if (a.m_d.ud->type() != "BKL-VM-PROG")
                     {
                         throw BukaLISPException(
                             "atom2cpp", "", 0, "write_atom",
-                            "Can only serialize VM-PROG T_UD");
+                            "Can only serialize BKL-VM-PROG T_UD");
                     };
                     PROG *prog = dynamic_cast<PROG *>(a.m_d.ud);
 
                     string a_d_m = write_atom(prog->m_debug_info_map, o);
                     o << "PROG *" << nn << "_ud = new PROG(gc, "
-                      << prog->data_array()->m_len
+                      << prog->m_data_vec->m_len
                       << ", "
                       << prog->m_instructions_len << ");\n";
 
-                    for (size_t i = 0; i < prog->data_array()->m_len; i++)
+                    for (size_t i = 0; i < prog->m_data_vec->m_len; i++)
                     {
-                        string ne = write_atom(prog->data_array()->m_data[i], o);
+                        string ne = write_atom(prog->m_data_vec->m_data[i], o);
                         o << nn << "_ud->m_atom_data[" << i << "] = "
                           << ne << ";\n";
                     }

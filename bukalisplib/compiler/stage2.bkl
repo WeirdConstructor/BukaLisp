@@ -30,19 +30,29 @@
 (define make-s2-frame
   (lambda (gtx)
     (let ((self {pad: []
+                 pad-map: {}
                  pos: [0 []]}))
       ($define! self (get-debug-info)
         (last (meta-stack: gtx)))
       ($define! self (store-static-data data)
-        (push! (pad: self) data)
-        [(- (length (pad: self)) 1) REG-ROW-DATA])
-      ($define! self (to-vm-prog code-pad func-info)
+; TODO: FIXME: This optimization does not work for some reason:
+;        (let ((pad-idx (@data (pad-map: self))))
+;          (if pad-idx
+;            [pad-idx REG-ROW-DATA]
+;            (begin
+              (push! (pad: self) data)
+              (define idx (- (length (pad: self)) 1))
+;              (@!data (pad-map: self) idx)
+              [idx REG-ROW-DATA])
+;      )))
+      ($define! self (to-vm-prog code-pad func-info root-env)
         (let ((debug-info (.to-vm-prog-debug-info code-pad)))
-          (when func-info
-            (@!" FUNCTION-INFO " debug-info func-info))
-          (bkl-make-vm-prog [(pad:  self)
-                             (.to-vm-prog-code       code-pad)
-                             debug-info])))
+          (bkl-make-vm-prog ['BKL-VM-PROG
+                             func-info
+                             (pad:  self)
+                             (.to-vm-prog-code code-pad)
+                             debug-info
+                             root-env])))
       ($define! self (new-tmp-pos)
         (let ((env-pos           (pos: self))
               (free-tmp-pos-list (@1 env-pos)))
@@ -145,16 +155,16 @@
 (define primitive-map (bkl-primitive-map))
 
 (define stage-2-translation-nodes
-  {'#1#data
+  {'#s1#data
     (lambda (ctx arg T gtx)
       (.store-static-data (F: ctx) (first arg)))
-   '#1#prim
+   '#s1#prim
     (lambda (ctx arg T gtx)
       (let ((prim-idx (@(first arg) primitive-map)))
         (unless prim-idx
           (error "Bad primitive in stage 2 compilation" arg))
         [prim-idx REG-ROW-PRIM]))
-   '#1#begin
+   '#s1#begin
     (lambda (ctx arg T gtx)
       (define last-adr nil)
       (do-each (form arg)
@@ -163,13 +173,13 @@
         (let ((adr (T ctx form)))
           (set! last-adr adr))
         last-adr))
-   '#1#var
+   '#s1#var
     (lambda (ctx arg T gtx)
       (let ((adr (@(@0 arg) (env: ctx))))
         (unless adr
           (error "Fatal error in stage 2, variable not found!" arg))
         adr))
-   '#1#glob-var
+   '#s1#glob-var
     (lambda (ctx arg T gtx)
       (let ((root-var  (@(@0 arg) (root-env: gtx))))
         (unless root-var
@@ -177,7 +187,7 @@
             (set! root-var [new-root-adr REG-ROW-ROOT])
             (@!(@0 arg) (root-env: gtx) root-var)))
         root-var))
-   '#1#set!
+   '#s1#set!
     (lambda (ctx arg T gtx)
       (let ((var-adr (T ctx (@0 arg)))
             (val-adr (T [var-adr ctx] (@1 arg))))
@@ -185,7 +195,7 @@
           (.op-mov (P: ctx) var-adr val-adr nil)
           (.recycle-pos (F: ctx) val-adr))
         var-adr))
-   '#1#set*
+   '#s1#set*
     (lambda (ctx arg T gtx)
       (let ((val-adrs []))
         (do-each (v arg)
@@ -201,57 +211,57 @@
             (set! i (+ i 1)))
           #;(displayln SET*: (pp-str (code: (P: ctx))))
           last-var-adr)))
-   '#1#add (generate-binary-op 'op-add)
-   '#1#sub (generate-binary-op 'op-sub)
-   '#1#mul (generate-binary-op 'op-mul)
-   '#1#div (generate-binary-op 'op-div)
-   '#1#gt  (generate-binary-op 'op-gt)
-   '#1#lt  (generate-binary-op 'op-lt)
-   '#1#ge  (generate-binary-op 'op-ge)
-   '#1#le  (generate-binary-op 'op-le)
-   '#1#eq  (generate-binary-op 'op-eq)
-   '#1#eqv (generate-binary-op 'op-eqv)
-   '#1#not
+   '#s1#add (generate-binary-op 'op-add)
+   '#s1#sub (generate-binary-op 'op-sub)
+   '#s1#mul (generate-binary-op 'op-mul)
+   '#s1#div (generate-binary-op 'op-div)
+   '#s1#gt  (generate-binary-op 'op-gt)
+   '#s1#lt  (generate-binary-op 'op-lt)
+   '#s1#ge  (generate-binary-op 'op-ge)
+   '#s1#le  (generate-binary-op 'op-le)
+   '#s1#eq  (generate-binary-op 'op-eq)
+   '#s1#eqv (generate-binary-op 'op-eqv)
+   '#s1#not
     (lambda (ctx arg T gtx)
       (let ((adr (new-tmp-pos-or-parent-adr ctx))
             (in-adr (T ctx (first arg))))
         (.op-not (P: ctx) adr in-adr)
         (.recycle-pos (F: ctx) in-adr)
         adr))
-   '#1#nil?
+   '#s1#nil?
     (lambda (ctx arg T gtx)
       (let ((adr (new-tmp-pos-or-parent-adr ctx))
             (in-adr (T ctx (first arg))))
         (.op-isnil (P: ctx) adr in-adr)
         (.recycle-pos (F: ctx) in-adr)
         adr))
-   '#1#nil
+   '#s1#nil
     (lambda (ctx arg T gtx)
       (let ((adr (new-tmp-pos-or-parent-adr ctx)))
       (.op-load-nil (P: ctx) adr)
       adr))
-   '#1#set
+   '#s1#set
     (lambda (ctx arg T gtx)
       (let ((struct-adr (T ctx (@2 arg)))
             (field-adr  (T ctx (@1 arg)))
             (val-adr    (T ctx (@3 arg))))
         (.op-set (P: ctx) struct-adr field-adr val-adr)
         val-adr))
-   '#1#get
+   '#s1#get
     (lambda (ctx arg T gtx)
       (let ((out-adr    (new-tmp-pos-or-parent-adr ctx))
             (field-adr  (T ctx (@0 arg)))
             (struct-adr (T ctx (@1 arg))))
         (.op-get (P: ctx) out-adr struct-adr field-adr)
         out-adr))
-   '#1#let
+   '#s1#let
     (lambda (ctx arg T gtx)
       (let ((new-vars []))
         (do-each (v (@0 arg))
           (push! new-vars v)
           (push! new-vars (.new-pos (F: ctx))))
         (T (assign ctx [env: (assign (env: ctx) new-vars)]) (@1 arg))))
-   '#1#map
+   '#s1#map
     (lambda (ctx arg T gtx)
       (let ((map-adrs           [])
             (recycle-adrs       [])
@@ -272,7 +282,7 @@
                      (.store-static-data (F: ctx) map-init-adrs-vec))
         (.recycle-pos-list (F: ctx) recycle-adrs)
         ret-adr))
-   '#1#list
+   '#s1#list
     (lambda (ctx arg T gtx)
       (let ((list-adrs      [])
             (vec-elems      (compile-list T ctx arg #t))
@@ -280,7 +290,7 @@
             (vec-adr        (@1 vec-elems)))
         (.recycle-pos-list (F: ctx) recycle-adrs)
         vec-adr))
-   '#1#apply
+   '#s1#apply
     (lambda (ctx arg T gtx)
       (let ((ret-adr        (new-tmp-pos-or-parent-adr ctx))
             (fn-adr         (T ctx (@0 arg)))
@@ -291,7 +301,7 @@
         (.op-call (P: ctx) ret-adr fn-adr vec-adr)
         (.recycle-pos-list (F: ctx) recycle-adrs)
         ret-adr))
-   '#1#method-call
+   '#s1#method-call
     (lambda (ctx arg T gtx)
       (let ((ret-adr        (new-tmp-pos-or-parent-adr ctx))
             (fn-adr         (.new-tmp-pos (F: ctx)))
@@ -311,32 +321,32 @@
         (.recycle-pos (F: ctx) obj-adr)
         (.recycle-pos-list (F: ctx) recycle-adrs)
         ret-adr))
-   '#1#return
+   '#s1#return
     (lambda (ctx arg T gtx)
       (.op-return (P: ctx) (T ctx (@0 arg)))
       (.new-tmp-pos (F: ctx)))
-   '#1#yield
+   '#s1#yield
     (lambda (ctx arg T gtx)
       (let ((ret-adr (.new-tmp-pos (F: ctx))))
         (.op-yield (P: ctx) ret-adr (T ctx (@0 arg)))
         ret-adr))
-   '#1#current-coroutine
+   '#s1#current-coroutine
     (lambda (ctx arg T gtx)
       (let ((ret-adr (new-tmp-pos-or-parent-adr ctx)))
         (.op-get-coro (P: ctx) ret-adr)
         ret-adr))
-   '#1#stack-trace
+   '#s1#stack-trace
     (lambda (ctx arg T gtx)
       (let ((tit-adr (T ctx (@0 arg))))
         (.op-stack-trc (P: ctx) tit-adr)
         tit-adr))
-   '#1#return-from
+   '#s1#return-from
     (lambda (ctx arg T gtx)
       (.op-ctrl-jmp (P: ctx)
                     (T ctx (@1 arg))
                     (T ctx (@0 arg)))
       (.new-tmp-pos (F: ctx)))
-   '#1#eval
+   '#s1#eval
     (lambda (ctx arg T gtx)
       (let ((env-adr (if (nil? (@1 arg))
                        (begin
@@ -350,7 +360,7 @@
         (.recycle-pos (F: ctx) env-adr)
         (.recycle-pos (F: ctx) code-adr)
         out-adr))
-   '#1#create-upv
+   '#s1#create-upv
     (lambda (ctx arg T gtx)
       (let ((new-var-defs []))
         (do-each (upv-var-name (@1 arg))
@@ -366,7 +376,7 @@
                    [env: (assign (env: ctx)
                                  new-var-defs)])
            (@2 arg))))
-   '#1#for
+   '#s1#for
     (lambda (ctx arg T gtx)
       (let ((cond-res-adr (.new-tmp-pos (F: ctx)))
             (ret-adr      (new-tmp-pos-or-parent-adr ctx))
@@ -396,7 +406,7 @@
         (.recycle-pos (F: ctx) iter-adr)
         (.recycle-pos (F: ctx) body-ret-adr)
         ret-adr))
-   '#1#while
+   '#s1#while
     (lambda (ctx arg T gtx)
       (let ((ret-adr        (new-tmp-pos-or-parent-adr ctx))
             (cond-pad       (make-code-pad-object (F: ctx)))
@@ -419,7 +429,7 @@
                   cond-adr)
         (.recycle-pos (F: ctx) cond-adr)
         ret-adr))
-   '#1#do
+   '#s1#do
     (lambda (ctx arg T gtx)
       (let ((test-pad       (make-code-pad-object (F: ctx)))
             (test-adr       (T (assign ctx [P: test-pad]) (@0 arg)))
@@ -443,7 +453,7 @@
         (do-each (adr recycle-adrs)
           (.recycle-pos (F: ctx) adr))
         result-adr))
-   '#1#do-each
+   '#s1#do-each
     (lambda (ctx arg T gtx)
       (let ((ret-adr        (.new-tmp-pos (F: ctx)))
             (ok-adr         (.new-tmp-pos (F: ctx)))
@@ -481,10 +491,10 @@
         (when key-adr
           (.recycle-pos (F: ctx) key-adr))
         ret-adr))
-   '#1#if
+   '#s1#if
     (lambda (ctx arg T gtx)
       (let ((if-ret-adr         (new-tmp-pos-or-parent-adr ctx))
-            (is-negated?        (eqv? (first (@0 arg)) '#1#not))
+            (is-negated?        (eqv? (first (@0 arg)) '#s1#not))
             (cond-adr           (if is-negated?
                                   (T ctx (@1 (@0 arg)))
                                   (T ctx (@0 arg))))
@@ -504,15 +514,15 @@
         (.recycle-pos (F: ctx) true-branch-adr)
         (.recycle-pos (F: ctx) false-branch-adr)
         if-ret-adr))
-   '#1#cond
-;(#1#cond
-;  (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data 1))
-;           (#1#data 10))
-;  (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data a:))
-;           (#1#data 11))
-;  (clause: (#1#eqv (#1#var case_0_t_1 case_0_t) (#1#data l))
-;           (#1#data 12))
-;  (else: (#1#data 30)))
+   '#s1#cond
+;(#s1#cond
+;  (clause: (#s1#eqv (#s1#var case_0_t_1 case_0_t) (#s1#data 1))
+;           (#s1#data 10))
+;  (clause: (#s1#eqv (#s1#var case_0_t_1 case_0_t) (#s1#data a:))
+;           (#s1#data 11))
+;  (clause: (#s1#eqv (#s1#var case_0_t_1 case_0_t) (#s1#data l))
+;           (#s1#data 12))
+;  (else: (#s1#data 30)))
 ;#test1:
 ;op-brif 
     (lambda (ctx arg T gtx)
@@ -553,7 +563,7 @@
         (do-each (body (reverse out-bodies))
           (.append-code-pad (P: ctx) body))
         out-adr))
-   '#1#block
+   '#s1#block
     (lambda (ctx arg T gtx)
       (let ((ret-adr    (new-tmp-pos-or-parent-adr ctx))
             (expr-body  (make-code-pad-object (F: ctx)))
@@ -567,7 +577,7 @@
                       (.store-static-data (F: ctx) (@0 arg)))
         (.append-code-pad (P: ctx) expr-body)
         ret-adr))
-   '#1#handle-exceptions
+   '#s1#handle-exceptions
     (lambda (ctx arg T gtx)
       (let ((ret-adr        (new-tmp-pos-or-parent-adr ctx))
             (var-adr        (T ctx (@0 arg)))
@@ -589,7 +599,7 @@
         (.recycle-pos (F: ctx) exh-ret-adr)
         (.recycle-pos (F: ctx) body-ret-adr)
         ret-adr))
-   '#1#with-cleanup
+   '#s1#with-cleanup
     (lambda (ctx arg T gtx)
       (let ((cleanup-pad         (make-code-pad-object (F: ctx)))
             (expr-pad            (make-code-pad-object (F: ctx))))
@@ -639,7 +649,7 @@
       ;
       ; .op-pop-clnup is done at the start of the cleanup.
       ))
-   '#1#lambda
+   '#s1#lambda
     (lambda (ctx arg T gtx)
       (let ((lambda-spec        (@0 arg))
             (arg-var-adrs       [])
@@ -686,7 +696,12 @@
             ret-adr
             (.store-static-data
               (F: ctx)
-              (.to-vm-prog lambda-frame lambda-pad (@0 lambda-spec)))
+              (.to-vm-prog lambda-frame
+                           lambda-pad
+                           (@0 lambda-spec)
+                           (@1 (bkl-get-meta
+                                 (@" REGS "
+                                   (root-env: gtx))))))
             (.store-static-data
               (F: ctx)
               [is-coroutine arity creator-upv-adrs]))

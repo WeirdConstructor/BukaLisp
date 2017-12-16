@@ -455,7 +455,7 @@ START_PRIM()
     out.m_d.b =
            A0.m_type == T_PRIM
         || A0.m_type == T_CLOS
-        || (A0.m_type == T_UD && A0.m_d.ud->type() == "VM-PROG");
+        || (A0.m_type == T_UD && A0.m_d.ud->type() == "BKL-VM-PROG");
 END_PRIM(procedure?);
 
 START_PRIM()
@@ -619,9 +619,7 @@ END_PRIM(set-length!)
 
 START_PRIM()
     REQ_EQ_ARGC(bkl-make-vm-prog, 1);
-    out = bukalisp::make_prog(m_rt->m_gc, A0);
-    if (out.m_type == T_UD)
-        m_rt->m_gc.reg_userdata(out.m_d.ud);
+    out = PROG::create_prog_from_info(m_rt->m_gc, A0);
 END_PRIM(bkl-make-vm-prog)
 
 START_PRIM()
@@ -630,51 +628,20 @@ START_PRIM()
 END_PRIM(bkl-prog-serialize)
 
 START_PRIM()
-    REQ_GT_ARGC(bkl-run-vm-prog, 1);
-
-    if (A0.m_type != T_UD || A0.m_d.ud->type() != "VM-PROG")
-        error("Bad input type to run-vm-prog, expected VM-PROG.", A0);
-
-    if (A1.m_type != T_MAP)
-        error("No proper root env given to run-vm-prog.", A1);
-
-    AtomVec *prog_args = nullptr;
-    if (args.m_len > 2 && A2.m_type != T_NIL)
-    {
-        if (A1.m_type != T_VEC)
-            error("Can't call VM prog with non list arguments", A2);
-        prog_args = A2.m_d.vec;
-    }
-
-    if (!m_vm)
-        error("Can't execute VM progs, no VM instance loaded into interpreter", A0);
-
-    out = m_vm->eval(A0, A1.m_d.map, prog_args);
-END_PRIM(bkl-run-vm-prog)
-
-START_PRIM()
     REQ_GT_ARGC(bkl-run-vm, 1);
 
-    AtomMap *root_env = nullptr;
+    AtomVec *prog_args = nullptr;
     if (args.m_len > 1 && A1.m_type != T_NIL)
     {
-        if (A1.m_type != T_MAP)
-            error("Can execute VM only with a map as root environment", A1);
-        root_env = A1.m_d.map;
-    }
-
-    AtomVec *prog_args = nullptr;
-    if (args.m_len > 2 && A2.m_type != T_NIL)
-    {
-        if (A2.m_type != T_VEC)
-            error("Can execute VM only with a list as argument list", A2);
-        prog_args = A2.m_d.vec;
+        if (A1.m_type != T_VEC)
+            error("Can execute VM only with a list as argument list", A1);
+        prog_args = A1.m_d.vec;
     }
 
     if (!m_vm)
         error("Can't execute VM, no VM instance loaded into interpreter", A0);
 
-    out = m_vm->eval(A0, root_env, prog_args);
+    out = m_vm->eval(A0, prog_args);
 END_PRIM(bkl-run-vm)
 
 START_PRIM()
@@ -915,6 +882,11 @@ START_PRIM()
 END_PRIM(read-str)
 
 START_PRIM()
+    REQ_EQ_ARGC(userdata->atom, 1);
+    out = expand_userdata_to_atoms(&(m_rt->m_gc), A0);
+END_PRIM(userdata->atom)
+
+START_PRIM()
     REQ_EQ_ARGC(size, 1);
     out = Atom(T_INT, (int64_t) A0.size());
 END_PRIM_DOC(size,
@@ -979,13 +951,13 @@ START_PRIM()
     if (args.m_len == 1)
     {
         AtomVec *av = m_rt->m_gc.allocate_vector(0);
-        out = m_vm->eval(A0, nullptr, av);
+        out = m_vm->eval(A0, av);
     }
     else if (args.m_len == 2)
     {
         if (A1.m_type != T_VEC)
             error("'apply' No argument list given.", A1);
-        out = m_vm->eval(A0, nullptr, A1.m_d.vec);
+        out = m_vm->eval(A0, A1.m_d.vec);
     }
     else
     {
@@ -1005,7 +977,7 @@ START_PRIM()
         for (size_t i = 0; i < av_last->m_len; i++)
             av->push(av_last->m_data[i]);
 
-        out = m_vm->eval(A0, nullptr, av);
+        out = m_vm->eval(A0, av);
     }
 END_PRIM_DOC(apply,
 "@control procedure (apply _proc_ [_arg1_ ... _argN_] [...])\n"
@@ -1360,7 +1332,7 @@ START_PRIM()
 
     Atom prog =
         m_compiler_call(exprs, env, "eval", true);
-    out = eval(prog, env);
+    out = eval(prog, nullptr);
 END_PRIM(eval)
 
 START_PRIM()

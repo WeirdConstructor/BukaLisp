@@ -34,7 +34,7 @@
 ;                                     ['eval [syntax: eval-syntax]])
 ;                             #t)))
 ;            (set! global-saved-eval-vm-closure
-;              (bkl-run-vm-prog eval-prog local-root))
+;              (bkl-run-vm eval-prog))
 ;            (set! eval-closure global-saved-eval-vm-closure)))
 ;;        (displayln ENDED-COMPILE-EVAL:)
 ;        (set-root-env-var root-env 'eval eval-closure)))
@@ -61,14 +61,17 @@
             (adr (stage2-transformer s1prog ctx gtx))
             (P (P: ctx)))
         (.op-return P adr)
-;        (displayln DEBUG-INFO: adr (pp-str (.to-vm-prog-debug-info P)))
-;        (displayln ROOT-ENV: (pp-str (root-env: gtx)))
-        (let ((prog (.to-vm-prog (F: ctx) P name)))
+        (let ((prog (.to-vm-prog (F: ctx) P name root-env)))
           (when *DEBUG* (displayln PROG: prog))
-          #;(displayln END-CALL-COMPILER: only-compile?)
+          (unless (or (eqv? name ".\\bukalisplib\\compiler.bkl")
+                      (eqv? (substring name 0 1) "<"))
+            (let ((comp-at (userdata->atom prog)))
+              (sys-write-file
+                (str name ".bklc")
+                (pp-str comp-at))))
           (if only-compile?
             prog
-            (bkl-run-vm-prog prog root-env)))))))
+            (bkl-run-vm prog)))))))
 ;----------------------------------------------------------------------------
 
 (displayln END-COMPILER-COMPILE:)

@@ -12,6 +12,7 @@ add_library(bukalisp_lib STATIC
     src/atom.cpp
     src/ports.cpp
     src/atom_cpp_serializer.cpp
+    src/atom_userdata.cpp
     src/interpreter.cpp
     src/buklivm.cpp
     src/runtime.cpp

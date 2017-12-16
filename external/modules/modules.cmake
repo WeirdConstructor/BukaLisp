@@ -45,14 +45,15 @@ target_link_libraries(bklisp_module_support ${PLATFORM_LIBS_ADD})
 target_link_libraries(bukalisp_lib
     bklisp_module_support
 
-    bklisp_mod_test
-    bklisp_mod_util
-    bklisp_mod_sys
-    bklisp_mod_ev_loop
+#    bklisp_mod_test
+#    bklisp_mod_util
+#    bklisp_mod_sys
+#    bklisp_mod_ev_loop
+#    bklisp_mod_sqldb
+#    bklisp_mod_http
+#    bklisp_mod_costraeng
+
 #    bklisp_mod_discount
-    bklisp_mod_sqldb
-    bklisp_mod_http
-    bklisp_mod_costraeng
 
     ${Boost_LIBRARIES}
     ${BOOST_SUPPORT_LIBS}

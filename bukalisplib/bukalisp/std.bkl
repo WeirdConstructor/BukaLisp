@@ -1,8 +1,13 @@
 (define-library
   (bukalisp std)
-  (export map)
+  (export map eval)
   (import (bukalisp base))
   (begin
+    (define (eval- code . env)
+      (if (empty? env)
+        (eval code)
+        (eval code env)))
+    (define eval eval-)
     (define (map proc . lists)
       (let ((first-list (@0 lists)))
         (unless first-list

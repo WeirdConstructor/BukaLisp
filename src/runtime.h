@@ -7,6 +7,7 @@
 #include "atom_generator.h"
 #include "parser.h"
 #include "ports.h"
+#include <algorithm>
 
 namespace bukalisp
 {

@@ -4,7 +4,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 3)
       (error "'@' requires exactly 2 arguments" args))
-    ['#1#get (T ctx (@1 args)) (T ctx (@2 args))]))
+    ['#s1#get (T ctx (@1 args)) (T ctx (@2 args))]))
 
 (add-optimized-prim
   S1-ROOT-ENV
@@ -12,7 +12,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 4)
       (error "'@!' requires exactly 3 arguments" args))
-    ['#1#set field: (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))]))
+    ['#s1#set field: (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))]))
 
 (add-optimized-prim
   S1-ROOT-ENV
@@ -20,7 +20,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'not' requires exactly 1 argument" args))
-    ['#1#not (T ctx (@1 args))]))
+    ['#s1#not (T ctx (@1 args))]))
 
 (add-optimized-prim
   S1-ROOT-ENV
@@ -28,7 +28,7 @@
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
       (error "'nil?' requires exactly 1 argument" args))
-    ['#1#nil? (T ctx (@1 args))]))
+    ['#s1#nil? (T ctx (@1 args))]))
 
 (define make-assoc-tree
   (lambda (operation ctx args T gtx)
@@ -41,7 +41,7 @@
 
 (define make-left-assoc-tree
   (lambda (operation neutral)
-    (set! neutral ['#1#data neutral])
+    (set! neutral ['#s1#data neutral])
     (lambda (ctx args T gtx)
       (case (- (length args) 1)
         ((0) [operation neutral           neutral])
@@ -73,11 +73,11 @@
             (if last-op
               (let ((cur-op
                       (DI! args
-                           ['#1#if
+                           ['#s1#if
                             (DI! args
-                                 ['#1#not
+                                 ['#s1#not
                                   (DI! args [operation last-op c-v])])
-                            ['#1#data #f]])))
+                            ['#s1#data #f]])))
                 (set! last-op c-v)
                 (when cur-tree
                   (push! cur-tree cur-op))
@@ -91,15 +91,15 @@
           (@!2 cur-tree (@2 last-cmp)))
         out-tree))))
 
-(add-optimized-prim S1-ROOT-ENV '+ (make-left-assoc-tree '#1#add    0))
-(add-optimized-prim S1-ROOT-ENV '- (make-left-assoc-tree '#1#sub    0))
-(add-optimized-prim S1-ROOT-ENV '* (make-left-assoc-tree '#1#mul    1))
-(add-optimized-prim S1-ROOT-ENV '/ (make-left-assoc-tree '#1#div    1))
+(add-optimized-prim S1-ROOT-ENV '+ (make-left-assoc-tree '#s1#add    0))
+(add-optimized-prim S1-ROOT-ENV '- (make-left-assoc-tree '#s1#sub    0))
+(add-optimized-prim S1-ROOT-ENV '* (make-left-assoc-tree '#s1#mul    1))
+(add-optimized-prim S1-ROOT-ENV '/ (make-left-assoc-tree '#s1#div    1))
 
-(add-optimized-prim S1-ROOT-ENV 'eqv?   (make-cmp-op-tree '#1#eqv))
-(add-optimized-prim S1-ROOT-ENV '=      (make-cmp-op-tree '#1#eq))
-(add-optimized-prim S1-ROOT-ENV '<      (make-cmp-op-tree '#1#lt))
-(add-optimized-prim S1-ROOT-ENV '>      (make-cmp-op-tree '#1#gt))
-(add-optimized-prim S1-ROOT-ENV '<=     (make-cmp-op-tree '#1#le))
-(add-optimized-prim S1-ROOT-ENV '>=     (make-cmp-op-tree '#1#ge))
+(add-optimized-prim S1-ROOT-ENV 'eqv?   (make-cmp-op-tree '#s1#eqv))
+(add-optimized-prim S1-ROOT-ENV '=      (make-cmp-op-tree '#s1#eq))
+(add-optimized-prim S1-ROOT-ENV '<      (make-cmp-op-tree '#s1#lt))
+(add-optimized-prim S1-ROOT-ENV '>      (make-cmp-op-tree '#s1#gt))
+(add-optimized-prim S1-ROOT-ENV '<=     (make-cmp-op-tree '#s1#le))
+(add-optimized-prim S1-ROOT-ENV '>=     (make-cmp-op-tree '#s1#ge))
 

@@ -701,7 +701,7 @@ Atom Interpreter::call(Atom func, AtomVec *av, bool eval_args, size_t arg_offs)
     }
     else if (m_vm && func == T_UD && func.m_d.ud->type() == "VM-PROG")
     {
-        ret = m_vm->eval(func, nullptr, av);
+        ret = m_vm->eval(func, av);
     }
     else
         error("Non callable function element in list", func);

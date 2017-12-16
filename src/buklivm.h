@@ -12,12 +12,11 @@
 
 class BukaLISPModule;
 
-#define VM_CLOS_SIZE 5
+#define VM_CLOS_SIZE 4
 #define VM_CLOS_PROG     0
 #define VM_CLOS_UPV      1
 #define VM_CLOS_IS_CORO  2
 #define VM_CLOS_ARITY    3
-#define VM_CLOS_ROOT_ENV 4
 
 //---------------------------------------------------------------------------
 
@@ -137,20 +136,52 @@ struct INST
 //        int64_t i;
 //    } va;
 
-    void to_string(std::ostream &ss)
+    void from_atom(Atom at)
+    {
+        op = op_from_name(at.at(0).to_display_str());
+        o  = (int32_t) at.at(1).to_int();
+        oe = (int8_t)  at.at(2).to_int();
+        a  = (int32_t) at.at(3).to_int();
+        ae = (int8_t)  at.at(4).to_int();
+        b  = (int32_t) at.at(5).to_int();
+        be = (int8_t)  at.at(6).to_int();
+        c  = (int32_t) at.at(7).to_int();
+        ce = (int8_t)  at.at(8).to_int();
+    }
+
+    Atom to_atom(GC &gc) const
+    {
+        AtomVec *av = gc.allocate_vector(9);
+        av->m_len = 9;
+        av->m_data[0] = Atom(T_KW, gc.new_symbol(get_op_name()));
+        av->m_data[1].set_int(o);
+        av->m_data[2].set_int(oe);
+        av->m_data[3].set_int(a);
+        av->m_data[4].set_int(ae);
+        av->m_data[5].set_int(b);
+        av->m_data[6].set_int(be);
+        av->m_data[7].set_int(c);
+        av->m_data[8].set_int(ce);
+        return Atom(T_VEC, av);
+    }
+
+    static uint8_t op_from_name(const std::string &opname)
+    {
+#       define X(name, code)    if ((opname) == #name) { return code; } else
+        OP_CODE_DEF(X)
+        {
+            return -1;
+        }
+#       undef X
+    }
+
+    std::string get_op_name() const
     {
         std::string op_name;
 #       define X(name, code)    case code: op_name = #name; break;
         switch (op) { OP_CODE_DEF(X) }
 #       undef X
-        while (op_name.size() < 14)
-           op_name = " " + op_name;
-        ss << "#" << op_name << ": ("
-           << o << "/" << (int32_t) oe
-           << ", [" << a << "/" << (int32_t) ae
-           << ":" << b << "/" << (int32_t) be
-           << ":" << c << "/" << (int32_t) ce
-           << "]";
+        return op_name;
     }
 
     INST() { clear(); }
@@ -173,34 +204,61 @@ struct INST
 class PROG : public UserData
 {
     public:
+        AtomVec *m_data_vec;
+        AtomVec *m_root_regs;
+
         Atom     m_debug_info_map;
         Atom     m_atom_data;
+        Atom     m_root_env;
         INST    *m_instructions;
         size_t   m_instructions_len;
         std::string m_function_info;
+        GC      *m_gc;
 
     public:
+        static Atom create_prog_from_info(GC &gc, Atom prog_info);
+
         PROG()
-            : m_instructions(nullptr)
+            : m_instructions(nullptr), m_gc(nullptr), m_instructions_len(0)
         {
 //            std::cout << "*NEW PROG" << ((void *) this) << std::endl;
         }
         PROG(GC &gc, size_t atom_data_len, size_t instr_len)
+            : m_gc(&gc)
         {
             m_atom_data.set_vec(gc.allocate_vector(atom_data_len));
+            m_data_vec = m_atom_data.m_d.vec;
             m_instructions_len = instr_len;
             m_instructions     = new INST[instr_len + 1];
             m_instructions[instr_len].op = OP_END;
 //            std::cout << "NEW PROG" << ((void *) this) << ";; " << atom_data_len << " ;;" << std::endl;
         }
 
-        AtomVec *data_array() const { return m_atom_data.m_d.vec; }
-
-        void set_data_from(AtomVec *av)
+        virtual void to_atom(Atom &a)
         {
-            m_atom_data.m_d.vec->m_len = 0;
-            for (size_t i = 0; i < av->m_len; i++)
-                m_atom_data.m_d.vec->set(i, av->m_data[i]);
+            AtomVec *av = m_gc->allocate_vector(6);
+            av->m_data[0] = Atom(T_SYM, m_gc->new_symbol("BKL-VM-PROG"));
+            av->m_data[1] = Atom(T_STR, m_gc->new_symbol(m_function_info));
+            av->m_data[2] = m_atom_data;
+
+            AtomVec *instr = m_gc->allocate_vector(m_instructions_len);
+            instr->m_len = m_instructions_len;
+            for (size_t i = 0; i < m_instructions_len; i++)
+                instr->m_data[i] = m_instructions[i].to_atom(*m_gc);
+            av->m_data[3].set_vec(instr);
+
+            av->m_data[4] = m_debug_info_map;
+            av->m_data[5] = m_root_env;
+
+            av->m_len = 6;
+
+            a.set_vec(av);
+        }
+
+        void set_root_env(Atom &a, AtomVec *root_regs)
+        {
+            m_root_env = a;
+            m_root_regs = root_regs;
         }
 
         void set_debug_info(Atom &a)
@@ -215,25 +273,24 @@ class PROG : public UserData
             m_instructions[idx] = i;
         }
 
-        virtual std::string type() { return "VM-PROG"; }
-        virtual std::string as_string();
+        virtual std::string type() { return "BKL-VM-PROG"; }
+        virtual std::string as_string(bool pretty = false);
 
         virtual void mark(GC *gc, uint8_t clr)
         {
             UserData::mark(gc, clr);
             gc->mark_atom(m_atom_data);
             gc->mark_atom(m_debug_info_map);
+            gc->mark_atom(m_root_env);
         }
 
         virtual ~PROG()
         {
-            if (m_instructions) delete[] m_instructions;
+            if (m_instructions)
+                delete[] m_instructions;
 //            std::cout << "DEL PROG" << ((void *) this) << std::endl;
         }
 };
-//---------------------------------------------------------------------------
-
-Atom make_prog(GC &gc, Atom prog_info);
 //---------------------------------------------------------------------------
 
 class VMProgStateGuard
@@ -421,7 +478,7 @@ class VM
             }
         }
 
-        Atom eval(Atom at_ud, AtomMap *root_env, AtomVec *args = nullptr);
+        Atom eval(Atom at_ud, AtomVec *args = nullptr);
 };
 //---------------------------------------------------------------------------
 

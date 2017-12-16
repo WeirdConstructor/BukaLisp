@@ -9,7 +9,10 @@
 namespace bukalisp
 {
 //---------------------------------------------------------------------------
+
 class GC;
+
+struct Atom;
 
 class UserData
 {
@@ -25,7 +28,9 @@ class UserData
 
         virtual std::string type() { return "unknown"; }
 
-        virtual std::string as_string()
+        virtual void to_atom(Atom &a) { }
+
+        virtual std::string as_string(bool pretty = false)
         {
             return std::string("#<userdata:unknown>");
         }
@@ -38,6 +43,9 @@ class UserData
         {
         }
 };
+//---------------------------------------------------------------------------
+
+Atom expand_userdata_to_atoms(GC *gc, Atom in);
 //---------------------------------------------------------------------------
 
 }

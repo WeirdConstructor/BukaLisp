@@ -27,18 +27,37 @@
             [v env]))))))
 ;----------------------------------------------------------------------------
 
+(define S1-ROOT-ENV {})
+(define SYNTAXES [])
+(define OPTIMIZED-PRIMS [])
+
+(define add-syntax
+  (lambda (sym fn)
+    (push! SYNTAXES fn)
+    (@!sym S1-ROOT-ENV [syntax: (- (length SYNTAXES) 1)])))
+
+(define add-optimized-prim
+  (lambda (root-env prim-k compile-func)
+    (push! OPTIMIZED-PRIMS compile-func)
+    (let ((var (@prim-k root-env)))
+      (when (nil? var)
+        (error "Unknown primitive to optimize" prim-k))
+      (@!2 var (- (length OPTIMIZED-PRIMS) 1)))))
+
+;----------------------------------------------------------------------------
+
 (define stage-1-transformation-quote-matches
-  {(string->symbol "nil") (lambda (ctx arg T gtx) ['#1#nil])
-   'boolean  (lambda (ctx arg T gtx) ['#1#data arg])
-   'number   (lambda (ctx arg T gtx) ['#1#data arg])
-   'exact    (lambda (ctx arg T gtx) ['#1#data arg])
-   'inexact  (lambda (ctx arg T gtx) ['#1#data arg])
-   'symbol   (lambda (ctx arg T gtx) ['#1#data arg])
-   'keyword  (lambda (ctx arg T gtx) ['#1#data arg])
-   'string   (lambda (ctx arg T gtx) ['#1#data arg])
+  {(string->symbol "nil") (lambda (ctx arg T gtx) ['#s1#nil])
+   'boolean  (lambda (ctx arg T gtx) ['#s1#data arg])
+   'number   (lambda (ctx arg T gtx) ['#s1#data arg])
+   'exact    (lambda (ctx arg T gtx) ['#s1#data arg])
+   'inexact  (lambda (ctx arg T gtx) ['#s1#data arg])
+   'symbol   (lambda (ctx arg T gtx) ['#s1#data arg])
+   'keyword  (lambda (ctx arg T gtx) ['#s1#data arg])
+   'string   (lambda (ctx arg T gtx) ['#s1#data arg])
    'map
      (lambda (ctx arg T gtx)
-       (let ((o-map ['#1#map]))
+       (let ((o-map ['#s1#map]))
          (do-each (k v arg)
            (push!
              o-map
@@ -47,7 +66,7 @@
          o-map))
    'list
      (lambda (ctx arg T gtx)
-       (append '#1#list
+       (append '#s1#list
                (map (lambda (v)
                       (.S1-T-Q gtx ctx v))
                     arg)))})
@@ -99,26 +118,26 @@
 
 (define post-optimize-apply
  (lambda (ctx T gtx apply-tree)
-   (if (and (eqv? (@0 apply-tree)      '#1#apply)
-            (eqv? (@0 (@1 apply-tree)) '#1#prim))
+   (if (and (eqv? (@0 apply-tree)      '#s1#apply)
+            (eqv? (@0 (@1 apply-tree)) '#s1#prim))
      (begin
        (case (@1 (@1 apply-tree))
-         ((list) (.AM gtx (append '#1#list (@2 apply-tree))))
+         ((list) (.AM gtx (append '#s1#list (@2 apply-tree))))
          (else apply-tree)))
      apply-tree)))
 ;----------------------------------------------------------------------------
 
 (define stage-1-transformation-matches
-  {(string->symbol "nil")      (lambda (ctx arg T gtx) ['#1#nil])
-   'boolean  (lambda (ctx arg T gtx) ['#1#data arg])
-   'number   (lambda (ctx arg T gtx) ['#1#data arg])
-   'exact    (lambda (ctx arg T gtx) ['#1#data arg])
-   'inexact  (lambda (ctx arg T gtx) ['#1#data arg])
-   'string   (lambda (ctx arg T gtx) ['#1#data arg])
-   'keyword  (lambda (ctx arg T gtx) ['#1#data arg])
+  {(string->symbol "nil")      (lambda (ctx arg T gtx) ['#s1#nil])
+   'boolean  (lambda (ctx arg T gtx) ['#s1#data arg])
+   'number   (lambda (ctx arg T gtx) ['#s1#data arg])
+   'exact    (lambda (ctx arg T gtx) ['#s1#data arg])
+   'inexact  (lambda (ctx arg T gtx) ['#s1#data arg])
+   'string   (lambda (ctx arg T gtx) ['#s1#data arg])
+   'keyword  (lambda (ctx arg T gtx) ['#s1#data arg])
    'map
      (lambda (ctx arg T gtx)
-       (define o-map ['#1#map])
+       (define o-map ['#s1#map])
        (do-each (k v arg)
          (push! o-map (.AM gtx [(T ctx k) (T ctx v)])))
        o-map)
@@ -130,9 +149,9 @@
            (error (str "Access undefined variable '" arg "'")
                   (last (meta-stack: gtx))))
          (case (@0 value)
-           ((var:)      ['#1#var (@1 value) (@2 value)])
-           ((glob-var:) ['#1#glob-var (@1 value) (@2 value)])
-           ((prim:)     ['#1#prim (@1 value)])
+           ((var:)      ['#s1#var (@1 value) (@2 value)])
+           ((glob-var:) ['#s1#glob-var (@1 value) (@2 value)])
+           ((prim:)     ['#s1#prim (@1 value)])
            ((syntax:)
             (error "Variable contains syntax directive, can't use it here" value))
            ((macro:)
@@ -146,10 +165,10 @@
           (when (> (length arg) 2)
             (error "Get by keyword can only have one argument (the map)"
                    arg))
-          ['#1#get (T ctx (@0 arg)) (T ctx (@1 arg))])
+          ['#s1#get (T ctx (@0 arg)) (T ctx (@1 arg))])
          ((list)
           (post-optimize-apply ctx T gtx
-                               ['#1#apply
+                               ['#s1#apply
                                 (T ctx (@0 arg))
                                 (.AM gtx (map (lambda (v) (T ctx v))
                                               (drop arg 1)))]))
@@ -160,7 +179,8 @@
               (error (str "Access undefined variable '" (@0 arg) "'")
                      (last (meta-stack: gtx))))
             (case (@0 value)
-              ((syntax:) ((@1 value) ctx arg T gtx))
+              ((syntax:)
+                ((@(@1 value) SYNTAXES) ctx arg T gtx))
               ((macro:)
                (let ((transformed
                        (apply (@1 value) (drop arg 1))))
@@ -168,19 +188,19 @@
               ((prim:)
                (if (nil? (@2 value))
                  (post-optimize-apply ctx T gtx
-                                      ['#1#apply
-                                       (.AM gtx ['#1#prim (@1 value)])
+                                      ['#s1#apply
+                                       (.AM gtx ['#s1#prim (@1 value)])
                                        (.AM gtx (map (lambda (v) (T ctx v))
                                                      (drop arg 1)))])
-                 ((@2 value) ctx arg T gtx)))
+                 ((@(@2 value) OPTIMIZED-PRIMS) ctx arg T gtx)))
               ((var:)
-               ['#1#apply
-                (.AM gtx ['#1#var (@1 value) (@2 value)])
+               ['#s1#apply
+                (.AM gtx ['#s1#var (@1 value) (@2 value)])
                 (.AM gtx (map (lambda (v) (T ctx v))
                               (drop arg 1)))])
               ((glob-var:)
-               ['#1#apply
-                (.AM gtx ['#1#glob-var (@1 value) (@2 value)])
+               ['#s1#apply
+                (.AM gtx ['#s1#glob-var (@1 value) (@2 value)])
                 (.AM gtx (map (lambda (v) (T ctx v))
                               (drop arg 1)))])
               (else
@@ -221,7 +241,7 @@
       (T ctx nil)
       (if (= (length exprs) 1)
         (T ctx (@0 exprs))
-        (append '#1#begin
+        (append '#s1#begin
                 (map (lambda (v)
                        (T ctx v))
                      exprs))))))
@@ -250,8 +270,6 @@
           args:          args})
         (error-fn "Function parameter is neither a list or a symbol" params)))))
 ;----------------------------------------------------------------------------
-
-(define S1-ROOT-ENV {})
 
 (define init-root-env
   (lambda (root-env)
@@ -295,22 +313,11 @@
       (@!reg-idx (@" REGS " root-env) content)
       (@!2 var reg-idx))))
 
-(define add-syntax
-  (lambda (sym fn)
-    (@!sym S1-ROOT-ENV [syntax: fn])))
-
-(include "compiler/stage1_syntax.bkl")
-
 (do-each (k v (bkl-primitive-map))
   (@!k S1-ROOT-ENV [prim: k]))
 
-(define add-optimized-prim
-  (lambda (root-env prim-k compile-func)
-    (let ((var (@prim-k root-env)))
-      (when (nil? var)
-        (error "Unknown primitive to optimize" prim-k))
-      (@!2 var compile-func))))
-
 (include "compiler/stage1_opt_prim.bkl")
+
+(include "compiler/stage1_syntax.bkl")
 
 (@!" IS-ROOT-ENV " S1-ROOT-ENV #t)

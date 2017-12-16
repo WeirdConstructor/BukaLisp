@@ -141,11 +141,13 @@ struct AtomVec
     void clear() { m_len = 0; }
 
     void alloc(size_t len);
+    void clear_alloc();
     void init(uint8_t current_gc_color, size_t len);
 
     Atom *first();
     Atom *last();
     void pop();
+    Atom pop_last();
     void push(const Atom &a);
     void unshift(const Atom &a);
     void shift();
@@ -159,7 +161,7 @@ struct AtomVec
 //---------------------------------------------------------------------------
 
 #if WITH_MEM_POOL
-extern MemoryPool<Atom> g_atom_array_pool;
+thread_local extern MemoryPool<Atom> g_atom_array_pool;
 #endif
 
 //---------------------------------------------------------------------------
@@ -723,6 +725,8 @@ class GC
         std::vector<AtomVec *> m_gc_vec_stack;
         std::vector<AtomMap *> m_gc_map_stack;
 
+        AtomVec     *m_free_unallocated_atom_vecs;
+
         AtomVec     *m_tiny_vectors;
         AtomVec     *m_small_vectors;
         AtomVec     *m_medium_vectors;
@@ -936,6 +940,7 @@ class GC
               m_num_new_userdata(0),
               m_num_new_vectors(0),
               m_num_new_maps(0),
+              m_free_unallocated_atom_vecs(nullptr),
               m_root_pool([=](size_t len) { return this->allocate_vector(len); })
         {
             m_root_pool.set_pool(this->allocate_vector(100));
@@ -953,7 +958,9 @@ class GC
         void give_back_vector(AtomVec *cur)
         {
 //          std::cout << "SWEEP VEC " << cur << std::endl;
-            delete cur;
+            cur->clear_alloc();
+            cur->m_gc_next = m_free_unallocated_atom_vecs;
+            m_free_unallocated_atom_vecs = cur;
 //            if (cur->m_alloc >= GC_BIG_VEC_LEN)
 //            {
 //                delete cur;
@@ -1117,9 +1124,15 @@ class GC
 
         AtomVec *allocate_vector(size_t alloc_len)
         {
-            AtomVec *new_vec = nullptr;
+            AtomVec *new_vec = m_free_unallocated_atom_vecs;
+            if (new_vec)
+            {
+                m_free_unallocated_atom_vecs =
+                    m_free_unallocated_atom_vecs->m_gc_next;
+            }
+            else
+                new_vec = new AtomVec;
 
-            new_vec = new AtomVec;
             new_vec->alloc(alloc_len);
 //            if (alloc_len > GC_MEDIUM_VEC_LEN)
 //            {
@@ -1306,7 +1319,7 @@ class GC
             //---------------------------------------------------------------------------
 
             virtual std::string type()      { return "MAP-ITER"; }
-            virtual std::string as_string() { return "#<map-iterator>"; }
+            virtual std::string as_string(bool pretty = false) { return "#<map-iterator>"; }
 
             //---------------------------------------------------------------------------
 
@@ -1372,7 +1385,7 @@ class GC
             Atom &value() { return m_iterator ? MAP_ITER_VAL(m_iterator) : m_nil; }
 
             virtual std::string type()      { return "MAP-ITER"; }
-            virtual std::string as_string() { return "#<map-iterator>"; }
+            virtual std::string as_string(bool pretty = false) { return "#<map-iterator>"; }
 
             virtual void mark(GC *gc, uint8_t clr)
             {
@@ -1411,7 +1424,7 @@ class RegRowsReference : public UserData
             AtomVec **rr2);
 
         virtual std::string type()      { return "REG-ROWS-REF"; }
-        virtual std::string as_string() { return "#<reg-rows-reference>"; }
+        virtual std::string as_string(bool pretty = false) { return "#<reg-rows-reference>"; }
 
         virtual void mark(GC *gc, uint8_t clr);
 

@@ -29,6 +29,10 @@ class SEX_Builder
             m_dbg_line       = line;
         }
 
+        virtual void push_meta(int64_t idx)                  = 0;
+
+        virtual void label(int64_t lbl_id)                   = 0;
+        virtual void next_label(int64_t lbl_id)              = 0;
         virtual void start_list()                            = 0;
         virtual void end_list()                              = 0;
 
@@ -193,14 +197,49 @@ class Parser
                     if (t.m_text[t.m_text.size() - 1] == ':')
                     {
                         if (t.m_text[0] == ':')
-                            m_builder->atom_keyword(
-                                t.m_text.substr(1, t.m_text.size() - 2));
+                            M_BUILDER(atom_keyword(
+                                t.m_text.substr(1, t.m_text.size() - 2)));
                         else
-                            m_builder->atom_keyword(
-                                t.m_text.substr(0, t.m_text.size() - 1));
+                            M_BUILDER(atom_keyword(
+                                t.m_text.substr(0, t.m_text.size() - 1)));
                     }
                     else if (t.m_text[0] == ':')
-                        m_builder->atom_keyword(t.m_text.substr(1));
+                        M_BUILDER(atom_keyword(t.m_text.substr(1)));
+                    else if (t.m_text == "@^")
+                    {
+                        t = m_tok.peek();
+                        if (t.m_token_id != TOK_INT)
+                        {
+                            log_error("Can only set an integer meta index.", t);
+                            return false;
+                        }
+                        m_tok.next();
+                        int64_t nxt_meta_idx = t.m_num.i;
+                        if (nxt_meta_idx < 0)
+                        {
+                            log_error("Can only set an positive integer meta index.", t);
+                            return false;
+                        }
+                        M_BUILDER(push_meta(nxt_meta_idx));
+                        return parse();
+                    }
+                    else if (t.m_text == "#LBL=" || t.m_text == "#LBL#")
+                    {
+                        // FIXME: Should maybe handle labels in parse() directly!
+                        bool is_next_lbl = t.m_text == "#LBL=";
+
+                        t = m_tok.peek();
+                        m_tok.next();
+                        int64_t lbl_id = stoll(t.m_text, 0, 10);
+
+                        if (is_next_lbl)
+                        {
+                            M_BUILDER(next_label(lbl_id));
+                            return parse();
+                        }
+                        else
+                            M_BUILDER(label(lbl_id));
+                    }
                     else if (t.m_text == "#t" || t.m_text == "#true")
                         M_BUILDER(atom_bool(true));
                     else if (t.m_text == "#f" || t.m_text == "#false")
