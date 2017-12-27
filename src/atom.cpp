@@ -4,6 +4,7 @@
 #include "atom.h"
 #include "atom_printer.h"
 #include <sstream>
+#include <algorithm>
 #include "parse_util.h"
 
 
@@ -138,6 +139,27 @@ void Atom::set(size_t i, const Atom &v)
         m_d.vec->set(i, v);
     else if (m_type == T_MAP)
         m_d.map->set(Atom(T_INT, i), v);
+}
+//---------------------------------------------------------------------------
+
+bool Atom::is_lt(const Atom &other) const
+{
+    if (m_type == other.m_type)
+    {
+        switch (m_type)
+        {
+            case T_INT:  return m_d.i < other.m_d.i;
+            case T_DBL:  return m_d.d < other.m_d.d;
+            case T_BOOL: return m_d.b < other.m_d.b;
+            case T_STR:
+            case T_KW:
+            case T_SYNTAX:
+            case T_SYM:
+                return m_d.sym->m_str < other.m_d.sym->m_str;
+        }
+    }
+    else
+        return this->id() < other.id();
 }
 //---------------------------------------------------------------------------
 
@@ -332,6 +354,8 @@ size_t AtomHash::operator()(const Atom &a) const
 
 void AtomVec::alloc(size_t len)
 {
+    if (len <= 0) len = 1;
+
     m_alloc = len;
     m_len   = 0;
 #if WITH_MEM_POOL
@@ -394,6 +418,24 @@ Atom AtomVec::pop_last()
 }
 //---------------------------------------------------------------------------
 
+void AtomVec::sort()
+{
+    std::sort(
+        m_data,
+        m_data + m_len,
+        [](const Atom &a, const Atom &b) { return a.is_lt(b); });
+}
+//---------------------------------------------------------------------------
+
+void AtomVec::sort_stable()
+{
+    std::stable_sort(
+        m_data,
+        m_data + m_len,
+        [](const Atom &a, const Atom &b) { return a.is_lt(b); });
+}
+//---------------------------------------------------------------------------
+
 void AtomVec::set(size_t idx, const Atom &a)
 {
     if (idx >= m_len)
@@ -424,8 +466,12 @@ void AtomVec::unshift(const Atom &a)
 
 void AtomVec::shift()
 {
+    if (m_len <= 0)
+        return;
+
     for (size_t i = 1; i < m_len; i++)
         m_data[i - 1] = m_data[i];
+
     m_len--;
 }
 //---------------------------------------------------------------------------

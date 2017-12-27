@@ -150,6 +150,12 @@ class MemoryPool
 
         Type *allocate(size_t block_len)
         {
+            // XXX TESTING:
+#if TEST_DISABLE_MEM_POOL_INTERNAL
+            return new Type[block_len];
+#endif
+
+
 //            std::lock_guard<std::mutex> lock(m_global_lock);
             size_t type_block_byte_len = sizeof(Type) * block_len;
             size_t block_byte_len      = sizeof(Descriptor) + type_block_byte_len;
@@ -191,6 +197,10 @@ class MemoryPool
 
         void free(Type *mem)
         {
+#if TEST_DISABLE_MEM_POOL_INTERNAL
+            delete[] mem;
+            return;
+#endif
 //            std::lock_guard<std::mutex> lock(m_global_lock);
             Descriptor *d =
                 (Descriptor *) (((char *) mem) - sizeof(Descriptor));

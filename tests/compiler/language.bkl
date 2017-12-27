@@ -1,4 +1,3 @@
-(displayln AAA:)
 (displayln (bkl-gc-statistics))
 ;(include "compiler.bkl")
 
@@ -27,7 +26,6 @@
       (bkl-set-meta to 0 (@0 (bkl-get-meta src))))
     to))
 
-(displayln YYY:)
 (define T-env
   (lambda (code expected root-env)
     (set! code (DI! code [code]))
@@ -45,6 +43,7 @@
     (T-env code expected {})))
 ;----------------------------------------------------------------------------
 
+;(error L:)
 ;(PUSH-DEBUG)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; TODO
@@ -1128,7 +1127,9 @@
       (x 1 2 3))
    [1 [2 3]])
 
-; Test using a known environemt which is mutatable:
+;; Test using a known environemt which is mutatable:
+; XXX FIXME: Broken when I serialized the main run program, or maybe
+; earlier?!
 (let ((my-env {}))
   (T-env '(begin (define x 13.3)) 13.3 my-env)
   (T-env '(begin x)               13.3 my-env)
@@ -2434,8 +2435,10 @@
     (invoke-compiler PROG "serializer test" #t {}))
   (let ((ser-t-prog-1 (userdata->atom t-prog-1))
         (ser-t-prog-s (write-str ser-t-prog-1))
-        (ser-t-prog-o (first (read-str ser-t-prog-s))))
-    (unless (equal? ser-t-prog-1 ser-t-prog-o)
+        (ser-t-prog-o (first (read-str ser-t-prog-s)))
+        (ser-in-s ser-t-prog-s)
+        (ser-out-s (write-str ser-t-prog-o)))
+    (unless (equal? ser-in-s ser-out-s)
       (error "Serializing a programm did not work!" [ser-t-prog-1 ser-t-prog-o]))))
 
 (begin
@@ -2445,7 +2448,9 @@
   (define comp-prog-ud (userdata->atom comp-prog))
   (define comp-prog-ud-s1 (write-str comp-prog-ud))
   (define comp-prog-ud-r1 (first (read-str comp-prog-ud-s1)))
-  (unless (equal? comp-prog-ud comp-prog-ud-r1)
+;  (sys-write-file "x1.bkld" (pp-str comp-prog-ud))
+;  (sys-write-file "x2.bkld" (pp-str comp-prog-ud-r1))
+  (unless (equal? (pp-str comp-prog-ud) (pp-str comp-prog-ud-r1))
     (error "Can't serialize compiled compiler!")))
 
 ALL-OK:

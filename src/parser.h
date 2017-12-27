@@ -29,8 +29,6 @@ class SEX_Builder
             m_dbg_line       = line;
         }
 
-        virtual void push_meta(int64_t idx)                  = 0;
-
         virtual void label(int64_t lbl_id)                   = 0;
         virtual void next_label(int64_t lbl_id)              = 0;
         virtual void start_list()                            = 0;
@@ -205,6 +203,7 @@ class Parser
                     }
                     else if (t.m_text[0] == ':')
                         M_BUILDER(atom_keyword(t.m_text.substr(1)));
+
                     else if (t.m_text == "@^")
                     {
                         t = m_tok.peek();
@@ -220,8 +219,18 @@ class Parser
                             log_error("Can only set an positive integer meta index.", t);
                             return false;
                         }
-                        M_BUILDER(push_meta(nxt_meta_idx));
-                        return parse();
+
+                        debug_token(t);
+                        M_BUILDER(start_list());
+                        M_BUILDER(atom_symbol("bkl-set-meta"));
+                        bool b = parse();
+                        if (!b) return false;
+                        M_BUILDER(atom_int(nxt_meta_idx));
+                        b = parse();
+                        debug_token(t);
+                        M_BUILDER(end_list());
+
+                        return b;
                     }
                     else if (t.m_text == "#LBL=" || t.m_text == "#LBL#")
                     {

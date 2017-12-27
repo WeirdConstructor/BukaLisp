@@ -887,6 +887,12 @@ START_PRIM()
 END_PRIM(userdata->atom)
 
 START_PRIM()
+    REQ_EQ_ARGC(atom->userdata, 1);
+    AtomMap *refmap = m_rt->m_gc.allocate_map();
+    out = PROG::repack_expanded_userdata(m_rt->m_gc, A0, refmap);
+END_PRIM(atom->userdata)
+
+START_PRIM()
     REQ_EQ_ARGC(size, 1);
     out = Atom(T_INT, (int64_t) A0.size());
 END_PRIM_DOC(size,

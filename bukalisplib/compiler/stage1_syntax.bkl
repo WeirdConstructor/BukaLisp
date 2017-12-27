@@ -420,7 +420,8 @@
     (displayln MACRO-EVAL: args)
     (define macro-func
       (eval (.AM gtx (append ['lambda (drop params 1)]
-                             (drop args 2)))))
+                             (drop args 2)))
+            {}))
     (@!macro-name (env: ctx)
                   [macro: macro-func macro-name])
     (.AM gtx ['#s1#nil])))

@@ -699,9 +699,7 @@
               (.to-vm-prog lambda-frame
                            lambda-pad
                            (@0 lambda-spec)
-                           (@1 (bkl-get-meta
-                                 (@" REGS "
-                                   (root-env: gtx))))))
+                           (@" REGS " (root-env: gtx))))
             (.store-static-data
               (F: ctx)
               [is-coroutine arity creator-upv-adrs]))

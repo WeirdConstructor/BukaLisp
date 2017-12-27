@@ -144,6 +144,9 @@ struct AtomVec
     void clear_alloc();
     void init(uint8_t current_gc_color, size_t len);
 
+    void sort();
+    void sort_stable();
+
     Atom *first();
     Atom *last();
     void pop();
@@ -334,6 +337,8 @@ struct Atom
 
     Atom meta() const;
 
+    bool is_lt(const Atom &other) const;
+
     void add_equal_compare(
         std::vector<std::pair<Atom, Atom>> &to_compare,
         const Atom &a,
@@ -428,7 +433,7 @@ struct Atom
         return false;
     }
 
-    int64_t id()
+    int64_t id() const
     {
         // TODO use X macro
         switch (m_type)

@@ -209,14 +209,14 @@ class PROG : public UserData
 
         Atom     m_debug_info_map;
         Atom     m_atom_data;
-        Atom     m_root_env;
         INST    *m_instructions;
         size_t   m_instructions_len;
         std::string m_function_info;
         GC      *m_gc;
 
     public:
-        static Atom create_prog_from_info(GC &gc, Atom prog_info);
+        static Atom create_prog_from_info(GC &gc, Atom prog_info, AtomMap *refmap = nullptr);
+        static Atom repack_expanded_userdata(GC &gc, Atom a, AtomMap *refmap);
 
         PROG()
             : m_instructions(nullptr), m_gc(nullptr), m_instructions_len(0)
@@ -248,16 +248,15 @@ class PROG : public UserData
             av->m_data[3].set_vec(instr);
 
             av->m_data[4] = m_debug_info_map;
-            av->m_data[5] = m_root_env;
+            av->m_data[5].set_vec(m_root_regs);
 
             av->m_len = 6;
 
             a.set_vec(av);
         }
 
-        void set_root_env(Atom &a, AtomVec *root_regs)
+        void set_root_env(AtomVec *root_regs)
         {
-            m_root_env = a;
             m_root_regs = root_regs;
         }
 
@@ -281,7 +280,7 @@ class PROG : public UserData
             UserData::mark(gc, clr);
             gc->mark_atom(m_atom_data);
             gc->mark_atom(m_debug_info_map);
-            gc->mark_atom(m_root_env);
+            gc->mark_atom(Atom(T_VEC, m_root_regs));
         }
 
         virtual ~PROG()

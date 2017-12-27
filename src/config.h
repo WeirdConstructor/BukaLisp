@@ -11,6 +11,8 @@
 // programs this might mean less memory usage.
 #define WITH_MEM_POOL           1
 
+#define TEST_DISABLE_MEM_POOL_INTERNAL 1
+
 //---------------------------------------------------------------------------
 
 // If you enable WITH_STD_UNORDERED_MAP AtomMap will use std::unordered_map.

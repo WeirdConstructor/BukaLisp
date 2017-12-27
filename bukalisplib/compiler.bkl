@@ -14,6 +14,7 @@
 ;    (displayln CALL-COMPILER: name STATISTICS: (bkl-gc-statistics))
     (unless (@" IS-ROOT-ENV " root-env)
       (init-root-env root-env))
+    (@!BKL-ROOT-ENV-ID: root-env (atom-id root-env))
     ; Wrap up eval-syntax into a closure, to hide it's syntactic nature
     ; from callers more throughout.
 ;    (when (eqv? (@0 (@'eval root-env)) prim:)
@@ -40,6 +41,7 @@
 ;        (set-root-env-var root-env 'eval eval-closure)))
     ; Attach the root env map as meta to the root env registers, so we
     ; have a chance to recover it in the VM later.
+;    (displayln COMPILING: name)
     (bkl-set-meta (@" REGS " root-env) 1 root-env)
     (let ((s1-ctx   {env:         root-env
                      include-dir: "bukalisplib"})
@@ -60,18 +62,51 @@
                   env:          {}})
             (adr (stage2-transformer s1prog ctx gtx))
             (P (P: ctx)))
+        #;(displayln REGS: (pp-str (root-env: gtx)))
         (.op-return P adr)
-        (let ((prog (.to-vm-prog (F: ctx) P name root-env)))
-          (when *DEBUG* (displayln PROG: prog))
+        (let ((prog (.to-vm-prog (F: ctx) P name (@" REGS " (root-env: gtx)))))
+          #;(when *DEBUG* (displayln PROG: prog))
           (unless (or (eqv? name ".\\bukalisplib\\compiler.bkl")
-                      (eqv? (substring name 0 1) "<"))
-            (let ((comp-at (userdata->atom prog)))
-              (sys-write-file
-                (str name ".bklc")
-                (pp-str comp-at))))
+                      (eqv? (substring name 0 1) "<")
+                      (eqv? name "bukalisp-std")
+                      (eqv? (str name) "x"))
+            #;(sys-write-file "root-env.bkld" (root-env: gtx))
+            #;(sys-write-file "root-env2.bkld" root-env)
+            #;(displayln RE-SERIALIZING-PROG: name)
+            (let ((comp-at (userdata->atom prog))
+                  (prog-2  (atom->userdata comp-at)))
+              nil)
+            #;(displayln RE-SERIALIZING-PROG-DONE: name))
           (if only-compile?
             prog
             (bkl-run-vm prog)))))))
+
+;              (displayln XX2:)
+;              (sys-write-file
+;                (str name ".bklc3")
+;                (pp-str prog-2))
+;              (displayln XX:)
+;              (sys-write-file
+;                (str name ".bklc4")
+;                (pp-str prog))
+;              (displayln XX3:)
+;              (sys-write-file
+;                (str name ".bklc2")
+;                (pp-str (userdata->atom prog-2)))
+;              (displayln XX4:)
+;              (sys-write-file
+;                (str name ".bklc")
+;                (pp-str comp-at))
+              #;(let ((fcont (sys-slurp-file (str name ".bklc")))
+                    (dat   (first (read-str fcont)))
+                    (dat2  (userdata->atom (bkl-make-vm-prog dat))))
+                (sys-write-file
+                  (str name ".bklcX")
+                  (pp-str dat))
+                (sys-write-file
+                  (str name ".bklcX2")
+                  (pp-str dat2)))
+              #;(set! prog prog-2)
 ;----------------------------------------------------------------------------
 
 (displayln END-COMPILER-COMPILE:)

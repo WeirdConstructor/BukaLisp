@@ -29,6 +29,7 @@
         (length (code: self)))
 
       ($define! self (to-vm-prog-code)
+        (push! (code: self) [END: 0 0 0 0 0 0 0 0])
         (code: self))
 
       ($define! self (to-vm-prog-debug-info)

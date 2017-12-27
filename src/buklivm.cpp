@@ -27,7 +27,116 @@ std::string PROG::as_string(bool pretty)
 }
 //---------------------------------------------------------------------------
 
-Atom PROG::create_prog_from_info(GC &gc, Atom prog_info)
+Atom PROG::repack_expanded_userdata(GC &gc, Atom a, AtomMap *refmap)
+{
+    if (refmap->at(a).m_type != T_NIL)
+        return refmap->at(a);
+
+    if (a.m_type == T_VEC)
+    {
+        if (a.at(0).m_type == T_SYM)
+        {
+            auto first = a.at(0).m_d.sym->m_str;
+
+            if (first == "BKL-VM-PROG")
+                return PROG::create_prog_from_info(gc, a, refmap);
+            else if (first == "BKL-META")
+            {
+                Atom a_meta = a.at(1);
+                Atom a_data = a.at(2);
+
+                if (a_meta.m_type == T_VEC)
+                {
+                    if (a_data.m_type == T_VEC)
+                    {
+                        Atom out(T_VEC, gc.allocate_vector(a_data.m_d.vec->m_len));
+                        refmap->set(a, out);
+                        Atom meta = repack_expanded_userdata(gc, a_meta, refmap);
+                        out.m_d.vec->m_meta = meta.m_d.vec;
+                        Atom data = repack_expanded_userdata(gc, a_data, refmap);
+
+                        for (size_t i = 0; i < data.m_d.vec->m_len; i++)
+                            out.m_d.vec->set(i, data.m_d.vec->m_data[i]);
+
+                        return out;
+                    }
+                    else if (a_data.m_type = T_MAP)
+                    {
+                        Atom out(T_MAP, gc.allocate_map());
+                        refmap->set(a, out);
+                        Atom meta = repack_expanded_userdata(gc, a_meta, refmap);
+                        out.m_d.map->m_meta = meta.m_d.vec;
+                        Atom data = repack_expanded_userdata(gc, a_data, refmap);
+
+                        ATOM_MAP_FOR(i, data.m_d.map)
+                        {
+                            out.m_d.map->set(MAP_ITER_KEY(i), MAP_ITER_VAL(i));
+                        }
+
+                        return out;
+                    }
+                    else
+                        throw BukaLISPException(
+                            "'bkl-make-vm-prog' bad BKL-META, "
+                            "did not assign meta to a vector or map!");
+                }
+                else
+                {
+                    throw BukaLISPException(
+                        "'bkl-make-vm-prog' bad BKL-META, "
+                        "did not assign a vector!");
+                }
+            }
+            else if (first == "BKL-CLOSURE")
+            {
+                Atom out(T_CLOS, gc.clone_vector(a.m_d.vec));
+                refmap->set(a, out);
+
+                for (size_t i = 0; i < out.m_d.vec->m_len; i++)
+                {
+                    out.m_d.vec->m_data[i] =
+                        repack_expanded_userdata(gc, a.m_d.vec->m_data[i], refmap);
+                }
+
+                out.m_d.vec->shift(); // remove BKL-CLOSURE
+
+                return out;
+            }
+
+            // vvv--- fall through to loop ---vvv
+        }
+
+        Atom out(T_VEC, gc.clone_vector(a.m_d.vec));
+        refmap->set(a, out);
+
+        for (size_t i = 0; i < out.m_d.vec->m_len; i++)
+        {
+            out.m_d.vec->m_data[i] =
+                repack_expanded_userdata(gc, a.m_d.vec->m_data[i], refmap);
+        }
+
+        return out;
+    }
+    else if (a.m_type == T_MAP)
+    {
+        Atom out(T_MAP, gc.allocate_map());
+        refmap->set(a, out);
+
+        ATOM_MAP_FOR(i, a.m_d.map)
+        {
+            Atom key = repack_expanded_userdata(gc, MAP_ITER_KEY(i), refmap);
+            Atom val = repack_expanded_userdata(gc, MAP_ITER_VAL(i), refmap);
+            out.m_d.map->set(key, val);
+        }
+
+        return out;
+    }
+
+    return a;
+}
+//---------------------------------------------------------------------------
+
+Atom PROG::create_prog_from_info(GC &gc, Atom prog_info, AtomMap *refmap)
 {
     if (prog_info.m_type != T_VEC)
         throw BukaLISPException(
@@ -48,7 +157,9 @@ Atom PROG::create_prog_from_info(GC &gc, Atom prog_info)
     Atom data      = prog_info.m_d.vec->m_data[2];
     Atom prog      = prog_info.m_d.vec->m_data[3];
     Atom debug     = prog_info.m_d.vec->m_data[4];
-    Atom root_env  = prog_info.m_d.vec->m_data[5];
+    Atom root_regs = prog_info.m_d.vec->m_data[5];
+
+//    std::cout << "PROG START " << func_info.to_display_str() << " RooT-ID:" << root_regs.id() << std::endl;
 
     if (data.m_type != T_VEC)
         throw BukaLISPException("'bkl-make-vm-prog' bad data element @2");
@@ -56,72 +167,59 @@ Atom PROG::create_prog_from_info(GC &gc, Atom prog_info)
     if (prog.m_type != T_VEC)
         throw BukaLISPException("'bkl-make-vm-prog' bad code element @3");
 
+    PROG *new_prog = new PROG(gc, data.m_d.vec->m_len, prog.m_d.vec->m_len);
+    gc.reg_userdata(new_prog);
+
+    Atom ret(T_UD);
+    ret.m_d.ud = new_prog;
+    if (refmap)
+        refmap->set(prog_info, ret);
+
+    if (refmap)
+    {
+        debug     = repack_expanded_userdata(gc, debug, refmap);
+        root_regs = repack_expanded_userdata(gc, root_regs, refmap);
+    }
+
     if (debug.m_type != T_MAP)
         throw BukaLISPException("'bkl-make-vm-prog' bad debug element @4");
 
-    if (root_env.m_type != T_MAP)
-        throw BukaLISPException("'bkl-make-vm-prog' bad root-env element @5");
-
-    PROG *new_prog =
-        new PROG(gc,
-                 data.m_d.vec->m_len,
-                 prog.m_d.vec->m_len + 1);
-    gc.reg_userdata(new_prog);
-
-    Atom root_regs =
-        root_env.m_d.map->at(Atom(T_STR, gc.new_symbol(" REGS ")));
-
     if (root_regs.m_type != T_VEC)
-        throw BukaLISPException(
-            "'bkl-make-vm-prog' root-env REGS needs to be a vector");
+        throw BukaLISPException("'bkl-make-vm-prog' bad root-regs element @5");
 
-    new_prog->set_root_env(root_env, root_regs.m_d.vec);
+    if (!root_regs.m_d.vec->m_meta)
+        throw BukaLISPException("'bkl-make-vm-prog' root regs dont have meta");
+
+    new_prog->set_root_env(root_regs.m_d.vec);
     new_prog->set_debug_info(debug);
-    new_prog->m_function_info = func_info.to_write_str();
+    new_prog->m_function_info = func_info.to_display_str();
 
-    for (size_t i = 0; i < data.m_d.vec->m_len; i++)
+    if (refmap)
     {
-        Atom d = data.m_d.vec->m_data[i];
-
-        if (   d.m_type == T_VEC
-            && d.at(0).m_type == T_SYM
-            && d.at(0).m_d.sym->m_str == "BKL-VM-PROG")
-            d = PROG::create_prog_from_info(gc, d);
-        else if (   d.m_type == T_VEC
-                 && d.at(0).m_type == T_SYM
-                 && d.at(0).m_d.sym->m_str == "BKL-CLOSURE")
+        for (size_t i = 0; i < data.m_d.vec->m_len; i++)
         {
-            d.m_d.vec->shift();
-            d.m_type = T_CLOS;
+            Atom d =
+                PROG::repack_expanded_userdata(
+                    gc, data.m_d.vec->m_data[i], refmap);
+            new_prog->m_atom_data.m_d.vec->set(i, d);
         }
-
-        new_prog->m_atom_data.m_d.vec->set(i, d);
+    }
+    else
+    {
+        for (size_t i = 0; i < data.m_d.vec->m_len; i++)
+        {
+            new_prog->m_atom_data.m_d.vec->set(i, data.m_d.vec->m_data[i]);
+        }
     }
 
-    for (size_t i = 0; i < prog.m_d.vec->m_len + 1; i++)
+    for (size_t i = 0; i < prog.m_d.vec->m_len; i++)
     {
         INST instr;
-        if (i == (prog.m_d.vec->m_len))
-        {
-            instr.op = OP_END;
-            instr.o  = 0;
-            instr.oe = 0;
-            instr.a  = 0;
-            instr.ae = 0;
-            instr.b  = 0;
-            instr.be = 0;
-            instr.c  = 0;
-            instr.ce = 0;
-        }
-        else
-            instr.from_atom(prog.m_d.vec->m_data[i]);
-
+        instr.from_atom(prog.m_d.vec->m_data[i]);
         new_prog->set(i, instr);
     }
 
-    Atom ud(T_UD);
-    ud.m_d.ud = new_prog;
-    return ud;
+    return ret;
 }
 //---------------------------------------------------------------------------
 
@@ -589,8 +687,6 @@ Atom VM::eval(Atom callable, AtomVec *args)
     {
         while (m_pc->op != OP_END)
         {
-//            INST &PC = *m_pc;
-
             if (m_trace)
             {
                 cout << "VMTRC FRMS(" << cont_stack->m_len << "): ";
@@ -844,8 +940,11 @@ Atom VM::eval(Atom callable, AtomVec *args)
 
                 case OP_NEW_UPV:
                 {
+                    E_SET_CHECK_REALLOC(A, A);
+                    E_SET_CHECK_REALLOC(O, O);
+
                     E_GET(tmp, A);
-                    Atom &val = *tmp;
+                    Atom val = *tmp;
                     if (PE_O != REG_ROW_UPV)
                         error("Can't set upvalue on non upvalue register row",
                               Atom(T_INT, PE_O));

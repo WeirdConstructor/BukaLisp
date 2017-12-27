@@ -69,7 +69,7 @@ void write_simple_atom(const Atom &a, std::ostream &o, bool pretty)
 }
 //---------------------------------------------------------------------------
 
-void fill_ref_map(const Atom &a, AtomMap &refmap, AtomMap &idxmap, int64_t &curidx)
+void fill_ref_map(const Atom &a, AtomMap &refmap, AtomMap &idxmap, int64_t &curidx, bool ordered_maps)
 {
     switch (a.m_type)
     {
@@ -87,7 +87,7 @@ void fill_ref_map(const Atom &a, AtomMap &refmap, AtomMap &idxmap, int64_t &curi
             AtomVec &v = *a.m_d.vec;
             for (size_t i = 0; i < v.m_len; i++)
             {
-                fill_ref_map(v.m_data[i], refmap, idxmap, curidx);
+                fill_ref_map(v.m_data[i], refmap, idxmap, curidx, ordered_maps);
             }
             break;
         }
@@ -102,10 +102,28 @@ void fill_ref_map(const Atom &a, AtomMap &refmap, AtomMap &idxmap, int64_t &curi
             else
                 refmap.set(a, Atom(T_INT, 1));
 
-            ATOM_MAP_FOR(i, a.m_d.map)
+            if (ordered_maps)
             {
-                fill_ref_map(MAP_ITER_KEY(i), refmap, idxmap, curidx);
-                fill_ref_map(MAP_ITER_VAL(i), refmap, idxmap, curidx);
+                AtomVec map_keys;
+                ATOM_MAP_FOR(i, a.m_d.map)
+                {
+                    map_keys.push(MAP_ITER_KEY(i));
+                }
+                map_keys.sort();
+                for (size_t i = 0; i < map_keys.m_len; i++)
+                {
+                    fill_ref_map(map_keys.m_data[i], refmap, idxmap, curidx, ordered_maps);
+                    Atom val = a.m_d.map->at(map_keys.m_data[i]);
+                    fill_ref_map(val, refmap, idxmap, curidx, ordered_maps);
+                }
+            }
+            else
+            {
+                ATOM_MAP_FOR(i, a.m_d.map)
+                {
+                    fill_ref_map(MAP_ITER_KEY(i), refmap, idxmap, curidx, ordered_maps);
+                    fill_ref_map(MAP_ITER_VAL(i), refmap, idxmap, curidx, ordered_maps);
+                }
             }
             break;
         }
@@ -179,7 +197,7 @@ void write_atom(const Atom &a, std::ostream &o)
     AtomMap m;
     AtomMap i;
     int64_t idx = 1;
-    fill_ref_map(a, m, i, idx);
+    fill_ref_map(a, m, i, idx, false);
     write_atom(a, o, i);
 }
 //---------------------------------------------------------------------------
@@ -205,13 +223,13 @@ void write_atom_pp_rec(const Atom &a, std::stringstream &o, size_t indent, AtomM
     {
         case T_VEC:
         {
-            PRINT_INDEX_OR_BREAK(idxmap, a);
-
             if (a.size() <= 12)
             {
-                write_atom(a, o);
+                write_atom(a, o, idxmap);
                 return;
             }
+
+            PRINT_INDEX_OR_BREAK(idxmap, a);
 
             AtomVec &v = *a.m_d.vec;
             o << "(";
@@ -246,34 +264,45 @@ void write_atom_pp_rec(const Atom &a, std::stringstream &o, size_t indent, AtomM
         }
         case T_MAP:
         {
-            PRINT_INDEX_OR_BREAK(idxmap, a);
-
             if (a.size() <= 6)
             {
-                write_atom(a, o);
+                write_atom(a, o, idxmap);
                 return;
             }
+
+            PRINT_INDEX_OR_BREAK(idxmap, a);
 
             bool is_first = true;
             o << "{";
             indent += 2;
+
+            AtomVec map_keys;
             ATOM_MAP_FOR(p, a.m_d.map)
             {
+                map_keys.push(MAP_ITER_KEY(p));
+            }
+            map_keys.sort();
+
+            for (size_t ki = 0; ki < map_keys.m_len; ki++)
+            {
+                Atom key = map_keys.m_data[ki];
+                Atom val = a.m_d.map->at(key);
+
                 o << "\n";
                 print_indent(o, indent);
-                write_atom_pp_rec(MAP_ITER_KEY(p), o, indent, idxmap);
-                if (!MAP_ITER_KEY(p).is_simple())
+                write_atom_pp_rec(key, o, indent, idxmap);
+                if (!key.is_simple())
                 {
                     o << "\n";
                     print_indent(o, indent);
-                    write_atom_pp_rec(MAP_ITER_VAL(p), o, indent, idxmap);
+                    write_atom_pp_rec(val, o, indent, idxmap);
                 }
                 else
                 {
                     o << " ";
-                    size_t fs = MAP_ITER_KEY(p).size();
+                    size_t fs = key.size();
                     indent += fs + 1;
-                    write_atom_pp_rec(MAP_ITER_VAL(p), o, indent, idxmap);
+                    write_atom_pp_rec(val, o, indent, idxmap);
                     indent -= fs + 1;
                 }
             }
@@ -296,7 +325,7 @@ std::string write_atom_pp(const Atom &a)
         AtomMap m;
         AtomMap i;
         int64_t idx = 1;
-        fill_ref_map(a, m, i, idx);
+        fill_ref_map(a, m, i, idx, true);
         write_atom_pp_rec(a, ss, 0, i);
     }
     else               write_atom(a, ss);
