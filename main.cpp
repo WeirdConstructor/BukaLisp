@@ -1177,6 +1177,12 @@ int main(int argc, char *argv[])
            bukalisp_modules.push_back(new BukaLISPModule(init_httplib()));
            bukalisp_modules.push_back(new BukaLISPModule(init_ev_loop_lib()));
            bukalisp_modules.push_back(new BukaLISPModule(init_costraenglib()));
+
+           auto load_vm_modules_inst = [&](Instance &inst)
+           {
+               for (auto &mod : bukalisp_modules)
+                   inst.load_module(mod);
+           };
            auto load_vm_modules = [&](VM &vm)
            {
                for (auto &mod : bukalisp_modules)
@@ -1184,6 +1190,7 @@ int main(int argc, char *argv[])
            };
 
 #       else
+           auto load_vm_modules_inst = [&](Instance &inst) -> void { };
            auto load_vm_modules = [&](VM &vm) -> void { };
 #       endif
 
@@ -1387,6 +1394,7 @@ int main(int argc, char *argv[])
         else if (!input_file_path.empty())
         {
             Instance inst;
+            load_vm_modules_inst(inst);
 
             try
             {
@@ -1430,6 +1438,7 @@ int main(int argc, char *argv[])
         else
         {
             Instance inst;
+            load_vm_modules_inst(inst);
 
             try
             {

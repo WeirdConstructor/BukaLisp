@@ -251,6 +251,7 @@ class Instance
         void load_bootstrapped_compiler_from_disk();
         Atom execute_string(const std::string &line, AtomMap *root_env);
         Atom execute_file(const std::string &filepath);
+        void load_module(BukaLISPModule *mod);
 
         ValueFactoryPtr create_value_factory()
         {
