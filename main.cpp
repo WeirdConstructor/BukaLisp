@@ -1128,13 +1128,14 @@ int main(int argc, char *argv[])
         std::string input_file_path;
         std::string last_debug_sym;
 
-        bool tests      = false;
-        bool interpret  = false;
-        bool i_trace    = false;
-        bool i_force_gc = false;
-        bool i_trace_vm = false;
-        bool do_stat    = false;
-        bool bootstrap  = false;
+        bool tests              = false;
+        bool interpret          = false;
+        bool i_trace            = false;
+        bool i_force_gc         = false;
+        bool i_trace_vm         = false;
+        bool do_stat            = false;
+        bool bootstrap          = false;
+        bool write_compiler     = false;
 
         for (int i = 1; i < argc; i++)
         {
@@ -1153,6 +1154,11 @@ int main(int argc, char *argv[])
                 do_stat = true;
             else if (arg == "-b")
                 bootstrap = true;
+            else if (arg == "-B")
+            {
+                bootstrap = true;
+                write_compiler = true;
+            }
             else if (arg[0] == '-')
             {
                 std::cerr << "unknown option: " << argv[i] << std::endl;
@@ -1312,13 +1318,30 @@ int main(int argc, char *argv[])
                         root_env_c,
                         true);
 //                std::cout << "Compiler env: " << Atom(T_MAP, root_env_c).to_write_str(true) << std::endl;
-                compiler = vm.eval(compiler, nullptr);
 //                std::cout << "PROG: " << compiler.to_write_str(true) << std::endl;
             }
             GC_ROOT(rt.m_gc, compiler_r) = compiler;
             std::cout << "Compiler bootstrapping done, took: " << timer_comp_comp.diff() << "ms" << std::endl;
 
             i.cleanup_you_are_unused_now();
+
+            if (write_compiler)
+            {
+                std::string bootstrapped_compiler_filepath = compiler_filepath + "c";
+                write_str(bootstrapped_compiler_filepath,
+                    expand_userdata_to_atoms(&(rt.m_gc), compiler).to_write_str(true));
+                Atom compiler_serialized_from_disk =
+                    rt.read(bootstrapped_compiler_filepath,
+                            slurp_str(bootstrapped_compiler_filepath));
+                compiler_serialized_from_disk = compiler_serialized_from_disk.at(0);
+
+                AtomMap refmap;
+                compiler =
+                    PROG::repack_expanded_userdata(
+                        rt.m_gc, compiler_serialized_from_disk, &refmap);
+            }
+
+            compiler = vm.eval(compiler, nullptr);
 
             try
             {
@@ -1363,26 +1386,15 @@ int main(int argc, char *argv[])
         }
         else if (!input_file_path.empty())
         {
-            Runtime rt;
-            VM vm(&rt);
-            load_vm_modules(vm);
-            Interpreter i(&rt, &vm);
-            vm.set_trace(i_trace_vm);
-            i.set_trace(i_trace);
-            i.set_force_always_gc(i_force_gc);
-
-            GC_ROOT_MAP(rt.m_gc, root_env) = rt.m_gc.allocate_map();
+            Instance inst;
 
             try
             {
+                inst.load_bootstrapped_compiler_from_disk();
+
                 BenchmarkTimer bt;
-                Atom r =
-                    i.call_compiler(
-                        input_file_path,
-                        slurp_str(input_file_path),
-                        root_env,
-                        false);
-                cout << r.to_write_str() << endl;
+                Atom r = inst.execute_file(input_file_path);
+                cout << r.to_write_str(true) << endl;
                 cout << "time: " << bt.diff() << "ms" << endl;
             }
             catch (std::exception &e)
@@ -1417,38 +1429,42 @@ int main(int argc, char *argv[])
         }
         else
         {
-            Runtime rt;
-            VM vm(&rt);
-            load_vm_modules(vm);
-            Interpreter i(&rt, &vm);
-            vm.set_trace(i_trace_vm);
-            i.set_trace(i_trace);
-            i.set_force_always_gc(i_force_gc);
-            input_file_path = "<stdin>";
+            Instance inst;
 
-            GC_ROOT_MAP(rt.m_gc, root_env)
-                = rt.m_gc.allocate_map();
-
-            std::string line;
-            while (std::getline(std::cin, line))
+            try
             {
-                try
-                {
-                    if (line.size() > 0 && line[0] == '@')
-                        line = slurp_str(line.substr(1, line.size()));
+                inst.load_bootstrapped_compiler_from_disk();
 
-                    Atom r =
-                        i.call_compiler(input_file_path, line, root_env, false);
-                    cout << "> " << write_atom(r) << endl;
-                }
-                catch (std::exception &e)
+                Runtime &rt = inst.get_runtime();
+
+                GC_ROOT_MAP(rt.m_gc, root_env)
+                    = rt.m_gc.allocate_map();
+
+                std::string line;
+                while (std::getline(std::cin, line))
                 {
-                    cerr << "Exception: " << e.what() << endl;
+                    try
+                    {
+                        if (line.size() > 0 && line[0] == '@')
+                            line = slurp_str(line.substr(1, line.size()));
+
+                        Atom r = inst.execute_string(line, root_env);
+
+                        cout << "> " << r.to_write_str(true) << endl;
+                    }
+                    catch (std::exception &e)
+                    {
+                        cerr << "Exception: " << e.what() << endl;
+                    }
                 }
+
+                return 0;
+            }
+            catch (std::exception &e)
+            {
+                cerr << "Exception: " << e.what() << endl;
             }
         }
-
-        return 0;
     }
     catch (std::exception &e)
     {

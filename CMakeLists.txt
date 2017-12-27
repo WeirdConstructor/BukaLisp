@@ -15,6 +15,7 @@ add_library(bukalisp_lib STATIC
     src/atom_userdata.cpp
     src/interpreter.cpp
     src/buklivm.cpp
+    src/bukalisp.cpp
     src/runtime.cpp
     src/util.cpp
     src/mempool.cpp

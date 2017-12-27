@@ -20,7 +20,6 @@ struct Runtime
     Tokenizer      m_tok;
     Parser         m_par;
 
-
     std::vector<std::string> m_library_dir_paths;
 
     Runtime()

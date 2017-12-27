@@ -1,4 +1,10 @@
+// Copyright (C) 2017 Weird Constructor
+// For more license info refer to the the bottom of this file.
+
+#pragma once
+
 #include "buklivm.h"
+#include "interpreter.h"
 #include "atom_generator.h"
 #include <memory>
 
@@ -228,11 +234,23 @@ class Instance
         VM          m_vm;
         Interpreter m_i;
 
+        GC_ROOT_MEMBER(m_compiler);
+        std::function<Atom(Atom prog, AtomMap *root_env, const std::string &name, bool only_compile)>
+                    m_compile_func;
+
     public:
         Instance()
-            : m_vm(&m_rt), m_i(&m_rt, &m_vm)
+            : m_vm(&m_rt),
+              m_i(&m_rt, &m_vm),
+              GC_ROOT_MEMBER_INITALIZE(m_rt.m_gc, m_compiler)
         {
         }
+
+        Runtime &get_runtime() { return m_rt; }
+
+        void load_bootstrapped_compiler_from_disk();
+        Atom execute_string(const std::string &line, AtomMap *root_env);
+        Atom execute_file(const std::string &filepath);
 
         ValueFactoryPtr create_value_factory()
         {
@@ -242,3 +260,26 @@ class Instance
 //---------------------------------------------------------------------------
 
 }
+
+/******************************************************************************
+* Copyright (C) 2017 Weird Constructor
+*
+* Permission is hereby granted, free of charge, to any person obtaining
+* a copy of this software and associated documentation files (the
+* "Software"), to deal in the Software without restriction, including
+* without limitation the rights to use, copy, modify, merge, publish,
+* distribute, sublicense, and/or sell copies of the Software, and to
+* permit persons to whom the Software is furnished to do so, subject to
+* the following conditions:
+*
+* The above copyright notice and this permission notice shall be
+* included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+* MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+* IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+* CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+* TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+******************************************************************************/

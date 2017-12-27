@@ -283,7 +283,9 @@
                 (keys-in-map (@" LAMBDA-UPV " new-env))
                 nil))
             (defined-upvalues (if (found-upv-in-env? new-env)
-                                (only-in-first (upvalues-in-env new-env) new-args)
+                                (only-in-first
+                                  (upvalues-in-env new-env)
+                                  new-args)
                                 []))
             (non-upv-let-vars (only-in-first let-vars defined-upvalues))
             (lambda-body (if (found-upv-in-env? new-env)
