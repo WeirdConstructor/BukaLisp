@@ -11,7 +11,7 @@
 // programs this might mean less memory usage.
 #define WITH_MEM_POOL           1
 
-#define TEST_DISABLE_MEM_POOL_INTERNAL 1
+#define TEST_DISABLE_MEM_POOL_INTERNAL 0
 
 //---------------------------------------------------------------------------
 
