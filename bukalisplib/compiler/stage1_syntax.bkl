@@ -441,7 +441,6 @@
 
 (define compile-include
   (lambda (ctx filename T gtx)
-    (displayln INCL: filename)
     (let ((include-file-path (find-include-file filename (include-dir: ctx)))
           (include-content (sys-slurp-file
                              include-file-path))
