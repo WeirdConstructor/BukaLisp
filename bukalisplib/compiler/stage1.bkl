@@ -146,25 +146,31 @@
        (let ((lookup-res (lookup-in-env (env: ctx) arg annotate-upvalue-use []))
              (value (if lookup-res (@0 lookup-res) nil)))
          (when (nil? value)
-           (error (str "Access undefined variable '" arg "'")
-                  (last (meta-stack: gtx))))
+           (compiler-error gtx ctx
+                           (str "Access undefined variable '" arg "'")
+                           value))
          (case (@0 value)
-           ((var:)      ['#s1#var (@1 value) (@2 value)])
+           ((var:)      ['#s1#var      (@1 value) (@2 value)])
            ((glob-var:) ['#s1#glob-var (@1 value) (@2 value)])
-           ((prim:)     ['#s1#prim (@1 value)])
+           ((prim:)     ['#s1#prim     (@1 value)])
            ((syntax:)
-            (error "Variable contains syntax directive, can't use it here" value))
+            (compiler-error gtx ctx
+                            "Variable contains syntax directive, can't use it here"
+                            value))
            ((macro:)
-            (error "Variable contains macro, can't use it here" value))
+            (compiler-error
+              gtx ctx "Variable contains macro, can't use it here" value))
            (else
-             (error "Variable contains non representable value" value)))))
+             (compiler-error
+               gtx ctx "Variable contains non representable value" value)))))
    'list
      (lambda (ctx arg T gtx)
        (case (type (@0 arg))
          ((keyword)
           (when (> (length arg) 2)
-            (error "Get by keyword can only have one argument (the map)"
-                   arg))
+            (compiler-error
+              gtx ctx "Get by keyword can only have one argument (the map)"
+              arg))
           ['#s1#get (T ctx (@0 arg)) (T ctx (@1 arg))])
          ((list)
           (post-optimize-apply ctx T gtx
@@ -176,8 +182,8 @@
           (let ((lookup-res (lookup-in-env (env: ctx) (@0 arg) annotate-upvalue-use []))
                 (value (if lookup-res (@0 lookup-res) nil)))
             (when (nil? value)
-              (error (str "Access undefined variable '" (@0 arg) "'")
-                     (last (meta-stack: gtx))))
+              (compiler-error
+                gtx ctx (str "Access undefined variable") (@0 arg)))
             (case (@0 value)
               ((syntax:)
                 ((@(@1 value) SYNTAXES) ctx arg T gtx))
@@ -204,10 +210,11 @@
                 (.AM gtx (map (lambda (v) (T ctx v))
                               (drop arg 1)))])
               (else
-                (error "Unknown content in env" [arg value])))))
-         (else (error "Unknown element type in front of list"
-                      (type (@0 arg))
-                      arg))))})
+                (compiler-error
+                  gtx ctx "Unknown content in env" [arg value])))))
+         (else (compiler-error
+                 gtx ctx "Unknown element type in front of list"
+                 [(type (@0 arg)) arg]))))})
 
 (define stage1-transformator
   (lambda (data root-env gtx)

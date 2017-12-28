@@ -458,7 +458,6 @@ Atom VM::eval(Atom callable, AtomVec *args)
         if (   callable.m_d.vec->m_len == VM_CLOS_SIZE
             && callable.m_d.vec->m_data[0].m_type == T_UD)
         {
-            std::cout << "OFFF:" << std::endl;
             instant_operation.op = OP_CALL;
             instant_operation.a  = 1;
             instant_operation.ae = REG_ROW_FRAME;
@@ -1889,7 +1888,7 @@ Atom VM::eval(Atom callable, AtomVec *args)
             }
         }
     }
-    catch (VMRaise &r)
+    catch (VMRaise &)
     {
         throw;
     }
@@ -1905,41 +1904,11 @@ Atom VM::eval(Atom callable, AtomVec *args)
             instant_operation.oe = REG_ROW_SPECIAL;
 
             if (e.preserve_error_obj())
-            {
                 instant_ctrl_jmp_obj = e.get_error_obj();
-                std::cout << "ERRO: " << instant_ctrl_jmp_obj.to_write_str() << std::endl;
-            }
             else
-            {
-                instant_ctrl_jmp_obj.set_vec(m_rt->m_gc.allocate_vector(3));
-                instant_ctrl_jmp_obj.m_d.vec->push(
-                    Atom(T_SYM, m_rt->m_gc.new_symbol("BKL-ERROR-OBJ")));
-                instant_ctrl_jmp_obj.m_d.vec->push(
-                    Atom(T_STR, m_rt->m_gc.new_symbol(e.get_error_message())));
-                instant_ctrl_jmp_obj.m_d.vec->push(e.get_error_obj());
-                instant_ctrl_jmp_obj.m_d.vec->push(
-                    Atom(T_STR, m_rt->m_gc.new_symbol(e.what())));
-                AtomVec *frms = m_rt->m_gc.allocate_vector(10);
-                instant_ctrl_jmp_obj.m_d.vec->push(Atom(T_VEC, frms));
-                e.extract_frames(
-                    [&](const std::string &place,
-                        const std::string &file_name,
-                        size_t line,
-                        const std::string &func_name)
-                    {
-                        AtomVec *frm = m_rt->m_gc.allocate_vector(4);
-                        frm->push(Atom(T_STR, m_rt->m_gc.new_symbol(place)));
-                        frm->push(Atom(T_STR, m_rt->m_gc.new_symbol(file_name)));
-                        frm->push(Atom(T_INT, line));
-                        frm->push(Atom(T_STR, m_rt->m_gc.new_symbol(func_name)));
-                        frms->push(Atom(T_VEC, frm));
-                    });
-            }
+                instant_ctrl_jmp_obj = e.create_error_object(m_rt->m_gc);
 
             m_pc = &instant_operation;
-            // TODO: Create error object and inject it somehow into the
-            //       program!?
-            // Question: Where to get the storage location from?
             goto VM_START;
         }
 

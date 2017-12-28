@@ -1405,9 +1405,29 @@ int main(int argc, char *argv[])
                 cout << r.to_write_str(true) << endl;
                 cout << "time: " << bt.diff() << "ms" << endl;
             }
+            catch (VMRaise &r)
+            {
+                Atom err_obj = r.get_error_obj();
+                if (BukaLISPException::is_error_object(err_obj))
+                    BukaLISPException::print_error_object(err_obj, std::cerr);
+                else
+                {
+                    std::cerr << "Uncaugt raised atom: "
+                              << err_obj.to_write_str(true) << std::endl;
+                }
+            }
+            catch (BukaLISPException &e)
+            {
+                Runtime &rt = inst.get_runtime();
+                Atom err_obj = e.create_error_object(rt.m_gc);
+                if (BukaLISPException::is_error_object(err_obj))
+                    BukaLISPException::print_error_object(err_obj, std::cerr);
+                else
+                    std::cout << "Exception: " << e.what() << std::endl;
+            }
             catch (std::exception &e)
             {
-                cerr << "Exception: " << e.what() << endl;
+                cerr << "std::exception: " << e.what() << endl;
             }
         }
         else if (interpret)

@@ -5,3 +5,28 @@
       (push! out (fn v)))
     out))
 
+(define compiler-error
+  (lambda (gtx ctx atom error-message)
+    (raise
+      ['BKL-ERROR-OBJ
+       error-message
+       atom
+       (str "Compilation error: "
+            error-message
+            " (atom: " (write-str atom) ")")
+       (let ((file-pos (last (meta-stack: gtx))))
+         [(if (or (nil? ctx)
+                  (nil? (lambda-name: ctx)))
+            (if (> (length file-pos) 2)
+              ["code"
+               (@0 file-pos)
+               (@1 file-pos)
+               (@2 file-pos)]
+              ["code"
+               (@0 file-pos)
+               (@1 file-pos)
+               unknown:])
+            ["code"
+             (@0 file-pos)
+             (@1 file-pos)
+             (lambda-name: ctx)])])])))

@@ -88,6 +88,8 @@ class BukaLISPException : public std::exception
         bool has_stack_trace() const { return !m_frames.empty(); }
         std::string get_error_message() const { return m_error_message; }
 
+        Atom create_error_object(GC &gc) const;
+
         BukaLISPException &push(Atom &err_stack);
 
         BukaLISPException &push(const std::string place,
@@ -110,11 +112,13 @@ class BukaLISPException : public std::exception
             m_err = "\n" + m_err;
             return *this;
         }
+        static bool is_error_object(const Atom &a);
+        static void print_error_object(const Atom &a, std::ostream &o);
         void extract_frames(std::function<void(const std::string &place,
                                                const std::string &file_name,
                                                size_t line,
                                                const std::string &func_name)>
-                                               report_frame_func)
+                                               report_frame_func) const
         {
             for (auto &frm : m_frames)
                 report_frame_func(
@@ -363,7 +367,7 @@ struct Atom
                || (m_type == T_BOOL && !m_d.b);
     }
 
-    Atom at(size_t i)
+    Atom at(size_t i) const
     {
         if (   m_type != T_VEC
             && m_type != T_CLOS)
@@ -371,7 +375,7 @@ struct Atom
         return m_d.vec->at(i);
     }
 
-    Atom at(const Atom &a);
+    Atom at(const Atom &a) const;
 
     void set(const Atom &a, const Atom &v);
     void set(size_t i, const Atom &v);

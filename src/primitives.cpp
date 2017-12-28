@@ -668,6 +668,11 @@ START_PRIM()
 END_PRIM(error)
 
 START_PRIM()
+    REQ_EQ_ARGC(raise, 1);
+    throw VMRaise(m_rt->m_gc, A0);
+END_PRIM(raise)
+
+START_PRIM()
     REQ_EQ_ARGC(bkl-error, 2);
     throw
         add_stack_trace_error(

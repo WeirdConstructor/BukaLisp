@@ -9,6 +9,21 @@
 ;              (#static-data input))))
 ;
 
+(define annotate-file-pos
+  (lambda (pos data)
+    (if (list? pos)
+      (if (> (length pos) 2)
+        pos
+        (if (and (list? data)
+                 (or (symbol? (@0 data))
+                     (keyword? (@0 data))
+                     (string? (@0 data))))
+          (begin
+            (push! pos (str "(" (@0 data) " ...)"))
+            pos)
+          pos))
+      pos)))
+
 (define find-transform-match
  (lambda (match-struct data leaf-ctx global-ctx typed?)
   (let ((data-meta-di   (bkl-get-meta data))
@@ -18,7 +33,11 @@
                                     typed?)))
                             (when (nil? r)
                               (displayln Transform: (pp-str data))
-                              (error "No transformation found" data))
+                              (compiler-error
+                                global-ctx
+                                leaf-ctx
+                                "No transformation found"
+                                data))
                             r))))
     (when (nil? (meta-stack: global-ctx))
       (@!meta-stack: global-ctx []))
@@ -43,7 +62,8 @@
       (@!parent-ctx: leaf-ctx nil))
     (with-cleanup
       (unless (nil? data-meta-di)
-        (push! (meta-stack: global-ctx) (@0 data-meta-di))
+        (push! (meta-stack: global-ctx)
+               (annotate-file-pos (@0 data-meta-di) data))
         (set! do-pop? #t))
       (when do-pop?
         (pop! (meta-stack: global-ctx)))
@@ -65,7 +85,11 @@
                     (set! found? #t))))))
           (unless found?
             (displayln Transform: (pp-str data))
-            (error "Couldn't find transformation for " [(type data) data match-struct]))
+            (compiler-error
+              global-ctx
+              leaf-ctx
+              "Couldn't find transformation for "
+              [(type data) data match-struct]))
           ret))))))
 ;
 ;(define make-transform

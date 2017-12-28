@@ -162,7 +162,7 @@
     (lambda (ctx arg T gtx)
       (let ((prim-idx (@(first arg) primitive-map)))
         (unless prim-idx
-          (error "Bad primitive in stage 2 compilation" arg))
+          (compiler-error gtx ctx "Bad primitive in stage 2 compilation" arg))
         [prim-idx REG-ROW-PRIM]))
    '#s1#begin
     (lambda (ctx arg T gtx)
@@ -177,7 +177,9 @@
     (lambda (ctx arg T gtx)
       (let ((adr (@(@0 arg) (env: ctx))))
         (unless adr
-          (error "Fatal error in stage 2, variable not found!" arg))
+          (compiler-error gtx ctx
+                          "Fatal error in stage 2, variable not found!"
+                          arg))
         adr))
    '#s1#glob-var
     (lambda (ctx arg T gtx)
@@ -676,8 +678,9 @@
           (do-each (upv-var-name (@3 lambda-spec))
             (let ((upv-adr (@upv-var-name (env: ctx))))
               (unless (= (@1 upv-adr) REG-ROW-UPV)
-                (error "Bad upvalue in stage 2 compilation"
-                       [upv-var-name lambda-spec]))
+                (compiler-error gtx ctx
+                                "Bad upvalue in stage 2 compilation"
+                                [upv-var-name lambda-spec]))
               (let ((new-upv (assign (.new-pos lambda-frame) [1 REG-ROW-UPV])))
                 (push! creator-upv-adrs (@0 upv-adr))
                 (push! creator-upv-adrs (@0 new-upv))

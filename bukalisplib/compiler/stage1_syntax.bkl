@@ -67,9 +67,9 @@
   'if
   (lambda (ctx args T gtx)
     (when (< (length args) 3)
-      (error "'if' needs at least 2 arguments" args))
+      (compiler-error gtx ctx "'if' needs at least 2 arguments" args))
     (when (> (length args) 4)
-      (error "'if' can not have more than 3 arguments" args))
+      (compiler-error gtx ctx "'if' can not have more than 3 arguments" args))
     (if (= (length args) 3)
       ['#s1#if (T ctx (@1 args)) (T ctx (@2 args)) (T ctx nil)]
       ['#s1#if (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))])))
@@ -79,7 +79,7 @@
   'unless
   (lambda (ctx args T gtx)
     (when (< (length args) 3)
-      (error "'unless' needs at least 2 arguments" args))
+      (compiler-error gtx ctx "'unless' needs at least 2 arguments" args))
     ['#s1#if
      (.AM gtx ['#s1#not (T ctx (@1 args))])
      (.AM gtx (s1-begin T ctx (drop args 2)))
@@ -90,7 +90,7 @@
   'when
   (lambda (ctx args T gtx)
     (when (< (length args) 3)
-      (error "'when' needs at least 2 arguments" args))
+      (compiler-error gtx ctx "'when' needs at least 2 arguments" args))
     ['#s1#if
      (T ctx (@1 args))
      (.AM gtx (s1-begin T ctx (drop args 2)))
@@ -101,9 +101,9 @@
   'set!
   (lambda (ctx args T gtx)
     (unless (symbol? (@1 args))
-      (error "'set!' expected symbol as first argument" args))
+      (compiler-error gtx ctx "'set!' expected symbol as first argument" args))
     (unless (= (length args) 3)
-      (error "'set!' needs exactly 2 arguments" args))
+      (compiler-error gtx ctx "'set!' needs exactly 2 arguments" args))
     (let ((var-t (T ctx (@1 args))))
       (append '#s1#set! [var-t (T ctx (@2 args))]))))
 ;----------------------------------------------------------------------------
@@ -112,7 +112,7 @@
   'return
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'return' needs exactly 1 arguments" args))
+      (compiler-error gtx ctx "'return' needs exactly 1 arguments" args))
     (append '#s1#return [(T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
@@ -120,7 +120,7 @@
   'yield
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'yield' needs exactly 1 arguments" args))
+      (compiler-error gtx ctx "'yield' needs exactly 1 arguments" args))
     (append '#s1#yield [(T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
@@ -128,7 +128,7 @@
   'current-coroutine
   (lambda (ctx args T gtx)
     (unless (= (length args) 1)
-      (error "'current-coroutine' takes no arguments" args))
+      (compiler-error gtx ctx "'current-coroutine' takes no arguments" args))
     ['#s1#current-coroutine]))
 ;----------------------------------------------------------------------------
 
@@ -136,7 +136,7 @@
   'bkl-vm-stack-trace
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'bkl-vm-stack-trace' takes one argument" args))
+      (compiler-error gtx ctx "'bkl-vm-stack-trace' takes one argument" args))
     ['#s1#stack-trace (T ctx (@1 args))]))
 ;----------------------------------------------------------------------------
 
@@ -144,7 +144,7 @@
   'raise
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'raise' needs exactly 1 arguments" args))
+      (compiler-error gtx ctx "'raise' needs exactly 1 arguments" args))
     (append '#s1#return-from [['#s1#data nil] (T ctx (@1 args))])))
 ;----------------------------------------------------------------------------
 
@@ -152,9 +152,9 @@
   'handle-exceptions
   (lambda (ctx args T gtx)
     (unless (> (length args) 3)
-      (error "'handle-exceptions' needs at least 3 arguments" args))
+      (compiler-error gtx ctx "'handle-exceptions' needs at least 3 arguments" args))
     (unless (symbol? (@1 args))
-      (error "'handle-exceptions' first argument needs to be a symbol"))
+      (compiler-error gtx ctx "'handle-exceptions' first argument needs to be a symbol"))
     (define var-ref [])
     (compile-let-block
       ctx T gtx
@@ -172,7 +172,7 @@
   (lambda (ctx args T gtx)
     (unless (or (= (length args) 3)
                 (= (length args) 4))
-      (error "'with-cleanup' needs 2 or 3 arguments" args))
+      (compiler-error gtx ctx "'with-cleanup' needs 2 or 3 arguments" args))
     (let ((clnup-cond-var-sym '*BKL-CLEANUP-COND*)
           (clnup-tag-var-sym  '*BKL-CLEANUP-TAG*)
           (clnup-val-var-sym  '*BKL-CLEANUP-VAL*))
@@ -211,10 +211,14 @@
   'block
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'block' needs at least 2 arguments (the tag and an expression)" args))
+      (compiler-error gtx ctx
+                      "'block' needs at least 2 arguments (the tag and an expression)"
+                      args))
     (unless (or (symbol? (@1 args))
                 (keyword? (@1 args)))
-      (error "'block' tag needs to be either a symbol or a keyword" args))
+      (compiler-error gtx ctx
+                      "'block' tag needs to be either a symbol or a keyword"
+                      args))
     ['#s1#block (@1 args)
      (s1-begin T ctx (drop args 2))]))
 ;----------------------------------------------------------------------------
@@ -223,7 +227,9 @@
   'return-from*
   (lambda (ctx args T gtx)
     (unless (= (length args) 3)
-      (error "'return-from' needs exactly 2 arguments the tag and the value" args))
+      (compiler-error gtx ctx
+                      "'return-from' needs exactly 2 arguments the tag and the value"
+                      args))
     (append '#s1#return-from [(T ctx (@1 args)) (T ctx (@2 args))])))
 ;----------------------------------------------------------------------------
 
@@ -231,10 +237,14 @@
   'return-from
   (lambda (ctx args T gtx)
     (unless (= (length args) 3)
-      (error "'return-from' needs exactly 2 arguments the tag and the value" args))
+      (compiler-error gtx ctx
+                      "'return-from' needs exactly 2 arguments the tag and the value"
+                      args))
     (unless (or (symbol? (@1 args))
                 (keyword? (@1 args)))
-      (error "'return-from' tag needs to be either a symbol or a keyword" args))
+      (compiler-error gtx ctx
+                      "'return-from' tag needs to be either a symbol or a keyword"
+                      args))
     (append '#s1#return-from [(.S1-T-Q gtx ctx (@1 args)) (T ctx (@2 args))])))
 ;----------------------------------------------------------------------------
 
@@ -254,12 +264,12 @@
           (set! args (drop args 1))
           #f)))
     (unless (> (length args) 1)
-      (error "'lambda' needs more than 1 argument" args))
+      (compiler-error gtx ctx "'lambda' needs more than 1 argument" args))
     (define lambda-params
       (parse-lambda-params
         (@0 args)
         (lambda (msg a)
-          (error (str "'lambda' parameter error: " msg) a))))
+          (compiler-error gtx ctx (str "'lambda' parameter error: " msg) a))))
     (let ((new-env {" PARENT "         (env: ctx)
                     " LAMBDA-UPV "     {}})
           (new-args [])
@@ -311,17 +321,23 @@
   'let
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'let' needs more than 1 argument" args))
+      (compiler-error
+        gtx ctx "'let' needs more than 1 argument" args))
     (let ((var-binds (@1 args)))
       (unless (list? var-binds)
-        (error "'let' binding list needs to be a list" var-binds))
+        (compiler-error
+          gtx ctx "'let' binding list needs to be a list" var-binds))
       (do-each (bind-pair var-binds)
         (unless (list? bind-pair)
-          (error "'let' binding pair needs to be a list" bind-pair))
+          (compiler-error
+            gtx ctx "'let' binding pair needs to be a list" bind-pair))
         (unless (= (length bind-pair) 2)
-          (error "'let' binding pair needs exactly 2 elements" bind-pair))
+          (compiler-error
+            gtx ctx "'let' binding pair needs exactly 2 elements" bind-pair))
         (unless (symbol? (@0 bind-pair))
-          (error "'let' binding pair must contain a symbol as first element" bind-pair)))
+          (compiler-error
+            gtx ctx "'let' binding pair must contain a symbol as first element"
+            bind-pair)))
       (compile-let-block
        ctx T gtx
        var-binds
@@ -342,9 +358,10 @@
         #false))
     (case (type (@1 args))
       ((symbol) (unless (= (length args) 3)
-                  (error (str "'define' needs exactly 2 arguments if "
-                              "first is a symbol")
-                         args))
+                  (compiler-error
+                    gtx ctx (str "'define' needs exactly 2 arguments if "
+                                 "first is a symbol")
+                    args))
                 (let ((var-name (@1 args))
                       (var        nil)
                       (var-s1-sym nil))
@@ -364,15 +381,17 @@
                    (T (assign ctx [lambda-name: var-name])
                       (@2 args))]))
       ((list) (unless (> (length args) 2)
-                (error (str "'define' for function define needs "
-                            "at least 3 arguments")
-                       args))
+                (compiler-error
+                  gtx ctx (str "'define' for function define needs "
+                               "at least 3 arguments")
+                  args))
               (do-each (s (@1 args))
                 (unless (symbol? s)
-                  (error (str "'define' for function requires the "
-                              "first argument be a list only "
-                              "of symbols")
-                         (@1 args))))
+                  (compiler-error
+                    gtx ctx (str "'define' for function requires the "
+                                 "first argument be a list only "
+                                 "of symbols")
+                    (@1 args))))
               (let ((func-name      (@0 (@1 args)))
                     (var-s1-sym     nil)
                     (var            nil))
@@ -402,22 +421,24 @@
                              (.AM gtx [(drop (@1 args) 1)])
                              (drop args 2)))))]))
       (else
-        (error "'define' unexpected first argument" args)))))
+        (compiler-error gtx ctx "'define' unexpected first argument" args)))))
 ;----------------------------------------------------------------------------
 
 (add-syntax
   'define-macro
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'define-macro' needs at least 2 arguments" args))
+      (compiler-error gtx ctx "'define-macro' needs at least 2 arguments" args))
     (define params (@1 args))
     (unless (list? params)
-      (error "'define-macro' first argument needs to be a parameter list"
-             params))
+      (compiler-error
+        gtx ctx "'define-macro' first argument needs to be a parameter list"
+        params))
     (do-each (v params)
       (unless (symbol? v)
-        (error "'define-macro' parameter list must consist only of symbols"
-               params)))
+        (compiler-error
+          gtx ctx "'define-macro' parameter list must consist only of symbols"
+          params)))
     (define macro-name (first params))
     (displayln MACRO-EVAL: args)
     (define macro-func
@@ -460,7 +481,7 @@
   'include
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'include' needs exactly 1 argument" args))
+      (compiler-error gtx ctx "'include' needs exactly 1 argument" args))
     (compile-include ctx (@1 args) T gtx)))
 ;----------------------------------------------------------------------------
 
@@ -468,14 +489,16 @@
   '$define!
   (lambda (ctx args T gtx)
      (unless (> (length args) 3)
-       (error "'$define!' needs at least 3 arguments" args))
+       (compiler-error gtx ctx "'$define!' needs at least 3 arguments" args))
      (unless (list? (@2 args))
-       (error "'$define!' second argument needs to be a list" args))
+       (compiler-error
+         gtx ctx "'$define!' second argument needs to be a list" args))
      (unless (> (length (@2 args)) 0)
-       (error "'$define!' second argument list needs at least 1 symbol" args))
+       (compiler-error
+         gtx ctx "'$define!' second argument list needs at least 1 symbol" args))
      (do-each (v (@2 args))
        (unless (symbol? v)
-         (error
+         (compiler-error gtx ctx
            "'$define!' parameter list may only contain symbols"
            (@2 args))))
     ['#s1#set method:
@@ -524,23 +547,23 @@ value.
   'do-each
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'do-each' needs at least 2 arguments" args))
+      (compiler-error gtx ctx "'do-each' needs at least 2 arguments" args))
     (define iter-desc (@1 args))
     (unless (list? iter-desc)
-      (error
+      (compiler-error gtx ctx
         (str "first argument to 'do-each' "
              "needs to be an iteration description list")
         args))
     (when (< (length iter-desc) 2)
-      (error
+      (compiler-error gtx ctx
         "iteration description must be at least 2 elements long"
         iter-desc))
     (when (> (length iter-desc) 3)
-      (error
+      (compiler-error gtx ctx
         "iteration description too long (2 or 3 elements allowed)"
         iter-desc))
     (unless (symbol? (@0 iter-desc))
-      (error
+      (compiler-error gtx ctx
         "key bind name of iteration description must be a symbol"
         iter-desc));
     (define obj-atom (@1 iter-desc))
@@ -548,8 +571,10 @@ value.
       (begin
         (define obj-atom (@2 iter-desc))
         (unless (symbol? (@1 iter-desc))
-          (error "value bind name of iteration description must be a symbol"
-                 iter-desc))
+          (compiler-error
+            gtx ctx
+            "value bind name of iteration description must be a symbol"
+            iter-desc))
         (define obj (T ctx obj-atom))
         (compile-let-block
           ctx T gtx
@@ -577,7 +602,8 @@ value.
   'while
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'while' needs at least 2 arguments (test and body)" args))
+      (compiler-error
+        gtx ctx "'while' needs at least 2 arguments (test and body)" args))
     ['#s1#while
      (T ctx (@1 args))
      (s1-begin T ctx (drop args 2))]))
@@ -587,14 +613,19 @@ value.
   'for
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'for' needs at least 2 arguments (iterator desc and body)" args))
+      (compiler-error
+        gtx ctx "'for' needs at least 2 arguments (iterator desc and body)"
+        args))
     (let ((iter-desc (@1 args)))
       (unless (or (= (length iter-desc) 3)
                   (= (length iter-desc) 4))
-        (error "'for' iteration description needs 3 or 4 elements" iter-desc))
+        (compiler-error
+          gtx ctx "'for' iteration description needs 3 or 4 elements"
+          iter-desc))
       (unless (symbol? (@0 iter-desc))
-        (error "'for' iteration description needs a symbol as first elemetn"
-               iter-desc))
+        (compiler-error
+          gtx ctx "'for' iteration description needs a symbol as first elemetn"
+          iter-desc))
       (compile-let-block
         ctx T gtx
          (.AM gtx [[(@0 iter-desc) (@1 iter-desc)]])
@@ -611,15 +642,19 @@ value.
   'do
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "'do' needs at least 2 arguments (iterator binds, test and body)"
-             args))
+      (compiler-error
+        gtx ctx "'do' needs at least 2 arguments (iterator binds, test and body)"
+        args))
     (unless (list? (@1 args))
-      (error "'do' first argument is not a list (iterator binds)"))
+      (compiler-error
+        gtx ctx "'do' first argument is not a list (iterator binds)"))
     (unless (list? (@2 args))
-      (error "'do' second argument is not a list (test)"))
+      (compiler-error
+        gtx ctx "'do' second argument is not a list (test)"))
     (unless (> (length (@2 args)) 1)
-      (error "'do' test needs a test expression and a return value expression"
-             (@2 args)))
+      (compiler-error
+        gtx ctx "'do' test needs a test expression and a return value expression"
+        (@2 args)))
     (let ((iter-descs           (@1 args))
           (let-binds            [])
           (test-expr            (@0 (@2 args)))
@@ -627,10 +662,12 @@ value.
       (do-each (iter-bind iter-descs)
         (unless (or (= (length iter-bind) 2)
                     (= (length iter-bind) 3))
-          (error "'do' bad iterator bind, has not 3 elements" iter-bind))
+          (compiler-error
+            gtx ctx "'do' bad iterator bind, has not 3 elements" iter-bind))
         (unless (symbol? (@0 iter-bind))
-          (error "'do' first element of iteration binding needs to be a symbol"
-                 iter-bind))
+          (compiler-error
+            gtx ctx "'do' first element of iteration binding needs to be a symbol"
+            iter-bind))
         (push! let-binds [(@0 iter-bind) (@1 iter-bind)]))
       (compile-let-block
         ctx T gtx
@@ -663,7 +700,9 @@ value.
   '.
   (lambda (ctx args T gtx)
     (unless (> (length args) 2)
-      (error "method call needs at least 2 arguments (method & object)" args))
+      (compiler-error
+        gtx ctx "method call needs at least 2 arguments (method & object)"
+        args))
     (let ((method-name (@1 args))
           (obj         (@2 args))
           (m-args      (drop args 3)))
@@ -682,7 +721,7 @@ value.
   'or
   (lambda (ctx args T gtx)
     (unless (> (length args) 1)
-      (error "'or' needs at least one argument" args))
+      (compiler-error gtx ctx "'or' needs at least one argument" args))
     (define tmp-var (gtx-gentmpsym gtx 'or))
     (define operand (@1 args))
     (define false-v (T ctx #f))
@@ -714,7 +753,7 @@ value.
   'and
   (lambda (ctx args T gtx)
     (unless (> (length args) 1)
-      (error "'and' needs at least one argument" args))
+      (compiler-error gtx ctx "'and' needs at least one argument" args))
     (define tmp-var (gtx-gentmpsym gtx 'and))
     (define operand (@1 args))
     (define false-v (T ctx #f))
@@ -750,18 +789,22 @@ value.
     (define else-clause nil)
     (define out ['#s1#cond])
     (unless (> (length arg) 1)
-      (error "'cond' clause must have at least one clause" arg))
+      (compiler-error gtx ctx "'cond' clause must have at least one clause"
+                      arg))
     (do-each (clause (drop arg 1))
       (unless (list? clause)
-        (error "'cond' has an improper clause (not a list)" clause))
+        (compiler-error gtx ctx "'cond' has an improper clause (not a list)"
+                        clause))
       (when (< (length clause) 2)
-        (error (str "'cond' clauses must at least contain a test "
-                    "expression and result expression")
-               clause))
+        (compiler-error
+          gtx ctx (str "'cond' clauses must at least contain a test "
+                       "expression and result expression")
+          clause))
       (if (eqv? (@0 clause) 'else)
         (begin
           (when else-clause
-            (error "'cond' must not have more than one 'else' clause" clause))
+            (compiler-error
+              gtx ctx "'cond' must not have more than one 'else' clause" clause))
           (set! else-clause clause))
         (push!
           out
@@ -795,20 +838,22 @@ value.
     ;       precise error messages!
     (define else-clause nil)
     (when (< (length arg) 3)
-      (error "'case' needs at least 2 arguments" arg))
+      (compiler-error gtx ctx "'case' needs at least 2 arguments" arg))
     (let ((all-values {}))
       (do-each (clause (drop arg 2))
         (if (eqv? (first clause) 'else)
           (begin
             (when else-clause
-              (error "'case' duplicated else clause" clause))
+              (compiler-error gtx ctx "'case' duplicated else clause" clause))
             (set! else-clause clause))
           (begin
             (when (not (list? (first clause)))
-              (error "'case' clause first element is not a list" clause))
+              (compiler-error
+                gtx ctx "'case' clause first element is not a list" clause))
             (do-each (element (first clause))
               (if (@element all-values)
-                (error "'case' with duplicate value" element))
+                (compiler-error
+                  gtx ctx "'case' with duplicate value" element))
               (@!element all-values #t)))))
     (let ((key-value (@1 arg))
           (tmp-var (gtx-gentmpsym gtx 'case)))
@@ -862,13 +907,15 @@ value.
       (@!" LIBRARIES " (root-env: gtx) {}))
     (define LIBRARIES (@" LIBRARIES " (root-env: gtx)))
     (unless (list? (@1 arg))
-      (error "'define-library' library name needs to be a list" (@1 arg)))
+      (compiler-error
+        gtx ctx "'define-library' library name needs to be a list" (@1 arg)))
     (define lib-name (apply str-join "-" (@1 arg)))
     (define lib-root-env {" IS-ROOT-ENV " #t " REGS " []})
     (define export-list [])
     (do-each (decl (drop arg 2))
       (unless (list? decl)
-        (error "'define-library' invalid library declaration" decl))
+        (compiler-error
+          gtx ctx "'define-library' invalid library declaration" decl))
       (case (@0 decl)
         ((export)
          (do-each (ex (drop decl 1))
@@ -884,7 +931,8 @@ value.
     (do-each (ex export-list)
       (let ((exp-var (@ex lib-root-env)))
         (unless exp-var
-          (error "'define-library' can't export undefined binding" ex))
+          (compiler-error
+            gtx ctx "'define-library' can't export undefined binding" ex))
         (if (eqv? (@0 exp-var) glob-var:)
           (let ((value (get-root-env-var lib-root-env ex)))
             (@!ex exported-values [glob-var: ex value]))
@@ -923,8 +971,9 @@ value.
                 (compile-include ctx library-file T gtx)
                 (set! lib (@library-name LIBRARIES))
                 (unless lib
-                  (error "'import' library not found, also not defined in library file"
-                         [library-name library-file]))))
+                  (compiler-error
+                    gtx ctx "'import' library not found, also not defined in library file"
+                    [library-name library-file]))))
             (do-each (sym var (@1 lib))
               (if (eqv? (@0 var) glob-var:)
                 (set-root-env-var (root-env: gtx)
@@ -938,9 +987,9 @@ value.
   'eval
   (lambda (ctx arg T gtx)
     (when (> (length arg) 3)
-      (error "Too many arguments to 'eval'" arg))
+      (compiler-error gtx ctx "Too many arguments to 'eval'" arg))
     (when (< (length arg) 2)
-      (error "Too few arguments to 'eval'" arg))
+      (compiler-error gtx ctx "Too few arguments to 'eval'" arg))
     (if (= (length arg) 2)
       ['#s1#eval (T ctx (@1 arg))]
       ['#s1#eval (T ctx (@1 arg)) (T ctx (@2 arg))])))

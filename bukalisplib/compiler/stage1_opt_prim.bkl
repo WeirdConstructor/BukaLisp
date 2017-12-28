@@ -3,7 +3,7 @@
   '@
   (lambda (ctx args T gtx)
     (unless (= (length args) 3)
-      (error "'@' requires exactly 2 arguments" args))
+      (compiler-error gtx ctx "'@' requires exactly 2 arguments" args))
     ['#s1#get (T ctx (@1 args)) (T ctx (@2 args))]))
 
 (add-optimized-prim
@@ -11,7 +11,7 @@
   '@!
   (lambda (ctx args T gtx)
     (unless (= (length args) 4)
-      (error "'@!' requires exactly 3 arguments" args))
+      (compiler-error gtx ctx "'@!' requires exactly 3 arguments" args))
     ['#s1#set field: (T ctx (@1 args)) (T ctx (@2 args)) (T ctx (@3 args))]))
 
 (add-optimized-prim
@@ -19,7 +19,7 @@
   'not
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'not' requires exactly 1 argument" args))
+      (compiler-error gtx ctx "'not' requires exactly 1 argument" args))
     ['#s1#not (T ctx (@1 args))]))
 
 (add-optimized-prim
@@ -27,7 +27,7 @@
   'nil?
   (lambda (ctx args T gtx)
     (unless (= (length args) 2)
-      (error "'nil?' requires exactly 1 argument" args))
+      (compiler-error gtx ctx "'nil?' requires exactly 1 argument" args))
     ['#s1#nil? (T ctx (@1 args))]))
 
 (define make-assoc-tree
@@ -52,7 +52,8 @@
   (lambda (operation)
     (lambda (ctx args T gtx)
       (when (< (length args) 3)
-        (error (str "Operation requires at least 2 arguments") args))
+        (compiler-error
+          gtx ctx (str "Operation requires at least 2 arguments") args))
       (let ((out-pair [operation]))
         (do-each (v (drop args 1))
           (if (= (length out-pair) 3)
@@ -64,7 +65,8 @@
   (lambda (operation)
     (lambda (ctx args T gtx)
       (when (< (length args) 3)
-        (error (str "Operation requires at least 2 arguments") args))
+        (compiler-error
+          gtx ctx (str "Operation requires at least 2 arguments") args))
       (let ((last-op  nil)
             (out-tree nil)
             (cur-tree nil))

@@ -117,7 +117,7 @@ size_t count_elements(const Atom &a)
 }
 //---------------------------------------------------------------------------
 
-Atom Atom::at(const Atom &a)
+Atom Atom::at(const Atom &a) const
 {
     if (m_type != T_MAP) return Atom();
     return m_d.map->at(a);
@@ -661,6 +661,75 @@ void BukaLISPException::set_error_obj(GC &gc, const Atom &a)
     m_err_obj = std::make_shared<GCRefAtomExceptionContainer>(gc, a);
     m_err_obj_str = a.to_write_str();
     m_err = m_error_message + " (atom: " + m_err_obj_str + ")";
+}
+//---------------------------------------------------------------------------
+
+void BukaLISPException::print_error_object(const Atom &a, std::ostream &o)
+{
+    if (!is_error_object(a))
+        return;
+
+    o << "Exception: " << a.at(1).to_display_str();
+
+    Atom erobj = a.at(2);
+    if (erobj.m_type != T_NIL)
+    {
+        o << " (atom: " << erobj.to_write_str() << ")";
+    }
+
+    o << std::endl;
+
+    if (a.at(4).m_type == T_VEC)
+    {
+        AtomVec *frms = a.at(4).m_d.vec;
+        for (size_t i = 0; i < frms->m_len; i++)
+        {
+            Atom frm = frms->at(i);
+            o << "    [" << frm.at(0).to_display_str() << "]"
+              << " "     << frm.at(3).to_display_str()
+              << " { "    << frm.at(1).to_display_str()
+                         << ":"
+                         << frm.at(2).to_display_str() << " }"
+              << std::endl;
+        }
+    }
+}
+//---------------------------------------------------------------------------
+
+bool BukaLISPException::is_error_object(const Atom &a)
+{
+    return a.m_type == T_VEC
+        && a.m_d.vec->at(0).m_type == T_SYM
+        && a.m_d.vec->at(0).m_d.sym->m_str == "BKL-ERROR-OBJ";
+}
+//---------------------------------------------------------------------------
+
+Atom BukaLISPException::create_error_object(GC &gc) const
+{
+    AtomVec *err_obj = gc.allocate_vector(5);
+    err_obj->push(Atom(T_SYM, gc.new_symbol("BKL-ERROR-OBJ")));
+    err_obj->push(Atom(T_STR, gc.new_symbol(get_error_message())));
+    err_obj->push(get_error_obj());
+    err_obj->push(Atom(T_STR, gc.new_symbol(what())));
+
+    AtomVec *frms = gc.allocate_vector(10);
+    err_obj->push(Atom(T_VEC, frms));
+
+    extract_frames(
+        [&](const std::string &place,
+            const std::string &file_name,
+            size_t line,
+            const std::string &func_name)
+        {
+            AtomVec *frm = gc.allocate_vector(4);
+            frm->push(Atom(T_STR, gc.new_symbol(place)));
+            frm->push(Atom(T_STR, gc.new_symbol(file_name)));
+            frm->push(Atom(T_INT, line));
+            frm->push(Atom(T_STR, gc.new_symbol(func_name)));
+            frms->push(Atom(T_VEC, frm));
+        });
+
+    return Atom(T_VEC, err_obj);
 }
 //---------------------------------------------------------------------------
 
