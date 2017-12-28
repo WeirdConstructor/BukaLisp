@@ -102,11 +102,11 @@ Atom vv2atom(bukalisp::VM *vm, const VV &vv)
         // We do this, as I want to avoid memory management for PrimFunc.
         // They are (or should) currently be managed by the VM instance
         // and destroyed with it.
-        throw VMException("Can't pass VV closure from module to BukaLISP");
+        throw BukaLISPException("Can't pass VV closure from module to BukaLISP");
     }
     else
     {
-        throw VMException("Unknown VVal type in vv2atom");
+        throw BukaLISPException("Unknown VVal type in vv2atom");
     }
 }
 //---------------------------------------------------------------------------
@@ -205,8 +205,8 @@ VV atom2vv(VM *vm, const Atom &a)
             //d// std::cout << "ATOM2VV PTR: " << vvp << "," << vvp->ptr() << std::endl;
             if (!vvp)
             {
-                throw VMException("Can't convert non VVPointer-UserData "
-                                  "in call to primitive!");
+                throw BukaLISPException("Can't convert non VVPointer-UserData "
+                                        "in call to primitive!");
             }
             return vv_ptr(vvp->ptr(), vvp->type());
         }

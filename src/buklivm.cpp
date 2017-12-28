@@ -275,7 +275,7 @@ void VM::load_module(BukaLISPModule *m)
     }
     else if (init_func.m_type != T_NIL)
     {
-        throw VMException(
+        throw BukaLISPException(
                 "Bad __INIT__ in module initialization of '"
                 + m->module_name(this).m_d.sym->m_str
                 + "'");
@@ -458,6 +458,7 @@ Atom VM::eval(Atom callable, AtomVec *args)
         if (   callable.m_d.vec->m_len == VM_CLOS_SIZE
             && callable.m_d.vec->m_data[0].m_type == T_UD)
         {
+            std::cout << "OFFF:" << std::endl;
             instant_operation.op = OP_CALL;
             instant_operation.a  = 1;
             instant_operation.ae = REG_ROW_FRAME;
@@ -994,10 +995,28 @@ Atom VM::eval(Atom callable, AtomVec *args)
                         {
                             Atom *ot;
                             E_SET_D_PTR(PE_O, P_O, ot);
-                            (*func->m_d.func)(*(frame), *ot);
-        //                    cout << "frame: " << frame.to_write_str() << "; RET PRIM: "  << ret.to_write_str() << endl;
-                            if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
-                            //*argv_tmp = Atom();
+                            try
+                            {
+                                (*func->m_d.func)(*(frame), *ot);
+                                if (m_trace) cout << "CALL=> " << ot->to_write_str() << endl;
+                            }
+                            catch (VMRaise &r)
+                            {
+                                std::cout << "EXII" << std::endl;
+                                // TODO: If we have an error object, we need to
+                                //       attach current stack trace!
+                                BukaLISPException e("raised obj");
+                                e.set_error_obj(m_rt->m_gc, r.get_error_obj());
+                                e.set_do_ctrl_jmp_preserve_obj();
+                                throw e;
+                            }
+                            catch (BukaLISPException &e)
+                            {
+                                std::cout << "EX0" << e.what() << std::endl;
+                                if (m_trace) cout << "CALL=>Exception!" << endl;
+                                e.set_do_ctrl_jmp();
+                                throw add_stack_trace_error(e);
+                            }
                             break;
                         }
                         case T_CLOS:
@@ -1472,7 +1491,7 @@ Atom VM::eval(Atom callable, AtomVec *args)
                         || c->m_type == T_NIL
                         || (   c->m_type != T_VEC
                             && c->m_d.vec->m_len != VM_JUMP_FRAME_SIZE))
-                        throw VMRaise(m_rt->m_gc, *tmp);
+                        throw VMRaise(m_rt->m_gc, raised_val);
 
                     AtomVec *jmp_frame = c->m_d.vec;
                     if (   jmp_frame->at(VM_JMP_PC).m_type    != T_C_PTR
@@ -1859,7 +1878,7 @@ Atom VM::eval(Atom callable, AtomVec *args)
                     break;
 
                 default:
-                    throw VMException("Unknown VM opcode: " + to_string(m_pc->op));
+                    throw BukaLISPException("Unknown VM opcode: " + to_string(m_pc->op));
             }
             m_pc++;
 
@@ -1870,21 +1889,61 @@ Atom VM::eval(Atom callable, AtomVec *args)
             }
         }
     }
+    catch (VMRaise &r)
+    {
+        throw;
+    }
     catch (BukaLISPException &e)
     {
+        if (!e.has_stack_trace())
+            add_stack_trace_error(e);
+
         if (e.do_ctrl_jump())
         {
             instant_operation.op = OP_CTRL_JMP;
             instant_operation.o  = 0;
             instant_operation.oe = REG_ROW_SPECIAL;
-            instant_ctrl_jmp_obj.set_int(42);
+
+            if (e.preserve_error_obj())
+            {
+                instant_ctrl_jmp_obj = e.get_error_obj();
+                std::cout << "ERRO: " << instant_ctrl_jmp_obj.to_write_str() << std::endl;
+            }
+            else
+            {
+                instant_ctrl_jmp_obj.set_vec(m_rt->m_gc.allocate_vector(3));
+                instant_ctrl_jmp_obj.m_d.vec->push(
+                    Atom(T_SYM, m_rt->m_gc.new_symbol("BKL-ERROR-OBJ")));
+                instant_ctrl_jmp_obj.m_d.vec->push(
+                    Atom(T_STR, m_rt->m_gc.new_symbol(e.get_error_message())));
+                instant_ctrl_jmp_obj.m_d.vec->push(e.get_error_obj());
+                instant_ctrl_jmp_obj.m_d.vec->push(
+                    Atom(T_STR, m_rt->m_gc.new_symbol(e.what())));
+                AtomVec *frms = m_rt->m_gc.allocate_vector(10);
+                instant_ctrl_jmp_obj.m_d.vec->push(Atom(T_VEC, frms));
+                e.extract_frames(
+                    [&](const std::string &place,
+                        const std::string &file_name,
+                        size_t line,
+                        const std::string &func_name)
+                    {
+                        AtomVec *frm = m_rt->m_gc.allocate_vector(4);
+                        frm->push(Atom(T_STR, m_rt->m_gc.new_symbol(place)));
+                        frm->push(Atom(T_STR, m_rt->m_gc.new_symbol(file_name)));
+                        frm->push(Atom(T_INT, line));
+                        frm->push(Atom(T_STR, m_rt->m_gc.new_symbol(func_name)));
+                        frms->push(Atom(T_VEC, frm));
+                    });
+            }
+
             m_pc = &instant_operation;
             // TODO: Create error object and inject it somehow into the
             //       program!?
             // Question: Where to get the storage location from?
             goto VM_START;
         }
-        throw;
+
+        throw e;
     }
     catch (std::exception &e)
     {

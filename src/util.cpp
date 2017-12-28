@@ -31,7 +31,7 @@ UTF8Buffer *slurp(const std::string &filepath)
                         ios::in | ios::binary | ios::ate);
 
     if (!input_file.is_open())
-        throw bukalisp::BukLiVMException("Couldn't open '" + filepath + "'");
+        throw bukalisp::BukaLISPException("Couldn't open '" + filepath + "'");
 
     size_t size = (size_t) input_file.tellg();
 
@@ -61,7 +61,7 @@ bool write_str(const std::string &filepath, const std::string &data)
                          ios::out | ios::binary | ios::trunc);
 
     if (!output_file.is_open())
-        throw bukalisp::BukLiVMException("Couldn't open '" + tmpoutpath + "'");
+        throw bukalisp::BukaLISPException("Couldn't open '" + tmpoutpath + "'");
 
     output_file.write(data.data(), data.size());
     output_file.close();
@@ -94,7 +94,7 @@ std::string slurp_str(const std::string &filepath)
                         ios::in | ios::binary | ios::ate);
 
     if (!input_file.is_open())
-        throw bukalisp::BukLiVMException("Couldn't open '" + filepath + "'");
+        throw bukalisp::BukaLISPException("Couldn't open '" + filepath + "'");
 
     size_t size = (size_t) input_file.tellg();
 

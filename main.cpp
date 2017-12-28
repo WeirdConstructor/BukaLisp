@@ -37,20 +37,20 @@ using namespace std;
 //---------------------------------------------------------------------------
 
 #define TEST_TRUE(b, msg) \
-    if (!(b)) throw bukalisp::BukLiVMException( \
+    if (!(b)) throw bukalisp::BukaLISPException( \
         std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
         std::string(msg) + " in: " #b);
 
 #define TEST_EQ(a, b, msg) \
     if ((a) != (b)) \
-        throw bukalisp::BukLiVMException( \
+        throw bukalisp::BukaLISPException( \
             std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
             std::string(msg) + ", not eq: " \
             + std::to_string(a) + " != " + std::to_string(b));
 
 #define TEST_EQSTR(a, b, msg) \
     if ((a) != (b)) \
-        throw bukalisp::BukLiVMException( \
+        throw bukalisp::BukaLISPException( \
             std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
             std::string(msg) + ", not eq: " \
             + (a) + " != " + (b));
@@ -477,7 +477,7 @@ void test_atom_debug_info()
 #define TEST_EVAL(expr, b) \
     r = i.eval(std::string(__FILE__ ":") + std::to_string(__LINE__), expr); \
     if (bukalisp::write_atom(r) != (b)) \
-        throw bukalisp::BukLiVMException( \
+        throw bukalisp::BukaLISPException( \
             std::string(__FILE__ ":") + std::to_string(__LINE__) +  "| " + \
             #expr " not eq: " \
             + bukalisp::write_atom(r) + " != " + (b));

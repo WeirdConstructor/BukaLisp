@@ -21,6 +21,14 @@ namespace bukalisp
 //---------------------------------------------------------------------------
 
 struct Atom;
+class GC;
+
+class AtomExceptionContainer
+{
+    public:
+        virtual void get_error_obj(Atom &a) = 0;
+        virtual ~AtomExceptionContainer() { }
+};
 
 class BukaLISPException : public std::exception
 {
@@ -42,10 +50,15 @@ class BukaLISPException : public std::exception
         };
         std::vector<ErrorFrame> m_frames;
         std::string m_error_message;
+        std::string m_err_obj_str;
         std::string m_err;
+        bool        m_do_ctrl_jmp;
+        bool        m_preserve_obj;
+        std::shared_ptr<AtomExceptionContainer> m_err_obj;
 
     public:
         BukaLISPException(const std::string &err)
+            : m_do_ctrl_jmp(false), m_preserve_obj(false)
         {
             m_err = m_error_message = err;
         }
@@ -54,13 +67,26 @@ class BukaLISPException : public std::exception
                   size_t line,
                   const std::string &func_name,
                   const std::string &err)
+            : m_do_ctrl_jmp(false), m_preserve_obj(false)
         {
             m_err = m_error_message = err;
             push(place, file_name, line, func_name);
         }
 
-        // TODO!
-        bool do_ctrl_jump() { return false; }
+        void set_error_obj(GC &gc, const Atom &a);
+        Atom get_error_obj() const;
+
+        void set_do_ctrl_jmp() { m_do_ctrl_jmp = true; }
+        void set_do_ctrl_jmp_preserve_obj()
+        {
+            m_do_ctrl_jmp = true;
+            m_preserve_obj = true;
+        }
+        bool do_ctrl_jump() { return m_do_ctrl_jmp; }
+        bool preserve_error_obj() const { return m_preserve_obj; }
+
+        bool has_stack_trace() const { return !m_frames.empty(); }
+        std::string get_error_message() const { return m_error_message; }
 
         BukaLISPException &push(Atom &err_stack);
 
@@ -79,8 +105,23 @@ class BukaLISPException : public std::exception
             for (auto &frm : m_frames)
                 m_err = frm.to_string() + m_err;
             m_err += "Error: " + m_error_message;
+            if (!m_err_obj_str.empty())
+                m_err += " (atom: " + m_err_obj_str + ")";
             m_err = "\n" + m_err;
             return *this;
+        }
+        void extract_frames(std::function<void(const std::string &place,
+                                               const std::string &file_name,
+                                               size_t line,
+                                               const std::string &func_name)>
+                                               report_frame_func)
+        {
+            for (auto &frm : m_frames)
+                report_frame_func(
+                    frm.m_place,
+                    frm.m_file_name,
+                    frm.m_line,
+                    frm.m_func_name);
         }
         virtual const char *what() const noexcept { return m_err.c_str(); }
         virtual ~BukaLISPException() { }
@@ -506,22 +547,6 @@ struct Atom
                 return m_d.ptr == other.m_d.ptr;
         }
     }
-};
-//---------------------------------------------------------------------------
-
-
-class AtomException : public std::exception
-{
-    private:
-        std::string m_err;
-    public:
-        AtomException(const std::string &err)
-        {
-            m_err = err;
-        }
-
-        virtual const char *what() const noexcept { return m_err.c_str(); }
-        virtual ~AtomException() { }
 };
 //---------------------------------------------------------------------------
 
@@ -1437,6 +1462,21 @@ class RegRowsReference : public UserData
         {
             std::cout << "DIED REG ROWS REF" << std::endl;
         }
+};
+//---------------------------------------------------------------------------
+
+class GCRefAtomExceptionContainer : public AtomExceptionContainer
+{
+    private:
+        GC_ROOT_MEMBER(m_obj);
+    public:
+        GCRefAtomExceptionContainer(GC &gc, const Atom &a)
+            : GC_ROOT_MEMBER_INITALIZE(gc, m_obj)
+        {
+            m_obj = a;
+        }
+        virtual void get_error_obj(Atom &a) { a = m_obj; }
+        virtual ~GCRefAtomExceptionContainer() { }
 };
 //---------------------------------------------------------------------------
 

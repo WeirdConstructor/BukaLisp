@@ -13,17 +13,6 @@ namespace bukalisp
 {
 //---------------------------------------------------------------------------
 
-class BukLiVMException : public std::exception
-{
-    private:
-        std::string m_err;
-    public:
-        BukLiVMException(const std::string &err) : m_err(err) { }
-        virtual const char *what() const noexcept { return m_err.c_str(); }
-        virtual ~BukLiVMException() { }
-};
-//---------------------------------------------------------------------------
-
 class AtomGenerator : public bukalisp::SEX_Builder
 {
     private:

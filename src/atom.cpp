@@ -656,6 +656,23 @@ void RegRowsReference::mark(GC *gc, uint8_t clr)
 }
 //---------------------------------------------------------------------------
 
+void BukaLISPException::set_error_obj(GC &gc, const Atom &a)
+{
+    m_err_obj = std::make_shared<GCRefAtomExceptionContainer>(gc, a);
+    m_err_obj_str = a.to_write_str();
+    m_err = m_error_message + " (atom: " + m_err_obj_str + ")";
+}
+//---------------------------------------------------------------------------
+
+Atom BukaLISPException::get_error_obj() const
+{
+    Atom a;
+    if (m_err_obj)
+        m_err_obj->get_error_obj(a);
+    return a;
+}
+//---------------------------------------------------------------------------
+
 BukaLISPException &BukaLISPException::push(Atom &err_stack)
 {
     if (err_stack.m_type != T_VEC)

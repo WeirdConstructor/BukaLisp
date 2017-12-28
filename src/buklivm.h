@@ -44,17 +44,6 @@ class VMRaise : public std::exception
 };
 //---------------------------------------------------------------------------
 
-class VMException : public std::exception
-{
-    private:
-        std::string m_err;
-    public:
-        VMException(const std::string &err) : m_err(err) { std::cout << "FOO" << err << std::endl; }
-        virtual const char *what() const noexcept { return m_err.c_str(); }
-        virtual ~VMException() { }
-};
-//---------------------------------------------------------------------------
-
 //    X(PUSH_RNG_ENV,   8)
 //    X(PUSH_VEC_ENV,   9)
 
@@ -397,6 +386,7 @@ class VM
 
         void report_arity_error(Atom &arity, size_t argc);
 
+        // XXX FIXME TODO: This method needs to be as clever as the stack trace printer!
         BukaLISPException &add_stack_trace_error(BukaLISPException &e)
         {
             Atom info = get_current_debug_info();
@@ -424,7 +414,9 @@ class VM
 
         void error(const std::string &msg, const Atom &err_atom)
         {
-            error(msg + ", atom: " + err_atom.to_write_str());
+            BukaLISPException e(msg);
+            e.set_error_obj(m_rt->m_gc, err_atom);
+            throw e;
         }
 
         void init_prims();
@@ -436,7 +428,7 @@ class VM
                 Atom mod_funcs = MAP_ITER_VAL(p);
                 if (mod_funcs.m_type != T_MAP)
                 {
-                    throw VMException(
+                    throw BukaLISPException(
                             "On destruction: In module '"
                             + MAP_ITER_KEY(p).m_d.sym->m_str
                             + "': bad function map");
@@ -447,7 +439,7 @@ class VM
                 destr_func = destr_func.at(2);
                 if (destr_func.m_type != T_PRIM && destr_func.m_type != T_NIL)
                 {
-                    throw VMException(
+                    throw BukaLISPException(
                             "On destruction: In module '"
                             + MAP_ITER_KEY(p).m_d.sym->m_str
                             + "': bad destroy function");
