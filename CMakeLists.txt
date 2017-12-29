@@ -16,6 +16,7 @@ add_library(bukalisp_lib STATIC
     src/interpreter.cpp
     src/buklivm.cpp
     src/bukalisp.cpp
+    src/vmprog.cpp
     src/runtime.cpp
     src/util.cpp
     src/mempool.cpp

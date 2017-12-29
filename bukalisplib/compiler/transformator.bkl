@@ -19,7 +19,7 @@
                      (keyword? (@0 data))
                      (string? (@0 data))))
           (begin
-            (push! pos (str "(" (@0 data) " ...)"))
+            (push! pos (str "(" (@0 data) " )"))
             pos)
           pos))
       pos)))

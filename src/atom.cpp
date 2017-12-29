@@ -669,6 +669,8 @@ void BukaLISPException::print_error_object(const Atom &a, std::ostream &o)
     if (!is_error_object(a))
         return;
 
+    auto old_width = o.width();
+
     o << "Exception: " << a.at(1).to_display_str();
 
     Atom erobj = a.at(2);
@@ -685,14 +687,16 @@ void BukaLISPException::print_error_object(const Atom &a, std::ostream &o)
         for (size_t i = 0; i < frms->m_len; i++)
         {
             Atom frm = frms->at(i);
-            o << "    [" << frm.at(0).to_display_str() << "]"
-              << " "     << frm.at(3).to_display_str()
-              << " { "    << frm.at(1).to_display_str()
-                         << ":"
-                         << frm.at(2).to_display_str() << " }"
+            o << std::left << std::setfill(' ') << std::setw(20) << ("[" + frm.at(0).to_display_str() + "]")
+              << std::setw(35) << frm.at(3).to_display_str()
+              << "{" << frm.at(1).to_display_str()
+                     << ":"
+                     << frm.at(2).to_display_str() << "}"
               << std::endl;
         }
     }
+
+    o.width(old_width);
 }
 //---------------------------------------------------------------------------
 

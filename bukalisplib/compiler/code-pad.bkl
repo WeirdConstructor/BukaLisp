@@ -41,8 +41,8 @@
             (set! i (+ i 1)))
           m))
 
-      ($define! self (op-stack-trc title)
-        (push-op STACK_TRC: 0 title 0 0))
+      ($define! self (op-stack-trc out)
+        (push-op STACK_TRC: out 0 0 0))
 
       ($define! self (op-nop)
         (push-op NOP: 0 0 0 0))

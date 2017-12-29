@@ -339,9 +339,9 @@
         ret-adr))
    '#s1#stack-trace
     (lambda (ctx arg T gtx)
-      (let ((tit-adr (T ctx (@0 arg))))
-        (.op-stack-trc (P: ctx) tit-adr)
-        tit-adr))
+      (let ((ret-adr (new-tmp-pos-or-parent-adr ctx)))
+        (.op-stack-trc (P: ctx) ret-adr)
+        ret-adr))
    '#s1#return-from
     (lambda (ctx arg T gtx)
       (.op-ctrl-jmp (P: ctx)

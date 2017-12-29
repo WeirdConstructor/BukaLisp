@@ -135,8 +135,8 @@
 (add-syntax
   'bkl-vm-stack-trace
   (lambda (ctx args T gtx)
-    (unless (= (length args) 2)
-      (compiler-error gtx ctx "'bkl-vm-stack-trace' takes one argument" args))
+    (unless (= (length args) 1)
+      (compiler-error gtx ctx "'bkl-vm-stack-trace' takes no arguments" args))
     ['#s1#stack-trace (T ctx (@1 args))]))
 ;----------------------------------------------------------------------------
 
