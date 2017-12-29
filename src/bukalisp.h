@@ -246,6 +246,8 @@ class Instance
         {
         }
 
+        void set_trace(bool trc) { m_vm.set_trace(trc); }
+
         Runtime &get_runtime() { return m_rt; }
 
         void load_bootstrapped_compiler_from_disk();

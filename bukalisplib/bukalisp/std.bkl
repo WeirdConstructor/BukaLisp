@@ -1,13 +1,15 @@
 (define-library
   (bukalisp std)
-  (export map eval)
+  (export map eval map-join)
   (import (bukalisp base))
   (begin
     (define (eval- code . env)
       (if (empty? env)
         (eval code)
         (eval code env)))
+
     (define eval eval-)
+
     (define (map proc . lists)
       (let ((first-list (@0 lists)))
         (unless first-list
@@ -27,4 +29,14 @@
                   (push! out-list (apply proc args)))))
             (do-each (i first-list)
               (push! out-list (proc i))))
-          out-list)))))
+          out-list)))
+
+    (define (map-join sep fn lst)
+      (define out [])
+      (define i 0)
+      (do-each (v lst)
+        (push! out (fn v))
+        (set! i (+ i 1))
+        (unless (= i (length lst))
+          (push! out sep)))
+      out) ))

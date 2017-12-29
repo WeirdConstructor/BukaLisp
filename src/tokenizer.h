@@ -103,6 +103,7 @@ class Tokenizer
         unsigned int         m_token_pos;
         int                  m_cur_line;
         std::string          m_input_name;
+        bool                 m_trace;
 
     protected:
         void push(Token t)
@@ -114,8 +115,11 @@ class Tokenizer
 
     public:
         Tokenizer()
+            : m_trace(false)
         {
         }
+
+        void set_trace(bool t) { m_trace = t; }
 
         void reset()
         {
@@ -464,12 +468,18 @@ class Tokenizer
         Token peek()
         {
             if (m_tokens.size() <= m_token_pos) return Token();
-            return m_tokens[m_token_pos];
+            Token t = m_tokens[m_token_pos];
+            if (m_trace)
+                std::cout << "PEEK " << t.dump() << std::endl;
+            return t;
         }
         Token next()
         {
             if (m_tokens.size() <= m_token_pos) return Token();
-            return m_tokens[m_token_pos++];
+            Token t = m_tokens[m_token_pos++];
+            if (m_trace)
+                std::cout << "PEEK " << t.dump() << std::endl;
+            return t;
         }
 
         void pushAtom(UTF8Buffer &u8)

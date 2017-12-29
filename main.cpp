@@ -1133,6 +1133,7 @@ int main(int argc, char *argv[])
         bool i_trace            = false;
         bool i_force_gc         = false;
         bool i_trace_vm         = false;
+        bool i_trace_tok        = false;
         bool do_stat            = false;
         bool bootstrap          = false;
         bool write_compiler     = false;
@@ -1148,6 +1149,8 @@ int main(int argc, char *argv[])
                 i_force_gc = true;
             else if (arg == "-t")
                 i_trace = true;
+            else if (arg == "-k")
+                i_trace_tok = true;
             else if (arg == "-T")
                 i_trace_vm = true;
             else if (arg == "-S")
@@ -1401,6 +1404,8 @@ int main(int argc, char *argv[])
                 inst.load_bootstrapped_compiler_from_disk();
 
                 BenchmarkTimer bt;
+                inst.get_runtime().m_tok.set_trace(i_trace_tok);
+                inst.set_trace(i_trace_vm);
                 Atom r = inst.execute_file(input_file_path);
                 cout << r.to_write_str(true) << endl;
                 cout << "time: " << bt.diff() << "ms" << endl;
@@ -1418,6 +1423,7 @@ int main(int argc, char *argv[])
             }
             catch (BukaLISPException &e)
             {
+                std::cout << "X" << std::endl;
                 Runtime &rt = inst.get_runtime();
                 Atom err_obj = e.create_error_object(rt.m_gc);
                 if (BukaLISPException::is_error_object(err_obj))

@@ -57,6 +57,7 @@ class Parser
         SEX_Builder *m_builder;
         bool        m_eof;
         bool        m_builder_enabled;
+        int         m_builder_inhibit_cnt;
 #       define      M_BUILDER(X)   do { if (m_builder_enabled) { m_builder->X; } } while(0)
 
     public:
@@ -66,7 +67,25 @@ class Parser
         {
         }
 
-        void reset() { m_eof = false; m_builder_enabled = true; }
+        void inc_builder_inhibit()
+        {
+            m_builder_inhibit_cnt++;
+            m_builder_enabled = m_builder_inhibit_cnt <= 0;
+        }
+
+        void dec_builder_inhibit()
+        {
+            if (m_builder_inhibit_cnt > 0)
+                m_builder_inhibit_cnt--;
+            m_builder_enabled = m_builder_inhibit_cnt <= 0;
+        }
+
+        void reset()
+        {
+            m_eof                 = false;
+            m_builder_enabled     = true;
+            m_builder_inhibit_cnt = 0;
+        }
 
         bool is_eof() { return m_eof; }
 
@@ -287,9 +306,9 @@ class Parser
             if (t.m_token_id == TOK_CHR && t.m_text == "#;")
             {
                 m_tok.next();
-                m_builder_enabled = false;
+                inc_builder_inhibit();
                 parse();
-                m_builder_enabled = true;
+                dec_builder_inhibit();
                 return true;
             }
 
