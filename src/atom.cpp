@@ -311,6 +311,7 @@ std::string Atom::to_display_str() const
     return m_type == T_SYM ? m_d.sym->m_str
          : m_type == T_KW  ? m_d.sym->m_str
          : m_type == T_STR ? m_d.sym->m_str
+         : m_type == T_NIL ? ""
          : write_atom(*this);
 }
 //---------------------------------------------------------------------------

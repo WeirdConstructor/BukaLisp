@@ -326,6 +326,12 @@
 (T '(abs 10.123)    10.123)
 (T '(abs -10.123)   10.123)
 
+; Test nil behaviour for string conv.:
+
+(T '(str nil)           "")
+(T '(pp-str nil)        "nil")
+(T '(any->number nil)   0)
+
 ; Test string to number conversion:
 (T '(string->number "10")     10)
 (T '(string->number "-10")    -10)
