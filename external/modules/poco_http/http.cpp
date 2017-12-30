@@ -29,6 +29,8 @@
 #include <Poco/Net/HTTPCookie.h>
 #include <Poco/Net/HTTPServerRequest.h>
 #include <Poco/Net/HTTPSClientSession.h>
+#include <Poco/Net/HTMLForm.h>
+#include <Poco/Net/PartHandler.h>
 #include <Poco/Net/AcceptCertificateHandler.h>
 #include <Poco/Net/SSLManager.h>
 #include <Poco/Net/Context.h>
@@ -134,6 +136,45 @@ void Server::reply(int64_t token, const VV &reply)
 }
 //---------------------------------------------------------------------------
 
+class HTTP_Part_Handler : public Poco::Net::PartHandler
+{
+    public:
+        HTTP_Part_Handler()
+            : m_parts(vv_list())
+        {
+        }
+
+        void handlePart(const Poco::Net::MessageHeader &header, std::istream &stream)
+        {
+            using namespace Poco;
+            using namespace Poco::Net;
+
+            VVal::VV part(vv_map());
+
+            std::string type = header.get("Content-Type", "<unknown>");
+            part << vv_kv("content_type", type);
+
+            if (header.has("Content-Disposition"))
+            {
+                std::string d;
+                NameValueCollection nvc;
+                MessageHeader::splitParameters(
+                    header["Content-Disposition"], d, nvc);
+                part << vv_kv("name",     nvc.get("name",     "<unknown>"));
+                part << vv_kv("filename", nvc.get("filename", "<unknown>"));
+            }
+
+            std::ostringstream os;
+            os << stream.rdbuf();
+            part << vv_kv("body", os.str());
+
+            m_parts << part;
+        }
+
+        VVal::VV        m_parts;
+};
+//---------------------------------------------------------------------------
+
 class HTTP_SRV_Handler : public Poco::Net::HTTPRequestHandler
 {
     private:
@@ -148,8 +189,7 @@ class HTTP_SRV_Handler : public Poco::Net::HTTPRequestHandler
             std::promise<VV> response_promise;
             auto f = response_promise.get_future();
 
-            std::ostringstream os;
-            os << request.stream().rdbuf();
+            std::string body;
 
             VV params(vv_list());
 
@@ -157,14 +197,29 @@ class HTTP_SRV_Handler : public Poco::Net::HTTPRequestHandler
             for (auto p : u.getQueryParameters())
                 params << (vv_list() << vv(p.first) << vv(p.second));
 
-            VV req(
-                vv_map()
+            VV req(vv_map());
+
+            std::string content_type = request.getContentType();
+            if (content_type.substr(0, 19) == "multipart/form-data")
+            {
+                HTTP_Part_Handler partHandler;
+                Poco::Net::HTMLForm form(request, request.stream(), partHandler);
+                req << vv_kv("upload", partHandler.m_parts);
+            }
+            else
+            {
+                std::ostringstream os;
+                os << request.stream().rdbuf();
+                body = os.str();
+            }
+
+            req
                 << vv_kv("host",            request.getHost())
                 << vv_kv("method",          request.getMethod())
-                << vv_kv("content_type",    request.getContentType())
+                << vv_kv("content_type",    content_type)
                 << vv_kv("url",             request.getURI())
                 << vv_kv("params",          params)
-                << vv_kv("body",            os.str()));
+                << vv_kv("body",            body);
 
 //            L_DEBUG << "HTTP Request: " << req;
             m_srv->submit_request(req, &response_promise);
