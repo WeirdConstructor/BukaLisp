@@ -42,7 +42,14 @@
 #   define BKL_PATH_SEP    "/"
 #endif
 
+//---------------------------------------------------------------------------
 
+
+#if defined(WIN32) || defined(_WIN32)
+#   define BKL_PLATFORM "win32"
+#else
+#   define BKL_PLATFORM "linux"
+#endif
 /******************************************************************************
 * Copyright (C) 2017 Weird Constructor
 *

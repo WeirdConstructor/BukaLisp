@@ -952,6 +952,11 @@ START_PRIM()
 END_PRIM(sys-path-split)
 
 START_PRIM()
+    REQ_EQ_ARGC(sys-platform, 1);
+    out = Atom(T_STR, m_rt->m_gc.new_symbol(BKL_PLATFORM));
+END_PRIM(sys-platform)
+
+START_PRIM()
     REQ_GT_ARGC(apply, 1);
 
     if (!m_vm)
