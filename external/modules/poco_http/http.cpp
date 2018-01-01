@@ -199,6 +199,10 @@ class HTTP_SRV_Handler : public Poco::Net::HTTPRequestHandler
 
             VV req(vv_map());
 
+            VV header_map = vv_map();
+            for (auto header : request)
+                header_map->set(header.first, vv(header.second));
+
             std::string content_type = request.getContentType();
             if (content_type.substr(0, 19) == "multipart/form-data")
             {
@@ -219,6 +223,7 @@ class HTTP_SRV_Handler : public Poco::Net::HTTPRequestHandler
                 << vv_kv("content_type",    content_type)
                 << vv_kv("url",             request.getURI())
                 << vv_kv("params",          params)
+                << vv_kv("headers",         header_map)
                 << vv_kv("body",            body);
 
 //            L_DEBUG << "HTTP Request: " << req;
@@ -437,10 +442,10 @@ VV get(const std::string &url, const VVal::VV &opts)
 
         if (opts->_("headers")->is_defined())
         {
-            VV headerMap = vv_map();
+            VV header_map = vv_map();
             for (auto header : response)
-                headerMap->set(header.first, vv(header.second));
-            resp->set("headers", headerMap);
+                header_map->set(header.first, vv(header.second));
+            resp->set("headers", header_map);
         }
 
         if (response.getContentType() == "application/json")
