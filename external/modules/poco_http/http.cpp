@@ -334,6 +334,7 @@ Server::~Server()
 //        L_DEBUG << "HTTP Server stop.";
         m_http_srv->stopAll(true);
         delete m_http_srv;
+        m_http_srv = nullptr;
 //        L_DEBUG << "HTTP Server deleted.";
 	}
 }

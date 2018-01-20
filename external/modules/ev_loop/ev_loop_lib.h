@@ -105,6 +105,8 @@ class EventLoop
         {
         }
 
+        boost::asio::io_service *get_io_service() const { return &m_service; }
+
         void start_timer(VVal::VV timeduration, VVal::VV cb)
         {
             using namespace boost::asio;

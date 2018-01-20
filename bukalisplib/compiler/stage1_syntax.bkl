@@ -133,6 +133,20 @@
 ;----------------------------------------------------------------------------
 
 (add-syntax
+  'bkl-dump-stage1
+  (lambda (ctx args T gtx)
+    (define ret nil)
+    (displayln STAGE1-DUMP-START:)
+    (do-each (a (drop args 1))
+      (let ((result (T ctx a)))
+        (when (nil? ret)
+          (set! ret result))
+        (displayln (pp-str result))))
+    (displayln STAGE1-DUMP-END:)
+    ret))
+;----------------------------------------------------------------------------
+
+(add-syntax
   'bkl-vm-stack-trace
   (lambda (ctx args T gtx)
     (unless (= (length args) 1)
@@ -345,6 +359,14 @@
          (s1-begin T ctx (drop args 2)))))))
 ;----------------------------------------------------------------------------
 
+(define check-if-var-already-locally-defined
+  (lambda (ctx var-name)
+    (let ((lookup-res (lookup-in-env (env: ctx) var-name nil [])))
+      (if lookup-res
+        (begin (not (@" IS-ROOT-ENV " (env: ctx))))
+        #f))))
+;----------------------------------------------------------------------------
+
 (add-syntax
   'define
   (lambda (ctx args T gtx)
@@ -373,6 +395,12 @@
                         (set! var [glob-var: var-name glob-reg-idx])))
                     (begin
                       (set! var-s1-sym '#s1#var)
+                      (when (check-if-var-already-locally-defined ctx var-name)
+                        (compiler-error
+                          gtx ctx (str "'define' redefinition of local "
+                                       "variable not allowed (var: '"
+                                       var-name "').")
+                          args))
                       (let ((new-var-name (gtx-gensym gtx var-name)))
                         (push! (let-vars: ctx) new-var-name)
                         (set! var [var: new-var-name var-name]))))
@@ -403,6 +431,12 @@
                       (set! var [glob-var: func-name glob-reg-idx])))
                   (begin
                     (set! var-s1-sym '#s1#var)
+                    (when (check-if-var-already-locally-defined ctx func-name)
+                      (compiler-error
+                        gtx ctx (str "'define' redefinition of local "
+                                     "function not allowed (var: '"
+                                     func-name "').")
+                        args))
                     (let ((new-var-name (gtx-gensym gtx func-name)))
                       (push! (let-vars: ctx) new-var-name)
                       (set! var [var: new-var-name func-name]))))
@@ -567,15 +601,16 @@ value.
         "key bind name of iteration description must be a symbol"
         iter-desc));
     (define obj-atom (@1 iter-desc))
+    (define obj nil)
     (if (eqv? (length iter-desc) 3)
       (begin
-        (define obj-atom (@2 iter-desc))
+        (set! obj-atom (@2 iter-desc))
         (unless (symbol? (@1 iter-desc))
           (compiler-error
             gtx ctx
             "value bind name of iteration description must be a symbol"
             iter-desc))
-        (define obj (T ctx obj-atom))
+        (set! obj (T ctx obj-atom))
         (compile-let-block
           ctx T gtx
           (.AM gtx [[(@0 iter-desc) nil]
@@ -587,7 +622,7 @@ value.
              obj
              (s1-begin T ctx (drop args 2))])))
       (begin
-        (define obj (T ctx obj-atom))
+        (set! obj (T ctx obj-atom))
         (compile-let-block
           ctx T gtx
           (.AM gtx [[(@0 iter-desc) nil]])

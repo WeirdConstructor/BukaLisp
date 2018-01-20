@@ -156,6 +156,8 @@ bool Atom::is_lt(const Atom &other) const
             case T_SYNTAX:
             case T_SYM:
                 return m_d.sym->m_str < other.m_d.sym->m_str;
+            default:
+                return m_d.ptr < other.m_d.ptr;
         }
     }
     else

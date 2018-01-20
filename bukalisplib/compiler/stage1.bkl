@@ -233,7 +233,7 @@
 (define gtx-gensym
   (lambda (gtx name)
     (let ((sym (string->symbol (str name "_" (gensym-counter: gtx)))))
-      (@!var-counter: gtx (+ 1 (gensym-counter: gtx)))
+      (@!gensym-counter: gtx (+ 1 (gensym-counter: gtx)))
       sym)))
 ;----------------------------------------------------------------------------
 

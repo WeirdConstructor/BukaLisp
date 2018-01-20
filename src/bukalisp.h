@@ -233,6 +233,7 @@ class Instance
         Runtime     m_rt;
         VM          m_vm;
         Interpreter m_i;
+        bool        m_trace_vm;
 
         GC_ROOT_MEMBER(m_compiler);
         std::function<Atom(Atom prog, AtomMap *root_env, const std::string &name, bool only_compile)>
@@ -242,11 +243,12 @@ class Instance
         Instance()
             : m_vm(&m_rt),
               m_i(&m_rt, &m_vm),
-              GC_ROOT_MEMBER_INITALIZE(m_rt.m_gc, m_compiler)
+              GC_ROOT_MEMBER_INITALIZE(m_rt.m_gc, m_compiler),
+              m_trace_vm(false)
         {
         }
 
-        void set_trace(bool trc) { m_vm.set_trace(trc); }
+        void set_trace(bool trc) { m_trace_vm = trc; }
 
         Runtime &get_runtime() { return m_rt; }
 

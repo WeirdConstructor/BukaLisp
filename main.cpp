@@ -1318,7 +1318,7 @@ int main(int argc, char *argv[])
             std::string compiler_filepath = rt.find_in_libdirs("compiler.bkl");
 
             BenchmarkTimer timer_comp_comp;
-            Atom compiler;
+            GC_ROOT(rt.m_gc, compiler);
             {
                 GC_ROOT_MAP(rt.m_gc, root_env_c) = rt.m_gc.allocate_map();
                 compiler =
@@ -1330,7 +1330,6 @@ int main(int argc, char *argv[])
 //                std::cout << "Compiler env: " << Atom(T_MAP, root_env_c).to_write_str(true) << std::endl;
 //                std::cout << "PROG: " << compiler.to_write_str(true) << std::endl;
             }
-            GC_ROOT(rt.m_gc, compiler_r) = compiler;
             std::cout << "Compiler bootstrapping done, took: " << timer_comp_comp.diff() << "ms" << std::endl;
 
             i.cleanup_you_are_unused_now();
@@ -1483,7 +1482,9 @@ int main(int argc, char *argv[])
                         if (line.size() > 0 && line[0] == '@')
                             line = slurp_str(line.substr(1, line.size()));
 
+                        inst.set_trace(i_trace_vm);
                         Atom r = inst.execute_string(line, root_env);
+                        inst.set_trace(false);
 
                         cout << "> " << r.to_write_str(true) << endl;
                     }

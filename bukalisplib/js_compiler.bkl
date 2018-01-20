@@ -1,4 +1,4 @@
-(include compiler2)
+(include "compiler.bkl")
 
 ;----------------------------------------------------------------------------
 
@@ -29,6 +29,12 @@
       ($define! self (append-value o-p)
         (@!value-type: self (value-type: o-p))
         (@!value-str:  self (value-str: o-p)))
+      ($define! self (sf-value-of gtx o-p)
+        (if (.sideeffect? o-p)
+          (let ((tmp-var (gtx-gentmpsym gtx "spill")))
+            (.add-line self (str "let " tmp-var " = " (value-str: o-p) ";"))
+            tmp-var)
+          (.value o-p)))
       ($define! self (sideeffect?)
         (eqv? (value-type: self) with-sideeffect:))
       ($define! self (value)
@@ -52,6 +58,8 @@
                 (push! out-line "  ")))
               (push! out-line (@1 line))
               (push! o-lines (apply str-join "" out-line))))
+          (unless (= (length (.value self)) 0)
+            (push! o-lines (.value self)))
           (apply str-join "\n" o-lines)))
       ($define! self (print)
         (displayln (.to-string self)))
@@ -61,59 +69,93 @@
 (define js-transformer
   (lambda (stage-2-data ctx gtx)
     (find-transform-match
-      [['#s1#begin
-        (lambda (ctx arg T gtx)
-          (let ((P (str-pad)))
-            (if (= (length arg) 1)
-              (T ctx (@0 arg))
-              (let ((last-P (T ctx (@(- (length arg) 1) arg))))
-                (do-each (expr (take arg (- (length arg) 1)))
-                  (let ((sub-P (T ctx expr)))
-                    (.append-pad P sub-P)
-                    (when (.sideeffect? sub-P)
-                      (.add-line P (.value sub-P)))))
-                (.append-pad P last-P)
-                (.append-value P last-P)
-                P))))]
-       ['#s1#data
-        (lambda (ctx arg T gtx)
-          (let ((P (str-pad)))
-            (.set-value-no-sideeffect P (@0 arg))
-            P))]
-       ['#s1#var
-        (lambda (ctx arg T gtx)
-          (let ((P (str-pad)))
-            (.set-value-no-sideeffect P (@0 arg))
-            P))]
-       ['#s1#set!
-        (lambda (ctx arg T gtx)
-          (let ((P (str-pad)))
-            (.add-debug-from-gtx P gtx)
-            (let ((var-p   (T ctx (@0 arg)))
-                  (value-p (T ctx (@1 arg))))
-              (.append-pad P var-p)
-              (.append-pad P value-p)
-              (.add-line P (str (.value var-p) " = " (.value value-p) ";"))
-              (.append-value P var-p)
-              P)))]
-       ['#s1#lambda
-        (lambda (ctx arg T gtx)
-          (let ((P (str-pad)))
-            (.add-debug-from-gtx P gtx)
-            (.add-line P
-                       (str "function ("
-                            (apply str-join "," (@1 (@0 arg)))
-                            ") {"))
-            (.inc-indent P)
-            (let ((block-P (T ctx (@1 arg))))
-              (.append-pad P block-P)
-              (.add-line P (str "return " (.value block-P) ";")))
-            (.dec-indent P)
-            (.add-line P "}")
-            P))]]
+      {'#s1#begin
+      (lambda (ctx arg T gtx)
+        (let ((P (str-pad)))
+          (if (= (length arg) 1)
+            (T ctx (@0 arg))
+            (let ((last-P (T ctx (@(- (length arg) 1) arg))))
+              (do-each (expr (take arg (- (length arg) 1)))
+                (let ((sub-P (T ctx expr)))
+                  (.append-pad P sub-P)
+                  (when (.sideeffect? sub-P)
+                    (.add-line P (.value sub-P)))))
+              (.append-pad P last-P)
+              (.append-value P last-P)
+              P))))
+      '#s1#data
+      (lambda (ctx arg T gtx)
+        (let ((P (str-pad)))
+          (.set-value-no-sideeffect P (@0 arg))
+          P))
+      '#s1#var
+      (lambda (ctx arg T gtx)
+        (let ((P (str-pad)))
+          (.set-value-no-sideeffect P (@0 arg))
+          P))
+      '#s1#set!
+      (lambda (ctx arg T gtx)
+        (let ((P (str-pad)))
+          (.add-debug-from-gtx P gtx)
+          (let ((var-p   (T ctx (@0 arg)))
+                (value-p (T ctx (@1 arg))))
+            (.append-pad P var-p)
+            (.append-pad P value-p)
+            (.add-line P (str (.value var-p) " = " (.value value-p) ";"))
+            (.append-value P var-p)
+            P)))
+      '#s1#add
+      (lambda (ctx arg T gtx)
+        (let ((P   (str-pad))
+              (a-p (T ctx (@0 arg)))
+              (b-p (T ctx (@1 arg))))
+          (.add-debug-from-gtx P gtx)
+          (.append-pad P a-p)
+          (.append-pad P b-p)
+          (.set-value-no-sideeffect
+            P (str "("
+                   (.sf-value-of P gtx a-p)
+                   " + "
+                   (.sf-value-of P gtx b-p)
+                   ")"))
+          P))
+      '#s1#lambda
+      (lambda (ctx arg T gtx)
+        (let ((P             (str-pad))
+              (anon-tmp-func (gtx-gentmpsym gtx "anon")))
+          (.add-debug-from-gtx P gtx)
+          (.add-line P
+                     (str "let " anon-tmp-func " = function ("
+                          (apply str-join "," (@1 (@0 arg)))
+                          ") {"))
+          (.inc-indent P)
+          (let ((block-P (T ctx (@1 arg))))
+            (.append-pad P block-P)
+            (.add-line P (str "return " (.value block-P) ";")))
+          (.dec-indent P)
+          (.add-line P "};")
+          (.set-value-no-sideeffect P anon-tmp-func)
+          P))
+      '#s1#apply
+      (lambda (ctx arg T gtx)
+        (let ((P        (str-pad))
+              (func-p   (T ctx (@0 arg)))
+              (args     []))
+          (displayln FOFOFOF: gtx)
+          (.add-debug-from-gtx P gtx)
+          (.append-pad P func-p)
+          (do-each (a (@1 arg))
+            (let ((a-p (T ctx a)))
+              (.append-pad P a-p)
+              (push! args (.value a-p))))
+          (.add-debug-from-gtx P gtx)
+          (.set-value P (str "(" (.value func-p) ")"
+                             "(" (apply str-join ", " args) ")"))
+          P))}
       stage-2-data
       ctx
-      gtx)))
+      gtx
+      #f)))
 ;----------------------------------------------------------------------------
 
 (define s2js-transform
@@ -121,25 +163,37 @@
     (js-transformer
       val
       stage1-root-env
-      {})))
+      {gensym-counter: 0})))
 ;----------------------------------------------------------------------------
 
 (define js-compile
   (lambda (expr)
+    (when (string? expr)
+      (set! expr (first (read-str expr))))
+;    (displayln (pp-str (userdata->atom expr)))
+    (displayln (pp-str expr))
     (let ((root-env (spawn-root-env))
           (s1prog (stage1-transformator
                     expr
                     {env:         root-env
-                    include-dir: "bukalisplib"}
+                     include-dir: "bukalisplib"}
                     {root-env:    root-env
-                    gensym-counter: 0})))
-      (displayln (pp-str s1prog))
+                     gensym-counter: 0})))
+      (displayln FOFFF:)
       (.print (s2js-transform s1prog root-env)))))
 ;----------------------------------------------------------------------------
 
-(js-compile '(lambda (a b c) a))
-(js-compile
-  '(lambda (a b c)
-     (set! a 10)
-     a))
+;(js-compile '(lambda (a b c) 1 2 3))
+;(js-compile
+;  '(lambda (a b c)
+;     (set! a (+ b c 10))
+;     a))
 
+(js-compile
+  "((lambda (a b c)
+     (set! a
+       (+
+         ((lambda () 12))
+         c
+         10))
+     a) 1 2 3)")

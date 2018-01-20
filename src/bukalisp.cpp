@@ -66,7 +66,11 @@ Atom Instance::execute_string(const std::string &line, AtomMap *root_env)
     Atom line_prog =
         m_compile_func(line_code, root_env, "<repl>", true);
 
-    return m_vm.eval(line_prog, nullptr);
+    m_vm.set_trace(m_trace_vm);
+    Atom ret = m_vm.eval(line_prog, nullptr);
+    m_vm.set_trace(false);
+
+    return ret;
 }
 //---------------------------------------------------------------------------
 
@@ -85,7 +89,10 @@ Atom Instance::execute_file(const std::string &filepath)
     Atom vm_prog =
         m_compile_func(code, root_env.m_d.map, filepath, true);
 
-    return m_vm.eval(vm_prog, nullptr);
+    m_vm.set_trace(m_trace_vm);
+    Atom ret = m_vm.eval(vm_prog, nullptr);
+    m_vm.set_trace(false);
+    return ret;
 }
 //---------------------------------------------------------------------------
 

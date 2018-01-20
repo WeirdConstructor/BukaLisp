@@ -686,7 +686,7 @@
                 (push! creator-upv-adrs (@0 new-upv))
                 (@!upv-var-name new-env new-upv)))))
         ; emit code and compile body with a new environment:
-        (define new-env (assign (env: ctx) new-env))
+        (set! new-env (assign (env: ctx) new-env))
         (let ((ret-adr (new-tmp-pos-or-parent-adr ctx))
               (body-res-adr
                 (T (assign ctx [P:              lambda-pad

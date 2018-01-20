@@ -73,12 +73,9 @@ VV_CLOSURE_DOC(ev_loop_free,
 "Destroys an previously with `ev-loop-new` allocated _ev-loop-handle_.\n"
 )
 {
-        std::cout << "XXX" << std::endl;
     EventLoop *evl =
         vv_args->_P<EventLoop>(0, "ev-loop:instance");
-        std::cout << "XXX" << std::endl;
     evl->kill();
-        std::cout << "XXX2" << std::endl;
     return vv_undef();
 }
 //---------------------------------------------------------------------------

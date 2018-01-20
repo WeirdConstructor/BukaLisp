@@ -36,6 +36,160 @@
 using namespace VVal;
 using namespace std;
 
+//---------------------------------------------------------------------------
+
+// Taken from the internet, originally from Thomas Wang.
+// Found on https://naml.us/blog/tag/thomas-wang:
+static uint64_t int64hash(uint64_t key)
+{
+    key = (~key) + (key << 21); // key = (key << 21) - key - 1;
+    key = key ^ (key >> 24);
+    key = (key + (key << 3)) + (key << 8); // key * 265
+    key = key ^ (key >> 14);
+    key = (key + (key << 2)) + (key << 4); // key * 21
+    key = key ^ (key >> 28);
+    key = key + (key << 31);
+    return key;
+}
+//---------------------------------------------------------------------------
+
+// Function taken from the Internet:
+//
+// A xorshift* generator takes an xorshift generator, and performs an
+// invertible multiplication (modulo the word size) to its output as a
+// non-linear transformation, as suggested by Marsaglia.[1] The following
+// 64-bit generator with 64 bits of state has a maximal period of 264 − 1[5]
+// and fails only the MatrixRank test of BigCrush:
+//
+// http://en.wikipedia.org/wiki/Xorshift#Xorshift.2A
+static uint64_t xorshift64star(uint64_t x)
+{
+	x ^= x >> 12; // a
+	x ^= x << 25; // b
+	x ^= x >> 27; // c
+	return x * 2685821657736338717ULL;
+}
+//---------------------------------------------------------------------------
+
+static double int64todouble(uint64_t x)
+{
+    x = x >> 11; // Most significant bits to 53bit
+    return (double) x / (double) (UINT64_MAX >> 11);
+}
+//---------------------------------------------------------------------------
+
+VV_CLOSURE_DOC(util_int_to_ratio,
+"@util procedure (util-int-to-ratio _num_)\n"
+"@util procedure (util-int-to-ratio _list-of-num_)\n"
+"\n"
+    "    Converts a 64 Bit (actually 53 bit) integer to a double in the range 0 to 1\n"
+)
+{
+    if (vv_args->_(0)->is_list())
+    {
+        VV out(vv_list());
+
+        for (auto n : *(vv_args->_(0)))
+        {
+            out << int64todouble((uint64_t) n->i());
+        }
+
+        return out;
+    }
+    else
+    {
+        return vv(int64todouble((uint64_t) vv_args->_i(0)));
+    }
+}
+//---------------------------------------------------------------------------
+
+VV_CLOSURE_DOC(util_xorshift,
+"@util procedure (util-xorshift _list-of-nums_)\n"
+"@util procedure (util-xorshift _num_)\n"
+"@util procedure (util-xorshift _num_ _num-times_)\n"
+"@util procedure (util-xorshift _num_ _num-times_ #t)\n"
+"\n"
+"A 64-Bit XOR-Shift implementation with maximal period of 2^64-1.\n"
+"The initial number should not be zero, and preverable should have\n"
+"multiple one bits to lead to more 'interesting' numbers.\n"
+"The _num-times_ repeat application of xorshift to the same number multiple times.\n"
+"If the third argument is #true, all intermediate values are kept and returned\n"
+"in a list."
+)
+{
+    if (vv_args->_(0)->is_list())
+    {
+        VV out(vv_list());
+        for (auto n : *(vv_args->_(0)))
+            out << (int64_t) xorshift64star((uint64_t) n->i());
+        return out;
+    }
+    else if (vv_args->size() > 2 && vv_args->_b(2))
+    {
+        VV out(vv_list());
+        uint64_t x = (uint64_t) vv_args->_i(0);
+        for (int i = 1; i <= vv_args->_i(1); i++)
+        {
+            x = xorshift64star(x);
+            out << (int64_t) x;
+        }
+        return out;
+    }
+    else if (vv_args->size() > 1)
+    {
+        uint64_t x = (uint64_t) vv_args->_i(0);
+        for (int i = 1; i <= vv_args->_i(1); i++)
+            x = xorshift64star(x);
+        return vv((int64_t) x);
+    }
+    else
+    {
+        return vv((int64_t) xorshift64star((uint64_t) vv_args->_i(0)));
+    }
+}
+//---------------------------------------------------------------------------
+
+VV_CLOSURE_DOC(util_hash64,
+"@util procedure (util-hash64 _list-of-num_)\n"
+"@util procedure (util-hash64 _num_)\n"
+"@util procedure (util-hash64 _num_ _num-times_)\n"
+"@util procedure (util-hash64 _num_ _num-times_ #t)\n"
+"\n"
+"    A 64-Bit hash function implementation. See also `util-xorshift`.\n"
+)
+{
+    if (vv_args->_(0)->is_list())
+    {
+        VV out(vv_list());
+        for (auto n : *(vv_args->_(0)))
+            out << (int64_t) int64hash((uint64_t) n->i());
+        return out;
+    }
+    else if (vv_args->size() > 2 && vv_args->_b(2))
+    {
+        VV out(vv_list());
+        uint64_t x = (uint64_t) vv_args->_i(0);
+        for (int i = 1; i <= vv_args->_i(1); i++)
+        {
+            x = int64hash(x);
+            out << (int64_t) x;
+        }
+        return out;
+    }
+    else if (vv_args->size() > 1)
+    {
+        uint64_t x = (uint64_t) vv_args->_i(0);
+        for (int i = 1; i <= vv_args->_i(1); i++)
+            x = int64hash(x);
+        return vv((int64_t) x);
+    }
+    else
+    {
+        return vv((int64_t) int64hash((uint64_t) vv_args->_i(0)));
+    }
+}
+//---------------------------------------------------------------------------
+
 VV_CLOSURE_DOC(util_from_csv,
 "@util procedure (util-from-csv _csv-string_ _field-sep_ _row-sep_)\n"
 "@util procedure (util-from-csv _csv-string_ _field-sep_)\n"
@@ -394,6 +548,7 @@ VV_CLOSURE_DOC(util_re,
 "       $&      - entire match\n"
 "       $`      - prefix\n"
 "       $´      - suffix\n"
+"       $$      - '$' itself\n"
 "_return-format-mode-str_ may be empty or contain:\n"
 "       \"n\"   - string index-numbers\n"
 "\n"
@@ -476,16 +631,19 @@ BukaLISPModule init_utillib()
 #define SET_FUNC(functionName, closureName) \
     mod << (vv_list() << vv(#functionName) << VVC_NEW_##closureName(obj))
 
-    SET_FUNC(__INIT__,    util_init);
-    SET_FUNC(__DESTROY__, util_destroy);
+    SET_FUNC(__INIT__,      util_init);
+    SET_FUNC(__DESTROY__,   util_destroy);
 
-    SET_FUNC(from-csv,    util_from_csv);
-    SET_FUNC(to-csv,      util_to_csv);
-    SET_FUNC(to-utf8,     util_to_utf8);
-    SET_FUNC(from-utf8,   util_from_utf8);
-    SET_FUNC(to-json,     util_to_json);
-    SET_FUNC(from-json,   util_from_json);
-    SET_FUNC(re,          util_re);
+    SET_FUNC(int-to-ratio,  util_int_to_ratio);
+    SET_FUNC(xorshift,      util_xorshift);
+    SET_FUNC(hash64,        util_hash64);
+    SET_FUNC(from-csv,      util_from_csv);
+    SET_FUNC(to-csv,        util_to_csv);
+    SET_FUNC(to-utf8,       util_to_utf8);
+    SET_FUNC(from-utf8,     util_from_utf8);
+    SET_FUNC(to-json,       util_to_json);
+    SET_FUNC(from-json,     util_from_json);
+    SET_FUNC(re,            util_re);
 
     return BukaLISPModule(reg);
 }

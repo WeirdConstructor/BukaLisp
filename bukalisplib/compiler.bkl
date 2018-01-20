@@ -60,6 +60,7 @@
             (ctx {F:            frame
                   P:            (make-code-pad-object frame)
                   env:          {}})
+;            (_ (displayln FFFFF: (pp-str s1prog)))
             (adr (stage2-transformer s1prog ctx gtx))
             (P (P: ctx)))
         #;(displayln REGS: (pp-str (root-env: gtx)))

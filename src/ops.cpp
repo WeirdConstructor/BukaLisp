@@ -1109,69 +1109,68 @@ case OP_IKEY:
 //---------------------------------------------------------------------------
 
 #define     DEFINE_NUM_OP_BOOL(opname, oper)              \
-case OP_##opname:                             \
-{                                             \
-    E_SET_CHECK_REALLOC(O, O); \
-    Atom *a, *b; \
-    E_GET(a, A);                            \
-    E_GET(b, B);                            \
-                                              \
-    Atom o(T_BOOL);                           \
-    if (a->m_type == T_DBL)                    \
-        o.m_d.b = a->m_d.d    oper b->to_dbl(); \
-    else if (a->m_type == T_INT)               \
-        o.m_d.b = a->m_d.i    oper b->to_int(); \
-    else                                      \
-        o.m_d.b = a->to_int() oper b->to_int(); \
-    E_SET(O, o);                              \
-    break;                                    \
+case OP_##opname:                                         \
+{                                                         \
+    E_SET_CHECK_REALLOC(O, O);                            \
+    Atom *a, *b;                                          \
+    E_GET(a, A);                                          \
+    E_GET(b, B);                                          \
+                                                          \
+    Atom o(T_BOOL);                                       \
+    if (a->m_type == T_DBL || b->m_type == T_DBL)         \
+        o.m_d.b = a->m_d.d    oper b->to_dbl();           \
+    else if (a->m_type == T_INT)                          \
+        o.m_d.b = a->m_d.i    oper b->to_int();           \
+    else                                                  \
+        o.m_d.b = a->to_int() oper b->to_int();           \
+    E_SET(O, o);                                          \
+    break;                                                \
 }
 
 #define     DEFINE_NUM_OP_NUM(opname, oper, neutr)                   \
-case OP_##opname:                                        \
-{                                                        \
-    E_SET_CHECK_REALLOC(O, O);      \
-    Atom *a, *b; \
-    E_GET(a, A);                                       \
-    E_GET(b, B);                                       \
-                                                         \
-    Atom *ot;                                            \
-    E_SET_D_PTR(PE_O, P_O, ot);                          \
-    if (a->m_type == T_DBL)                               \
-    {                                                    \
-        ot->m_d.d = a->m_d.d    oper b->to_dbl();            \
-        ot->m_type = T_DBL;                                \
-    }                                                    \
-    else if (a->m_type == T_INT)                          \
-    {                                                    \
-        ot->m_d.i = a->m_d.i    oper b->to_int();            \
-        ot->m_type = T_INT;                                \
-    }                                                    \
-    else if (a->m_type == T_NIL)                          \
-    {                                                    \
-        if (b->m_type == T_DBL)                           \
-        {                                                \
-            ot->m_d.d = (double) neutr;                    \
-            ot->m_d.d = ((double) neutr) oper b->to_dbl();  \
-        }                                                \
-        else if (b->m_type == T_INT)                      \
-        {                                                \
-            ot->m_d.i = (int64_t) neutr;                    \
-            ot->m_d.i = ((int64_t) neutr) oper b->m_d.i;     \
-        }                                                \
-        else                                             \
-        {                                                \
-            ot->m_d.i = (int64_t) neutr;                   \
-            ot->m_d.i = ((int64_t) neutr) oper b->to_int(); \
-        }                                                \
-        ot->m_type = b->m_type;                             \
-    }                                                    \
-    else                                                 \
-    {                                                    \
-        ot->m_d.i = a->to_int() oper b->to_int();            \
-        ot->m_type = T_INT;                                \
-    }                                                    \
-    break;                                               \
+case OP_##opname:                                                    \
+{                                                                    \
+    E_SET_CHECK_REALLOC(O, O);                                       \
+    Atom *a, *b;                                                     \
+    E_GET(a, A);                                                     \
+    E_GET(b, B);                                                     \
+                                                                     \
+    Atom *ot;                                                        \
+    E_SET_D_PTR(PE_O, P_O, ot);                                      \
+    if (a->m_type == T_DBL)                                          \
+    {                                                                \
+        ot->m_d.d = a->m_d.d    oper b->to_dbl();                    \
+        ot->m_type = T_DBL;                                          \
+    }                                                                \
+    else if (b->m_type == T_DBL)                                     \
+    {                                                                \
+        ot->m_d.d = a->to_dbl() oper b->m_d.d;                       \
+        ot->m_type = T_DBL;                                          \
+    }                                                                \
+    else if (a->m_type == T_INT)                                     \
+    {                                                                \
+        ot->m_d.i = a->m_d.i    oper b->to_int();                    \
+        ot->m_type = T_INT;                                          \
+    }                                                                \
+    else if (a->m_type == T_NIL)                                     \
+    {                                                                \
+        if (b->m_type == T_INT)                                      \
+        {                                                            \
+            ot->m_d.i = ((int64_t) neutr) oper b->m_d.i;             \
+            ot->m_type = T_INT;                                      \
+        }                                                            \
+        else                                                         \
+        {                                                            \
+            ot->m_d.d = ((double) neutr) oper b->to_dbl();           \
+            ot->m_type = T_DBL;                                      \
+        }                                                            \
+    }                                                                \
+    else                                                             \
+    {                                                                \
+        ot->m_d.i = a->to_int() oper b->to_int();                    \
+        ot->m_type = T_INT;                                          \
+    }                                                                \
+    break;                                                           \
 }
 
 DEFINE_NUM_OP_NUM(ADD, +, 0)
@@ -1192,7 +1191,7 @@ case OP_MOD:
     E_SET_D_PTR(PE_O, P_O, ot);
     Atom &o = *ot;
     o.m_type = a.m_type;
-    if (a.m_type == T_DBL)
+    if (a.m_type == T_DBL || b.m_type == T_DBL)
         o.m_d.d = (double) (((int64_t) a.to_dbl()) % ((int64_t) b.to_dbl()));
     else
         o.m_d.i = a.to_int() % b.to_int();

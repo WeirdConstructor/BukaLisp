@@ -43,6 +43,26 @@
     (T-env code expected {})))
 ;----------------------------------------------------------------------------
 
+;(error X:)
+; Test do-each
+;(T '(let ((x 10))
+;      (define y 10)
+;      (if #f
+;        (begin (define y 20) y)
+;        (begin y)))
+;   0)
+
+;(T '(do-each (x [1 2 3]) x) 3)
+
+#;(#s1#let (o_0)
+  (#s1#begin (#s1#set! (#s1#var o_0 o) (#s1#list))
+    (#s1#begin (#s1#let (x_1)
+        (#s1#begin (#s1#set! (#s1#var x_1 x) (#s1#nil))
+          (#s1#do-each ((#s1#var x_1 x))
+            (#s1#nil)
+            (#s1#apply (#s1#prim push!)
+              ((#s1#var o_0 o) (#s1#var x_1 x))))))
+      (#s1#var o_0 o))))
 ;(error L:)
 ;(PUSH-DEBUG)
 
@@ -320,6 +340,27 @@
 (T '(<= 2 2) #true)
 (T '(<= 2.1 2) #false)
 (T '(>= 2.1 2) #true)
+
+; Test arithmetic primitives vs. arithmetics VM operations for consistency:
+(T '(let ((m *)) (m 2 2.2)) 4.4)
+(T '(* 2 2.2)               4.4)
+(T '(* nil 2.2)               0)
+(T '(let ((m *)) (m nil 2.2)) 0)
+
+(T '(let ((m /)) (m 4 0.5)) 8)
+(T '(/ 4 0.5)               8)
+(T '(/ nil 2.2)               0)
+(T '(let ((m /)) (m nil 2.2)) 0)
+
+(T '(/ 2.2)               (/ 1.0 2.2))
+(T '(let ((m /)) (m 2.2)) (/ 1.0 2.2))
+(T '(* 2.2)               (* 1.0 2.2))
+(T '(let ((m *)) (m 2.2)) (* 1.0 2.2))
+
+(T '(/ 2)                 (/ 1 2))
+(T '(let ((m /)) (m 2))   (/ 1 2))
+(T '(* 2)                 (* 1 2))
+(T '(let ((m *)) (m 2))   (* 1 2))
 
 (T '(abs 10)        10)
 (T '(abs -10)       10)

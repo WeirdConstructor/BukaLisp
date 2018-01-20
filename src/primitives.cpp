@@ -3,14 +3,14 @@
 
 #define BIN_OP_LOOPS(op) \
         if (args.m_len > 1) { \
-            if (out.m_type == T_DBL) { \
+            bool as_dbl = false; \
+            for (size_t i = 0; i < args.m_len; i++) \
+                if (args.m_data[i].m_type == T_DBL) { as_dbl = true; break ; } \
+            if (as_dbl) { \
+                out.set_dbl(out.to_dbl()); \
                 double &o = out.m_d.d; \
                 for (size_t i = 1; i < args.m_len; i++) \
                     o = o op args.m_data[i].to_dbl(); \
-            } else if (out.m_type == T_INT) { \
-                int64_t &o = out.m_d.i; \
-                for (size_t i = 1; i < args.m_len; i++) \
-                    o = o op args.m_data[i].to_int(); \
             } else { \
                 out.set_int(out.to_int()); \
                 int64_t &o = out.m_d.i; \
@@ -46,9 +46,8 @@ START_PRIM()
     out = args.m_data[0];
     if (args.m_len == 1)
     {
-        if      (out.m_type == T_DBL) out.set_dbl(1.0 / out.m_d.d);
-        else if (out.m_type == T_INT) out.set_dbl(1.0 / out.m_d.i);
-        else                          out.set_dbl(1.0 / out.to_int());
+        if (out.m_type == T_INT) out.set_int(1 / out.to_int());
+        else                     out.set_dbl(1.0 / out.to_dbl());
         return;
     }
     BIN_OP_LOOPS(/)
@@ -71,13 +70,16 @@ END_PRIM(-);
 #define REQ_EQ_ARGC(prim, cnt)    if (args.m_len != cnt) error("Wrong number of arguments to " #prim ", expected " #cnt);
 #define BIN_CMP_OP_NUM(op) \
     out = Atom(T_BOOL); \
+    bool as_dbl = false; \
+    for (size_t i = 0; i < args.m_len; i++) \
+        if (args.m_data[i].m_type == T_DBL) { as_dbl = true; break ; } \
     Atom last = args.m_data[0]; \
     for (size_t i = 1; i < args.m_len; i++) \
     { \
-        if (last.m_type == T_DBL) \
-            out.m_d.b = last.m_d.d op args.m_data[i].m_d.d; \
+        if (as_dbl) \
+            out.m_d.b = last.to_dbl() op args.m_data[i].to_dbl(); \
         else \
-            out.m_d.b = last.m_d.i op args.m_data[i].m_d.i; \
+            out.m_d.b = last.to_int() op args.m_data[i].to_int(); \
         if (!out.m_d.b) return; \
         last = args.m_data[i]; \
     }
