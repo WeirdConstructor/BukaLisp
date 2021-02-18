@@ -10,6 +10,11 @@ provide bindings to C++ libraries like Qt, POCO or Boost. The main project
 provides modules to extend the standalone BukaLisp interpreter with the goal
 of creating a more or less general purpose programming environment.
 
+Project Status
+--------------
+
+- **Not maintained**
+
 Relation to Lisp and Scheme
 ---------------------------
 
